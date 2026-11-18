@@ -1,34 +1,3 @@
-# 从零开始学 AI · 从会回答，到能做事
+# 网站的 17 次原始提交
 
-一本可以在书页里改代码、运行 Python、看视频、提问的中文交互书。上册带读者回到一个个技术难题出现的时候，下册把一个资料助手从文件夹里的脚本做成可用的系统。适合对 AI 好奇、已有少量 Python 基础的读者。
-
-上册第一章给问答助手加了一条看起来很合理的规则。读者先猜六句话能答对几句，再运行 `patch1.py`。原始实验仍是 **3/6**。第五句改对了，第六句却被分错。两句话都出现“账号”和“安装”，真正要办的事刚好相反。读者可以改一行代码再试，亲眼看见规则在哪一句失效。[直接体验这道题](https://ai-book-laboratory.lucien-alvarez748774.chatgpt.site/?chapter=upper-01#upper-01-predict-first-patch)
-
-## 从哪里开始
-
-| 你想做什么 | 从这里开始 |
-| --- | --- |
-| 修改课程原文、脚本、原始插图和视频 | [课程原稿与随附材料](course-source/) |
-| 了解设计理由、阅读器目标和原型 | [维护指南](docs/MAINTENANCE.md) · [产品需求](docs/PRD.md) · [书页原型](docs/design/) |
-| 阅读课程介绍和翻阅带图的产品需求 | [宣传文案](docs/editorial/课程介绍.md) · [图文 PRD](docs/design/零基础学AI_PRD_含设计图.pdf) |
-| 查看部署取舍和实际书页效果 | [服务器配置与部署设计](docs/planning/服务器配置与部署设计.md) · [预测实验验收图](docs/acceptance/ai-book-compact-prediction.jpg) |
-| 改进翻页、预测、Notebook 和导读 | [阅读器组件](components/) · [实验内核、状态与预测题](lib/) |
-| 查看读者实际会读到的内容 | [结构化章节、索引与字幕](public/course/) · [上线媒体](public/media/) |
-| 核对实验与运行服务 | [Notebook 验收](docs/notebook-acceptance.md) · [沙箱部署](docs/sandbox-deployment.md) · [内容清点](docs/content-audit.md) |
-
-## 在本地打开
-
-在仓库根目录使用 Node.js 22.13 或更高版本和 npm。首次安装会根据锁文件下载依赖。
-
-```sh
-npm ci
-npm run dev
-```
-
-普通本地环境默认在 `http://localhost:5173` 启动，以终端显示的地址为准。仓库已包含渲染好的章节与媒体，启动阅读器可以直接使用它们。修改原稿后，按 [维护指南](docs/MAINTENANCE.md) 重新导入。
-
-## 当前运行范围
-
-- 上下册共 39 篇正文、导读和附录，含 36 个术语、223 处插图和 10 段视频。第 05 章第二段保留了约 1 分 49 秒的原片，播放器附有末段补读。
-- 165 个完整 Python 单元中，34 个可直接在浏览器运行。同章共享变量，刷新后保留代码修改和历史输出，可按顺序重新运行。其余 131 个依赖独立执行服务，详见沙箱部署说明。
-- 匿名读者可以阅读、执行浏览器实验、查看课程释义，并在本机保留进度。线上 AI 问答和跨设备学习记录依赖登录、服务端模型配置和数据库。读者可以按章导出 ZIP、Python 脚本或 Notebook。
+本归档配合 `archive/source-snapshot` 分支，可以还原至已上线的 Sites v5。普通克隆后，在 main 分支执行 `python3 scripts/restore-original-history.py`。按文件名拼接 parts 后的 SHA-256 是 `56fa771a195aadc7859e708ff29f134a608a54f73bd41a6c5ed85f35f4d1cdc8`。末次提交是 `d0fa0881e575f37fbbcf8b0d49f3f0d75b07aede`。
