@@ -1,6 +1,6 @@
 # Linux 实验沙箱部署与接口
 
-**交付状态：实现和单元验证已完成；尚未部署。** 当前开发环境没有 Docker、gVisor 或目标服务器 SSH，因此没有执行镜像构建、真实容器端到端测试、TLS 上线或 GPU 验证。下面的操作由具备目标 Linux 服务器访问权的部署者完成；不能把前端预览可用视为 Linux 沙箱已接通。
+2026 年 11 月 18 日，在独立的 Ubuntu 24.04 验收机上构建镜像并跑通 HTTPS、读者登录、SQLite 和真实 gVisor 实验。上海目标主机仍需按其现有服务、域名和可用内存单独部署验收。[真实容器验收记录](https://github.com/Userwei0418/zero-to-ai-book/actions/runs/44330536479)
 
 实现位于 `services/sandbox/`。网关只用 Python 标准库和 Docker CLI，不增加主网站依赖，不创建云资源。默认不调用外部模型；部署者显式配置模型凭据后，限定的课程模型请求会真实调用配置的提供方，并可能按该账户套餐计费。所有用户代码只能进入强制使用 `runsc` 的容器；缺少 Docker、gVisor、内存/CPU/PID cgroup 能力或本地镜像时网关拒绝启动，没有宿主 Python 执行降级。
 
@@ -230,5 +230,5 @@ SANDBOX_TIMEOUT_SECONDS=60
 
 - 56 项标准库单元测试已通过：常量时间鉴权、UTF-8 大小、输入/path/文件数量限制、两种 files 格式、符号链接/硬链接/FIFO 防护、用户章节隔离键、速率与并发限制、超时销毁、清理失败关闭、Docker 参数、缺 runsc/cgroup 关闭、HTTP 契约、guest 输出与图片校验；另含模型固定目标/模型校验、无key拒绝、禁止重定向、额度、SSE缓冲、secret隔离与脱敏、RPC调度和本地urllib接口。
 - `py_compile` 对网关、内核、验证层、宿主/guest模型代理和验收脚本全部通过。
-- 当前开发环境未找到 Docker；镜像未构建、gVisor 未启动、真实 Python 会话/图片/中断端到端未运行。
-- 未连接真实模型提供方、部署服务器、HTTPS 或 GPU；文中的示例域名、secret 和镜像摘要均需部署者填写真实值。
+- Linux 验收机真实运行了两个读者会话，验证变量、文件、输出、执行计数、重置与中断隔离。超时后新会话从空环境启动，Matplotlib PNG、非 root 执行和清理均通过。[真实容器验收记录](https://github.com/Userwei0418/zero-to-ai-book/actions/runs/44330536479)
+- 该次验收使用临时 HTTPS 域名与测试账号。生产模型、目标服务器域名、GPU 和实际课堂容量需要单独配置与验收。
