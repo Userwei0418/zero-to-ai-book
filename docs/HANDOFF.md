@@ -25,7 +25,7 @@
 3. **课程素材。** 第 05 章第二段视频保留了可恢复的约 109 秒，并附末段补读。若取得更完整的原片，保留阅读锚点并同步更新字幕、文字稿和媒体清单。
 ## 查原始提交
 
-日常开发使用 `main`。GitHub 的[历史归档](https://github.com/Userwei0418/zero-to-ai-book/tree/archive/original-history)保存了原始提交增量。[公开原稿快照](https://github.com/Userwei0418/zero-to-ai-book/tree/archive/source-snapshot)保存迁移时的 1,144 个公开文件。普通克隆可以恢复截至线上 v5 的全部 17 个原始网站提交。
+日常开发使用 `main`。GitHub 的[历史归档](https://github.com/Userwei0418/zero-to-ai-book/tree/archive/site-history)保存了原始提交增量。[公开原稿快照](https://github.com/Userwei0418/zero-to-ai-book/tree/archive/source-snapshot)保存迁移时的 1,144 个公开文件。普通克隆可以恢复截至线上 v5 的全部 17 个原始网站提交。
 
 ```sh
 python3 scripts/restore-original-history.py
@@ -35,10 +35,10 @@ git log --oneline course-history
 脚本校验归档 SHA-256 和完整提交链，创建本地 `course-history` 分支。浅克隆或单分支克隆可先执行以下命令。
 
 ```sh
-git fetch origin refs/heads/archive/source-snapshot:refs/remotes/origin/archive/source-snapshot refs/heads/archive/original-history:refs/remotes/origin/archive/original-history
+git fetch origin refs/heads/archive/source-snapshot:refs/remotes/origin/archive/source-snapshot refs/heads/archive/site-history:refs/remotes/origin/archive/site-history
 ```
 
-第 18 次原始提交用于整理作者材料，包含一个另行保管的旧版补充 ZIP（内含历史日志及实验快照）。开发、构建、部署和两册课件均可使用公开文件。作者持有的完整 Git 备份保留全部 1,145 个文件，可恢复该次提交及同一原始 SHA。
+第 18 次原始提交用于整理作者材料，包含一个另行保管的旧版补充 ZIP（内含历史日志及实验快照）。已经从公开原稿完整重导 39 篇章节，与发布数据逐项比对一致，下载用的实验 ZIP 也逐字节一致。开发、构建和课程维护均可使用公开文件。作者持有的完整 Git 备份保留全部 1,145 个文件，可恢复该次提交及同一原始 SHA。
 
 ## 怎样把项目上下文持续留下来
 

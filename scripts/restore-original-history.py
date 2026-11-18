@@ -4,10 +4,10 @@ import subprocess
 import sys
 import tempfile
 
-ARCHIVE = "refs/remotes/origin/archive/original-history"
+ARCHIVE = "refs/remotes/origin/archive/site-history"
 BASE_TREE = "ef2e691471713cdd40507f2a0d097048a252dcfe"
 TIP = "d0fa0881e575f37fbbcf8b0d49f3f0d75b07aede"
-DIGEST = "37cee5858895b3452c37cba58807c0f188b9eff9bb9fb50ff770fbb8073af87b"
+DIGEST = "56fa771a195aadc7859e708ff29f134a608a54f73bd41a6c5ed85f35f4d1cdc8"
 BRANCH = "refs/heads/course-history"
 
 
@@ -25,7 +25,7 @@ def main():
         sys.exit("缺少原始文件树。请获取 archive/source-snapshot 分支，然后重试。")
     if not exists(TIP + "^{tree}"):
         if not exists(ARCHIVE):
-            subprocess.run(["git", "fetch", "origin", f"refs/heads/archive/original-history:{ARCHIVE}"], check=True)
+            subprocess.run(["git", "fetch", "origin", f"refs/heads/archive/site-history:{ARCHIVE}"], check=True)
         paths = git("ls-tree", "-r", "--name-only", ARCHIVE, "--", "parts").decode().splitlines()
         if not paths:
             sys.exit("历史归档缺少分片。")
@@ -38,7 +38,7 @@ def main():
             if digest.hexdigest() != DIGEST:
                 sys.exit("历史归档 SHA-256 校验失败。请重新获取归档分支。")
             pack.seek(0)
-            subprocess.run(["git", "index-pack", "--stdin", "--fix-thin"], stdin=pack, check=True)
+            subprocess.run(["git", "index-pack", "--stdin"], stdin=pack, check=True)
     git("fsck", "--connectivity-only", "--no-dangling", TIP)
     if git("rev-list", "--count", TIP).strip() != b"17":
         sys.exit("原始提交数量与交接记录不符。")

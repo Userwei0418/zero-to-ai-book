@@ -34,7 +34,7 @@ python scripts/prepare-experiment-support.py
 git diff --stat
 ```
 
-导入器目前核对 39 篇顶层 Markdown，并按文件名推导章节 ID。增删章节时，同步修改 `scripts/import-course.py` 的篇数、命名映射和相关测试。上、下册的辅助文件分别来自 `attachments/mygpt-companion-20261117-r4-8c90a8fb.zip` 与 `下册/attachments/从零开始学AI-下册配套课件.zip`，这些路径相对于 `course-source/`。更换课件版本或文件名时，同步更新导入器选择的路径。重导后检查前章依赖和下册下载包，尤其是跨章读取的数据集。
+导入器核对 39 篇顶层 Markdown，并按文件名推导章节 ID。增删章节时，同步修改 `scripts/import-course.py` 的篇数、命名映射和相关测试。上册按章节从作者正文的代码块和前章积累生成实验文件，下册另读取 `course-source/下册/attachments/从零开始学AI-下册配套课件.zip`。当前公开原稿足以重建已发布课程。2026 年 11 月 18 日从公开仓库重新导入并运行媒体处理后，39 篇章节 JSON 的内容逐项与上线数据一致，1,357 个实验文件条目一致，下载用 `experiment-support.zip` 逐字节相同。作者旧版补充快照单独保管。更换课件时请复查跨章依赖、实验输出和下载包。
 
 `--check-browser` 实际用本机 CPython 检查标为浏览器可运行的课程代码。要验证生产 Worker 对同一段程序的行为，还要单独跑 Pyodide 的 WASM 测试。替换视频或调整剪辑后，要同时检查字幕时间轴、海报和原有片段说明。
 
