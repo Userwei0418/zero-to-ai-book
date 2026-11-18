@@ -24,7 +24,7 @@
 | 主机访问 | 不挂载宿主目录、Docker socket、设备或凭据；用户脚本不进入宿主 shell 命令 |
 | 权限 | UID/GID 10001、全部 capabilities 移除、`no-new-privileges` |
 | 网络 | `--network=none`；不能联网下载数据、调用任意 API 或安装网络包；可选固定模型请求经内核 RPC 交给宿主代理 |
-| 根目录 | 只读；`/workspace` 为 64 MiB tmpfs，`/tmp` 为 16 MiB tmpfs；均为 `nosuid,nodev,noexec` |
+| 根目录 | 只读；`/workspace` 为每容器独有的 64 MiB tmpfs，内核以学员 UID 创建 0700 的 `/workspace/lesson` 工作目录，`/tmp` 为 16 MiB tmpfs；均为 `nosuid,nodev,noexec` |
 | CPU / 内存 | 每会话 1 CPU、256 MiB，memory-swap 与 memory 相同；必须有对应 cgroup 能力 |
 | 进程 / 文件描述符 | PID 上限 64、nproc 64、nofile 128、禁止 core dump；`/dev/shm` 16 MiB |
 | 单次运行 | 默认 15 秒，可配置 1–60 秒；包括冷启动、模型调用及代码执行，冷启动自身最多 20 秒；销毁清理可能额外需要数秒 |

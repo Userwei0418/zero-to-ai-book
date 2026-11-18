@@ -79,7 +79,7 @@ command[-1:] = ["--entrypoint=python", image, "-I", "-c",
                 "import os, socket, threading; print('guest UID', os.getuid(), flush=True); "
                 "t=threading.Thread(target=lambda:None); t.start(); t.join(); "
                 "s=socket.socket(); s.bind(('127.0.0.1', 8765)); s.close(); "
-                "open('/workspace/probe','w').close(); print('guest ready')"]
+                "os.mkdir('/workspace/lesson', 0o700); os.chdir('/workspace/lesson'); open('probe','w').close(); print('guest ready')"]
 subprocess.run(command, check=True, timeout=60)
 PYTHON
 

@@ -166,7 +166,7 @@ class RuntimeTests(unittest.TestCase):
     def test_container_command_enforces_boundary(self):
         command = gateway.Session(self.config, session_id(IDENTITY)).command()
         for flag in ["--runtime=runsc", "--network=none", "--read-only", "--cap-drop=ALL",
-                     "--security-opt=no-new-privileges:true", "--user=10001:10001", "--memory=256m",
+                     "--security-opt=no-new-privileges=true", "--user=10001:10001", "--memory=256m",
                      "--memory-swap=256m", "--cpus=1", "--pids-limit=64", "--pull=never", "--log-driver=none"]:
             self.assertIn(flag, command)
         self.assertFalse(any("docker.sock" in part or part.startswith("--privileged") or part == "--volume" for part in command))

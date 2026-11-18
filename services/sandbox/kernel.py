@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from validation import MAX_IMAGE_BYTES, MAX_IMAGES, MAX_OUTPUT_BYTES, validate_path
 from guest_model import GuestModelBroker
 
-WORKSPACE = "/workspace"
+WORKSPACE = "/workspace/lesson"
 WIRE_IN = None
 WIRE_OUT = None
 DEVNULL = None
@@ -177,6 +177,8 @@ def main() -> None:
     os.dup2(DEVNULL, 0)
     os.dup2(DEVNULL, 1)
     os.dup2(DEVNULL, 2)
+    # Create the private directory as the learner, independently of tmpfs UID mapping.
+    os.mkdir(WORKSPACE, mode=0o700)
     os.chdir(WORKSPACE)
     sys.path.insert(0, WORKSPACE)
     namespace = {"__name__": "__main__", "__builtins__": __builtins__}

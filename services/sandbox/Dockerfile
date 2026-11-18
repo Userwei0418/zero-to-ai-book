@@ -8,12 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
 COPY requirements.txt /opt/kernel/requirements.txt
 RUN python -m pip install --no-cache-dir --only-binary=:all: -r /opt/kernel/requirements.txt \
     && groupadd --gid 10001 learner \
-    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /workspace learner \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /workspace/lesson learner \
     && mkdir -p /workspace \
     && chown 10001:10001 /workspace
 COPY --chown=root:root kernel.py validation.py guest_model.py /opt/kernel/
 RUN chmod 0555 /opt/kernel/kernel.py /opt/kernel/validation.py /opt/kernel/guest_model.py
 
 USER 10001:10001
-WORKDIR /workspace
+WORKDIR /opt/kernel
 ENTRYPOINT ["python", "-I", "/opt/kernel/kernel.py"]
