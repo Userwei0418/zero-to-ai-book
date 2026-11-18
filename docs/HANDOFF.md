@@ -38,7 +38,27 @@ git log --oneline course-history
 git fetch origin refs/heads/archive/source-snapshot:refs/remotes/origin/archive/source-snapshot refs/heads/archive/site-history:refs/remotes/origin/archive/site-history
 ```
 
-第 18 次原始提交用于整理作者材料，包含一个另行保管的旧版补充 ZIP（内含历史日志及实验快照）。已经从公开原稿完整重导 39 篇章节，与发布数据逐项比对一致，下载用的实验 ZIP 也逐字节一致。开发、构建和课程维护均可使用公开文件。作者持有的完整 Git 备份保留全部 1,145 个文件，可恢复该次提交及同一原始 SHA。
+### 作者如何在本地恢复第 18 次提交
+
+第 18 次提交整理了作者材料，其中多出一份旧版课程附件。它含 1,631 个文件，包括章节代码快照、运行日志和一个小模型权重文件。公开原稿已经重建出相同的 39 篇章节，实验下载包也逐字节一致。日常维护、改课和发布继续使用公开仓库的 `main`。
+
+如果要复查旧实验的原始现场，在公开仓库根目录运行下面的命令。把附件路径换成自己保管的原件，选一个尚未创建、位于公开工作树以外的目录。该目录的上一级需要已存在。
+
+```sh
+python3 scripts/restore-original-history.py \
+  --private-companion "/path/to/mygpt-companion-20261117-r4-8c90a8fb.zip" \
+  --destination ../zero-to-ai-book-author
+git -C ../zero-to-ai-book-author rev-list --count HEAD
+git -C ../zero-to-ai-book-author rev-parse HEAD
+```
+
+输出应为 `18` 和 `a3268fa0902fcddee8a3503689e33b1ffdd981d2`。恢复程序校验附件、文件树与历史归档，在新目录建立独立的 Git 仓库。这个仓库没有远端，原先的公开工作树与分支保留原状。原始归档早于新增的交接文档，现行部署步骤见[运行与部署](DEPLOYMENT.md)。
+
+普通克隆已经包含所需的公开归档分支。单分支克隆可先运行以下命令获取归档，再离线执行上面的恢复步骤。
+
+```sh
+git fetch origin refs/heads/archive/source-snapshot:refs/remotes/origin/archive/source-snapshot refs/heads/archive/original-history:refs/remotes/origin/archive/original-history
+```
 
 ## 怎样把项目上下文持续留下来
 
