@@ -1,0 +1,1 @@
+ALTER TABLE `guide_cache` ADD `user_id` text;

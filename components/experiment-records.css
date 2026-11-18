@@ -1,0 +1,21 @@
+.experiment-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 4px;
+  text-align: start;
+  border-bottom: 1px solid #dedccc;
+  color: #394633;
+}
+.experiment-record > span { min-width: 0; display: grid; gap: 4px; }
+.experiment-record > svg { flex: none; color: #667654; }
+.experiment-record small, .experiment-record-status, .record-help { font-size: 12px; line-height: 1.55; color: #5d6556; }
+.experiment-record strong { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.experiment-record-status { display: flex; flex-wrap: wrap; gap: 3px 9px; }
+.experiment-record-status .run-error { color: #98482e; }
+.experiment-record:hover { background: #edeee2; }
+.experiment-record:focus-visible, .record-more:focus-visible { outline: 2px solid #727f5d; outline-offset: 2px; }
+.record-help { margin: 8px 0 0; }
+.record-more { min-height: 36px; color: #576b45; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }

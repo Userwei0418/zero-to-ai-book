@@ -1,0 +1,92 @@
+{
+  "upper-01-1a944445b9af": {
+    "caption": "早期机器翻译靠有限的词表和规则工作。",
+    "alt": "操作员坐在磁带计算机前，旁观者围看机器打印出来的译文。"
+  },
+  "upper-02-9664df60f3ac": {
+    "caption": "沿计算图往回走，找出每个数对结果的影响。",
+    "alt": "桌面上的蓝黄节点由箭头相连，每个节点旁放着一张记录计算的小字条。"
+  },
+  "upper-03-90a9af93db72": {
+    "caption": "午饭选哪家？每顿饭的评价都会影响下一次选择。",
+    "alt": "三家小店并排开着，门前脚印疏密不同，食客正朝右侧店铺走去。"
+  },
+  "upper-04extra-93c00f59bed2": {
+    "caption": "改海报时，有图层的源文件能把不同元素拆开。",
+    "alt": "机器人用机械臂抬起图纸，桌上分层摊开几张印有不同图形的画稿。"
+  },
+  "upper-05extra-a9e7ecac5f30": {
+    "caption": "流式返回让读者先读到已经写好的部分。",
+    "alt": "左半图的人坐等整箱成品；右半图的机器人正打印，读者已经拿起第一页。"
+  },
+  "upper-05extra-225222ae683d": {
+    "caption": "正文为空时，打开响应看看 token 花在了哪里。",
+    "alt": "读者拿着放大镜检查从信封里抽出的回信，机器人坐在桌子另一边。"
+  },
+  "upper-06extra-883da5af7be7": {
+    "caption": "要求附上原文依据，才能回查一份答卷。",
+    "alt": "一台机器人提交答卷，另一台拿放大镜检查，桌旁摆着装满资料的文件盒。"
+  },
+  "upper-06extra-01f04d5ee848": {
+    "caption": "调高放行阈值时，要一起看收下多少题、其中错了几题。",
+    "alt": "机器人旁边摆着标有对错的牌子，读者往天平的一端加砝码。"
+  },
+  "upper-09extra-aa56c4e9bf1a": {
+    "caption": "给下一次接手留下记录，才能知道工作停在哪一步。",
+    "alt": "读者在门口准备离开，桌旁的机器人把记录放进盒子，墙上挂着清单。"
+  },
+  "upper-09extra-591200458736": {
+    "caption": "读回真实结果，核对工具声称完成的操作。",
+    "alt": "机器人对着显示器操作键盘，旁边的人查看屏幕上逐项打勾的操作记录。"
+  },
+  "upper-intro-e3e65283e8cc": {
+    "caption": "一次任务怎样变成结果",
+    "alt": "用户任务进入 Harness，后者结合资料、会话状态和权限，向模型发出请求、调用工具，再把结果交给用户。工具可以生成实际文件。"
+  },
+  "upper-01-b687ae255534": {
+    "caption": "六行规则为什么一换问法就失效",
+    "subtitleSrc": "/course/captions/01-1.vtt"
+  },
+  "upper-01-9b9b067c37ff": {
+    "caption": "ELIZA、字模箱与三堵墙",
+    "subtitleSrc": "/course/captions/01-2.vtt"
+  },
+  "upper-02-75e1dd9f71d9": {
+    "caption": "1958 年的感知机与楼梯灯",
+    "subtitleSrc": "/course/captions/02-1.vtt"
+  },
+  "upper-02-f09e1027a849": {
+    "caption": "反向传播与 2012 年的转折点",
+    "subtitleSrc": "/course/captions/02-2.vtt"
+  },
+  "upper-03-c510141ab6a9": {
+    "caption": "第 37 手、中午吃什么与时间上的算账",
+    "subtitleSrc": "/course/captions/03-1.vtt"
+  },
+  "upper-03-f5356ae60189": {
+    "caption": "迷宫撞墙、赛艇转圈与 v0.3 的教训",
+    "subtitleSrc": "/course/captions/03-2.vtt"
+  },
+  "upper-04a-93498a17e92f": {
+    "caption": "安第斯山的独角兽与 592 个参数的迷你大脑",
+    "subtitleSrc": "/course/captions/04-1.vtt"
+  },
+  "upper-04b-ebe5ceff67b8": {
+    "caption": "读遍互联网之后，怎样让模型接下新任务",
+    "subtitleSrc": "/course/captions/04-2.vtt"
+  },
+  "upper-05-c93c0055f903": {
+    "caption": "五天一百万人与 SFT、DPO 两个旋钮",
+    "subtitleSrc": "/course/captions/05-1.vtt"
+  },
+  "upper-05-a4fcddbc36b0": {
+    "caption": "对话是叠起来的前文与五格任务卡",
+    "readingAlternative": [
+      "聊天窗口怎样接住上一句？应用把之前的消息按顺序重新交给模型。每条消息带着角色，区分系统要求、你的提问和助手先前的回答。",
+      "试写一张新人入职任务卡。填上五格：目标、材料、约束、产物、验收。材料里只有三条部门规定时，要求它标明缺少的信息，例如管理员姓名和系统网址。",
+      "最后用一份错答卷验收。三步编号和字段都齐全，但把“管理员确认后才能安装”写反了。只核对格式的程序会放行这份答卷，还需要检查每一步是否符合原文。 这也是本章最后要分开的三件事：读着舒服、说得正确、真正完成任务。"
+    ],
+    "subtitleSrc": "/course/captions/05-2.vtt",
+    "excerptNotice": "仅存前 1 分 49 秒，末段见本章补读。"
+  }
+}

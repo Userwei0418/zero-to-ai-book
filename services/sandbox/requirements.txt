@@ -1,0 +1,5 @@
+# Dependencies are installed only while an operator builds the image.
+# Review and rebuild deliberately; never pip-install submitted requirements on the host.
+numpy==2.2.6
+pandas==2.2.3
+matplotlib==3.10.3
