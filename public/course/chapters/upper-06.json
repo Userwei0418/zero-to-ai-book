@@ -1,0 +1,1149 @@
+{
+  "id": "upper-06",
+  "title": "第 06 章｜回答太快，那就多想一会儿？",
+  "shortTitle": "回答太快，那就多想一会儿？",
+  "volume": "upper",
+  "group": "第二篇 · 与模型协作",
+  "order": 11,
+  "kind": "chapter",
+  "minutes": 35,
+  "summary": "再看一遍题目：新同事第一天要办四件事。账号审批，30 分钟。下载工具包，20 分钟。安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。人手管够，能同时办的可以同时办。最快多久能全部办完？",
+  "text": "# 第 06 章｜回答太快，那就多想一会儿？\n\n配套课件在这里：[[零基础学AI/attachments/mygpt-companion-20261117-r4-8c90a8fb.zip|下载上册配套代码与实验材料（r4）]]。解压后先读 README，按对应章节说明使用。\n\n## 脱口而出\n\n上一章结尾那道题，你报的是多少？\n\n再看一遍题目：新同事第一天要办四件事。账号审批，30 分钟。下载工具包，20 分钟。安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。人手管够，能同时办的可以同时办。最快多久能全部办完？\n\n现在请你拿出纸笔，画一画。画完再往下看。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/M8kdbumkRoxJy6xa6OYcDbkJnEd.png|把它画出来：两件事可以同时办；第三件，得等两件都办完。]]\n\n审批和下载同时开始。下载 20 分钟就好了，可安装还得等审批，所以最早第 30 分钟才能装。装到 45，检到 55。\n\n**55 分钟。**\n\n如果你刚才脱口而出的是 75 或者 45，别不好意思。你不是不会算，你只是答得太快了。一拿起笔，你就算对了。\n\n那么，我们的资料助手呢？\n\n上一章，它把任务卡做得漂漂亮亮。这道题要求清楚，条件齐全，没有一个字含糊，按说难不倒它。我们把同一道题换十二组数字（审批时间取 20、30、40，下载时间取 10、20、30、40），准备好题目和标准答案：\n\n```python\n# puzzle.py：同一道排期题，换十二组数字\nimport re\n\ndef text(a, b):\n    return (f\"新同事第一天要办四件事。账号审批，{a} 分钟。下载工具包，{b} 分钟。\"\n            \"安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。\"\n            \"人手管够，能同时办的可以同时办。最快多久能全部办完？\")\n\ndef truth(a, b):\n    return max(a, b) + 15 + 10          # 审批和下载同时开始，等慢的那个，再装，再检\n\npuzzles = [(a, b) for a in (20, 30, 40) for b in (10, 20, 30, 40)]\n\ndef last_number(reply):\n    \"\"\"从它的回答里，取最后出现的那个数\"\"\"\n    found = re.findall(r\"\\d+\", reply)\n    return int(found[-1]) if found else None\n```\n\n调用模型还是用上一章的 `llm.py`（接的还是商汤 Token Plan 的 `https://token.sensetime.com/api/v1`，默认用 `sensenova-6.8-flash`）。这一章给它加了两个小开关：可以调温度，也可以让它顺便告诉我们这次写了多少 token。另外，网络偶尔会断，所以它会自动重试。\n\n**先给这页账本贴个标签：下面的通过率、回答和 token 数保留自原教材，不是本版商汤接口重新跑出的成绩。原教材来源说明记为 2026 年 11 月、SenseAudio 平台，默认 `senseaudio-s2-flash`，大一号为 `senseaudio-s2`，推理模型为该平台上的 `deepseek-v4.1-flash`。具体运行日、权重版本、当时完整代码版本和原始日志对应关系尚未核验；本版接口也未据此重测。**\n\n```python\n# llm.py：和上一章是同一个函数，多了两个开关：temperature，和“把花掉的 token 数也告诉我”\nimport json, os, time, urllib.request\n\ndef chat(messages, json_mode=False, temperature=0, want_usage=False):\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    body = {\n        \"model\": os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\"),\n        \"messages\": messages,\n        \"temperature\": temperature,\n    }\n    if json_mode:\n        body[\"response_format\"] = {\"type\": \"json_object\"}\n    base_url = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\n    req = urllib.request.Request(\n        base_url + \"/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    for attempt in range(3):                       # 网络偶尔会断，最多试三次\n        try:\n            with urllib.request.urlopen(req, timeout=180) as resp:\n                data = json.load(resp)\n            break\n        except (OSError, ValueError):\n            if attempt == 2:\n                raise\n            time.sleep(2)\n    text = data[\"choices\"][0][\"message\"][\"content\"].strip()\n    if want_usage == \"all\":\n        return data                                                      # 原样返回，给想看细节的人\n    if want_usage:\n        return text, data.get(\"usage\", {}).get(\"completion_tokens\", 0)   # 它写了多少 token\n    return text\n```\n\n然后像刚才对你那样，让它凭第一感觉报数：\n\n```python\n# quick.py：不许想，直接报数\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    print(f\"审批 {a} 下载 {b}：它答 {got}，应为 {truth(a, b)}\", \"✓\" if got == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n```\n\n十二道题，你猜它能对几道？\n\n```\n审批 20 下载 10：它答 45，应为 45 ✓\n审批 20 下载 20：它答 50，应为 45 ✗\n审批 20 下载 30：它答 50，应为 55 ✗\n审批 20 下载 40：它答 75，应为 65 ✗\n审批 30 下载 10：它答 50，应为 55 ✗\n审批 30 下载 20：它答 50，应为 55 ✗\n审批 30 下载 30：它答 45，应为 55 ✗\n审批 30 下载 40：它答 75，应为 65 ✗\n审批 40 下载 10：它答 65，应为 65 ✓\n审批 40 下载 20：它答 75，应为 65 ✗\n审批 40 下载 30：它答 75，应为 65 ✗\n审批 40 下载 40：它答 95，应为 65 ✗\n答对 2/12，平均每题写了 3 个 token\n```\n\n两道。\n\n再看它错的那些：50，75，95。75 是把四个数全加起来了，和很多人一样。95 是 40 加 40 加 15，少加了一个 10，也是往一块儿加。50 呢？不知道它是怎么凑出来的。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/AtSTbBeWCo4ss8x2x4UcmrzKnmh.png|话音还没落，它已经举牌了。]]\n\n在原教材的这组记录里，默认模型仍是 `senseaudio-s2-flash`。上一章它能把三条规定排成一份带出处的清单，这一章却连四个数都算不对。这说的是那组历史记录，不是现版默认接口的新结论。\n\n你也许会想：换个大点的模型不就好了。原教材记载，同平台更大一号的 `senseaudio-s2`，同样的问法，十二道对了六道。本版若改用 `glm-5.3`，需要另跑、另记，不能把这个六分搬过去。好了一些，还是有一半在蒙。\n\n它到底是哪里出了毛病？\n\n## 2022 年的岔路口\n\n这不是今天才有的毛病。ChatGPT 上线之前，GPT-3 就这样：写文章头头是道，碰到要拐几个弯的题目，张口就错。\n\n假设现在是 2022 年初，你在研究这个问题。你会从哪儿下手？\n\n**一条路：做大。** 模型再大十倍，也许它就会算了。刚才我们看到了，大一号的模型确实好一点。\n\n**另一条路：专门教。** 上一章教它“听话”用的那一套，拿来教它“算数”：攒几万道带详细解答的题，让它练。\n\n两条路听着都靠谱，也都很贵。\n\n那一年，有人走了第三条路。这条路便宜到近乎荒唐，说出来像个玩笑：**在题目后面加一句话。**\n\n先别往下看。猜猜是哪句话。\n\n2022 年 5 月，东京大学和 Google 的几位研究者发了一篇论文。他们在题目后面加了一句英文：“Let's think step by step.” 让我们一步一步想。\n\n模型没换，题目没换。在一套算术题上，他们报告的正确率从 17.7% 涨到了 78.7%。\n\n（再早几个月，Google 的另一组人做过类似的事：在题目前面放几道写了详细步骤的例题，模型就会学着也把步骤写出来。这个办法叫思维链，英文缩写 CoT。五月的这篇论文发现，连例题都不用给，一句话就行。）\n\n我们来试。还是那十二道题，还是那个只对了两道的模型，只把最后那句“只回答一个数字”换成“请一步一步想”：\n\n```python\n# steps.py：还是那个模型，只多说一句话\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor i, (a, b) in enumerate(puzzles):\n    reply, tokens = chat(text(a, b) + \"请一步一步想：先写出每件事最早几分开始、几分结束，最后一行只写答案的数字。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    if i == 1:\n        print(\"—— 审批 20、下载 20 那一题，它写的是 ——\")\n        print(reply)\n        print(\"——\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n```\n\n```\n—— 审批 20、下载 20 那一题，它写的是 ——\n1. 分析任务依赖关系：\n   - 账号审批（A）：20分钟，无前置依赖。\n   - 下载工具包（B）：20分钟，无前置依赖。\n   - 安装工具（C）：15分钟，依赖 A 和 B 都完成。\n   - 环境自检（D）：10分钟，依赖 C 完成。\n\n2. 确定最早开始时间：\n   - 由于人手管够，A 和 B 可以同时进行。\n   - A 开始时间：0 分钟。\n   - B 开始时间：0 分钟。\n\n3. 计算各任务结束时间：\n   - A 结束时间：0 + 20 = 20 分钟。\n   - B 结束时间：0 + 20 = 20 分钟。\n   - C 必须等 A 和 B 都结束才能开始。A 和 B 都在 20 分钟结束，所以 C 最早在 20 分钟开始。\n   - C 结束时间：20 + 15 = 35 分钟。\n   - D 必须等 C 结束才能开始。C 在 35 分钟结束，所以 D 最早在 35 分钟开始。\n   - D 结束时间：35 + 10 = 45 分钟。\n\n4. 总结每件事的时间段：\n   - 账号审批：0-20 分钟\n   - 下载工具包：0-20 分钟\n   - 安装工具：20-35 分钟\n   - 环境自检：35-45 分钟\n\n5. 全部办完的最快时间是最后一个任务结束的时间，即 45 分钟。\n\n45\n——\n答对 12/12，平均每题写了 455 个 token\n```\n\n十二道全对。\n\n看它写的那一段。它先把四件事和各自的条件列出来，再一件一件算出起止时间，最后才报数。这不就是你刚才在纸上做的事吗？\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/QqFObR0N2oGloaxV4ZjcdgAInyc.png|这一回，它先打草稿。]]\n\n回到岔路口。做大没有错，专门教也没有错，后来这两条路都有人走，都走通了（这一章后面会讲）。可在它们之前，有人先发现了一件事：**这个模型本来就会算。它只是没有被允许去算。**\n\n为什么一句话就能让它“被允许”？\n\n## 它说出来的话，就是它的草稿纸\n\n这件事的答案，你在第 04 章就已经拿到了。\n\n模型只做一件事：根据前文，接下一个词。\n\n你问它题目，并且要求“只回答一个数字”。这时候，它面前的前文只有题目。它必须在接下一个词的那一下子里，把四个数、三层先后关系全部处理完，直接吐出答案的第一个数字。\n\n这就好比不许你动笔，题目念完，立刻报数。\n\n而当它被允许一步一步写的时候，情况完全不同了。它先写下“审批 0 到 30，下载 0 到 20”。这一行一旦写出来，**就成了前文的一部分**。接下去它只需要回答一个小得多的问题：前文里写着两件事分别在 30 和 20 结束，那么安装最早什么时候开始？这个它接得住。写下“30”，又成了前文。再往前挪一小步。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/Bv9qbwYzwoR5qSxAZn0c4R9Bnud.png|它没有草稿纸。它说出来的话，就是它的草稿纸。]]\n\n人有脑子里的草稿，也有纸上的草稿。它两样都没有。它唯一能“记下来”的地方，就是它自己正在写的那段话。\n\n所以，不让它写，就等于不让它想。\n\n也顺便回看一眼第 04 章（上）我们自己手搓的那个 592 参数 `mini_gpt.py`：为什么不让它也“一步一步想”？因为它肚子里只见过几句固定规矩，连基本的加减和先后关系都没见过多少。**“一步一步想”能管用，前提是模型底子里本来就装过这些步骤的规律**；把草稿纸递给一个还没认全字的婴儿，纸再大也画不出算式。\n\n即便对大模型，这个道理也有三个容易踩的坑，先提醒你。\n\n**第一，写出来的步骤，不是它脑子里的录像。** 那一段推导是它“接”出来的文字，读着像思考过程，可它内部到底是怎么算的，这段文字并不保证如实反映。别因为步骤写得漂亮，就认定它是这么想的。\n\n**第二，步骤写得漂亮，不等于答案对。** 第一步错了，后面每一步都会沿着错的往下走，最后交给你一篇逻辑严密、层次分明的错误。而且这种错比脱口而出的错更唬人。\n\n**第三，想是要花钱的。** 回头看两次输出的最后一行。脱口而出，平均每题 3 个 token。一步一步想，455 个。贵了一百五十倍，也慢了一大截。\n\n第三条让人心疼。有没有便宜点的办法？\n\n## 多答几次，行不行\n\n你可能已经有了个主意：不让它长篇大论，还是让它直接报数，但是**多报几次**，取多数。一个人蒙不准，五个人投票总该靠谱点吧？\n\n每次 3 个 token，五次才 15 个，比 455 便宜多了。\n\n为了让五次的回答有所不同，我们把第 04 章学过的温度调到 1。动手之前，先猜它能对几道：\n\n```python\n# vote.py：不许想，但可以多答几次，少数服从多数\nfrom collections import Counter\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    answers = []\n    for _ in range(5):\n        reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", temperature=1, want_usage=True)\n        answers.append(last_number(reply))\n        spent += tokens\n    winner = Counter(answers).most_common(1)[0][0]\n    right += winner == truth(a, b)\n    print(f\"审批 {a} 下载 {b}：五次答 {answers}，多数是 {winner}，应为 {truth(a, b)}\", \"✓\" if winner == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n```\n\n```\n审批 20 下载 10：五次答 [35, 50, 35, 45, 45]，多数是 35，应为 45 ✗\n审批 20 下载 20：五次答 [45, 45, 35, 50, 50]，多数是 45，应为 45 ✓\n审批 20 下载 30：五次答 [50, 55, 65, 65, 50]，多数是 50，应为 55 ✗\n审批 20 下载 40：五次答 [75, 70, 60, 65, 75]，多数是 75，应为 65 ✗\n审批 30 下载 10：五次答 [50, 45, 55, 30, 35]，多数是 50，应为 55 ✗\n审批 30 下载 20：五次答 [45, 50, 50, 30, 65]，多数是 50，应为 55 ✗\n审批 30 下载 30：五次答 [50, 65, 65, 65, 50]，多数是 65，应为 55 ✗\n审批 30 下载 40：五次答 [60, 65, 90, 75, 75]，多数是 75，应为 65 ✗\n审批 40 下载 10：五次答 [50, 65, 45, 65, 65]，多数是 65，应为 65 ✓\n审批 40 下载 20：五次答 [60, 65, 55, 40, 65]，多数是 65，应为 65 ✓\n审批 40 下载 30：五次答 [70, 75, 80, 60, 70]，多数是 70，应为 65 ✗\n审批 40 下载 40：五次答 [85, 80, 40, 40, 40]，多数是 40，应为 65 ✗\n答对 3/12，平均每题写了 15 个 token\n```\n\n三道。比不投票只多对了一道，基本等于没用。\n\n看一看它每道题的五个答案，比结论更有意思。它们并不是围着正确答案小幅波动。它们东一个西一个，而且经常有两三个一起错在同一个数上，然后凭着“多数”当选。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/Mg7cbDFXGoYCeHx1bJjcBLBcnWf.png|五位一致同意。]]\n\n投票能管用，得有个前提：大家各错各的，错得互不相干，这样错误才会相互抵消。可这五次回答是同一个模型、带着同一个毛病答出来的。它们会一起错。\n\n**五份一样的答案，不是五份证据。它是一份证据，抄了五遍。**\n\n这句话请记住。到第 12 章我们请好几个 AI 助手一起干活的时候，同一个问题会换个样子再来：让同一个模型扮成“审查员”去检查它自己写的东西，算不算多了一双眼睛？\n\n（公平地说，“多答几次再投票”本身是个正经办法，也是 2022 年提出来的，论文里叫 Self-Consistency。只不过它是配着“一步一步想”用的：让模型把推导写上好几遍，每遍走不同的推导路线，这时候投票才有的可投。）\n\n> 📎\n>\n> **再多走一步：要是路线会分叉呢？** 刚才的排期题只有一条主线；如果在真实项目里加上一句限制——比如“审批和下载都要占同一条内网通道，同一时间只能办一件”——事情就会立刻分出两条路：“先审批再下载”，或者“先下载再审批”。一条草稿顺着第一条路写下去，很难半路自己跳出来比第二条。这时候，与其让模型自己乱蒙，不如让外面的程序把它拆成几条分支分别让模型算，最后把不通的枝剪掉、留最快的那一支。这就是后来的**思维树（Tree of Thoughts）**——听上去玄乎，其实只是把“画草稿”变成了“程序管分叉，模型算每一支”。\n\n## 让程序来把关\n\n换一个思路。与其指望它多答几次蒙对，不如找一个**不会跟着它一起错**的东西来检查。\n\n这道题有个好处：一份安排对不对，是可以一条一条核对的。每件事的时长对不对？有没有哪件事抢在了它该等的事前面？这些，一段普通的程序就能查，而且查一万遍都不会累，也不会被说服。\n\n```python\n# verify.py：把“看着合理”换成“查得出来”\ndef verify(plan, a, b):\n    \"\"\"plan 形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}\n    返回 (哪里不对, 全部办完的时间)。第一项是 None，表示这份安排行得通。\"\"\"\n    need = {\"审批\": a, \"下载\": b, \"安装\": 15, \"自检\": 10}\n    wait = {\"安装\": [\"审批\", \"下载\"], \"自检\": [\"安装\"]}\n    if not isinstance(plan, dict) or set(plan) != set(need):\n        return \"四件事要一件不多、一件不少\", None\n    for job, minutes in need.items():\n        span = plan[job]\n        if not (isinstance(span, list) and len(span) == 2 and all(isinstance(x, int) for x in span)):\n            return f\"{job}：要写成 [开始, 结束] 两个整数\", None\n        if span[0] < 0 or span[1] - span[0] != minutes:\n            return f\"{job}：要花 {minutes} 分钟，你写的起止时间对不上\", None\n    for job, before in wait.items():\n        for other in before:\n            if plan[job][0] < plan[other][1]:\n                return f\"{job}：不能在{other}办完（第 {plan[other][1]} 分钟）之前开始\", None\n    return None, max(span[1] for span in plan.values())\n\nif __name__ == \"__main__\":\n    plans = {\n        \"同时办\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]},\n        \"抢着装\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [20, 35], \"自检\": [35, 45]},\n        \"排队办\": {\"审批\": [0, 30], \"下载\": [30, 50], \"安装\": [50, 65], \"自检\": [65, 75]},\n    }\n    for name, plan in plans.items():\n        print(name, verify(plan, 30, 20))\n```\n\n先别接模型，我们自己写三份安排给它查。一份是对的；一份“抢着装”，让安装在第 20 分钟就开始；一份“排队办”，四件事一件接一件。猜猜它对这三份各会说什么？\n\n```\n同时办 (None, 55)\n抢着装 ('安装：不能在审批办完（第 30 分钟）之前开始', None)\n排队办 (None, 75)\n```\n\n第一份，行得通，55 分钟。第二份被拦下了，还说清了错在哪儿。\n\n第三份呢？行得通，75 分钟。\n\n它说得没错：排队办确实一条规矩都没违反。可这不是最快的。\n\n你是不是觉得这个场面有点眼熟？上一章那个放过了错答卷的 `check`，这一章这个放过了慢安排的 `verify`。同一句话，再说一遍：**你查的是什么？你没查的是什么？** 这个检查器查的是“行不行得通”，它不查“是不是最快”。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/M3nSbKp8BolmQixNmz3cOesonem.png|交上来的安排，先过这一关。]]\n\n顺带一提，怎样才算真正证明了“55 分钟就是最快”？光拿出一份 55 分钟的安排还不够——你还得证明**不可能比 55 更短**。这里只要看两条必走的路：一条是“审批 → 安装 → 自检”（`30 + 15 + 10 = 55`），另一条是“下载 → 安装 → 自检”（`20 + 15 + 10 = 45`）。哪怕人手无限多，较长那条路也得 55 分钟才能走完，这就叫**下界**。当一份可行方案的时间正好碰上下界，你才算把“最快”钉死了。\n\n现在把模型接上。规矩是这样的：不许解释，直接交一份安排，写清四件事各自几分开始、几分结束。交上来先过检查；过不了，就把错在哪儿告诉它，让它重交，最多三次。\n\n```python\n# checked.py：不许想，但交上来的安排要过检查；过不了，告诉它错在哪儿，让它重交\nimport json\nfrom llm import chat\nfrom puzzle import text, truth, puzzles\nfrom verify import verify\n\nASK = ('不要解释，只输出一个 JSON，写出四件事各自的起止时间（第几分钟），'\n       '形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}。')\n\nright = slow = spent = retries = 0\nfor a, b in puzzles:\n    messages = [{\"role\": \"user\", \"content\": text(a, b) + ASK}]\n    finish = None\n    for attempt in range(3):\n        reply, tokens = chat(messages, json_mode=True, want_usage=True)\n        spent += tokens\n        try:\n            problem, finish = verify(json.loads(reply), a, b)\n        except ValueError:\n            problem = \"这不是合法的 JSON\"\n        if problem is None:\n            break\n        retries += 1\n        messages += [{\"role\": \"assistant\", \"content\": reply},\n                     {\"role\": \"user\", \"content\": \"这份安排行不通：\" + problem + \"。请重新给出 JSON。\"}]\n    right += finish == truth(a, b)\n    slow += finish is not None and finish > truth(a, b)\n    print(f\"审批 {a} 下载 {b}：它排到第 {finish} 分钟办完，最快应为 {truth(a, b)}\", \"✓\" if finish == truth(a, b) else \"✗\")\nprint(f\"最快的安排 {right}/{len(puzzles)}；行得通但不是最快 {slow} 题；被打回重交 {retries} 次；平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n```\n\n猜两个数：它能排对几道？中间会被打回几次？\n\n```\n审批 20 下载 10：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 20：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 20 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 30 下载 10：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 20：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 10：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 20：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 30：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n最快的安排 12/12；行得通但不是最快 0 题；被打回重交 0 次；平均每题写了 43 个 token\n```\n\n十二道全对。平均每题 43 个 token，是“一步一步想”的十分之一。\n\n可是请看那个数：**被打回重交 0 次。**\n\n我们辛辛苦苦写的检查器，一次都没派上用场。它每一份都是一次就交对了的。\n\n这和我预想的不一样。我本来以为会看到它交错、被打回、改正的过程。那么，既然检查器根本没出手，它是怎么从 2 道变成 12 道的？\n\n想一想，再往下看。\n\n答案藏在我们让它交的那样东西里。我们没让它报一个总数，我们让它写出**四件事各自的起止时间**。要写出“安装从 30 开始”，它得先写下“审批到 30 结束”。写下来，就成了前文。\n\n我们以为自己在让它“填表”。其实这张表，就是一张最省纸的草稿。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/Dg80bkuAYoaU74xPFz6cVrmynDc.png|同样的题，四种花法。]]\n\n这是这一章我最想让你带走的东西：**要它写下来的，不必是长篇大论，只要恰好是那几个中间结果。** “一步一步想”有用，不是因为话多，是因为关键的中间结果被写了出来。你要是知道关键的中间结果是什么，直接让它写那几样，又准又省。\n\n那检查器白写了吗？没有。今天十二道题它没出手，不等于明天换一批题它还能闲着。它便宜，不会累，不会被哄；留着它，是一份保险。只是要记得它保的是什么，不保的是什么。\n\n最后还有一句煞风景的实话。这道题，其实根本用不着模型。翻回去看 `puzzle.py` 里的 `truth` 函数：一行代码，算得又快又准，永远不会错。\n\n**凡是一行确定的代码就能算对的事，别交给模型去想。** 模型该出场的，是那些写不成一行代码的地方。这道题只是我们的练习场。\n\n## 把草稿纸装进模型里\n\n故事回到岔路口上的另外两条路：做大，和专门教。\n\n“一步一步想”是使用的人加的一句话。那么，能不能让模型自己养成这个习惯，不用人提醒，遇到难题就先打草稿？\n\n2024 年 9 月 12 日，OpenAI 发布了一个新模型，叫 o1。你点开它，问了一道题。它没有马上回答。屏幕上出现一行小字：正在思考。过了十几秒，答案才出来，上面多了一行：“思考了 14 秒”。\n\n这是头一回，一个面向大众的模型会先停下来想。\n\n它是怎么练出来的？公开资料说明 o1 用强化学习训练推理，但没有公开完整配方。为了接上第 03 章 `reinforce.py` 的直觉，我们先看一种用程序验分的办法（后面的 R1 论文披露了这一路的具体做法，并非在核实 o1 的完整训练细节）：让模型在回答之前先写一段草稿，再交出答案；由像 `verify.py` 这样能客观验对错的程序来判分——答对了就加分，然后朝着高分去练（因为奖励能由程序直接核对，常被叫作“基于可验证奖励的强化学习”，英文简称 RLVR）。练得多了，它自己就摸出了一套容易拿高分的草稿习惯：把问题拆开，中途检查，发现走不通就退回去换条路。\n\n所以“会思考的模型”，其实拧了两个旋钮：\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/EwBzbxOupoOxijxryRIcai5Jnbf.png|“会思考的模型”，拧的是两个旋钮。]]\n\n一个在练的时候：教它养成先打草稿的习惯。一个在用的时候：这道题，许它打多长的草稿。你在一些产品里见到的“深度思考”开关，拧的就是后一个。\n\n有意思的是那份草稿的去向。o1 的草稿是不给用户看的，你只能看到一个摘要。可它是真实存在的，而且照样算钱——更要紧的是，**它在账单和输出上限里都算成 `completion_tokens`**。\n\n还记得第 05 章（番外）里那个 `max_tokens` 坑吗？如果你调用推理模型时把 `max_tokens` 设得太小，比如卡在 `16` 甚至 `8192`，遇到难题它光在草稿纸里推演就把额度花完了，最后正经回答一个字都没来得及吐出来，只给你返回一个空字符串加上 `finish_reason: \"length\"`。\n\n口说无凭，我们来掀开帘子看一眼。本版示例把推理模型环境变量 `LLM_MODEL` 设为 `deepseek-v4.1-flash`。下面保留的输出，按原教材说明来自 2026 年 11 月 SenseAudio 平台上的同名模型，尚未在当前商汤接口复测。原实验仍只许它“回答一个数字，不要任何解释”，再看它实际写了多少：\n\n```python\n# peek.py：有的模型嘴上只回一个数，背地里呢？\nfrom llm import chat\nfrom puzzle import text\n\ndata = chat(text(30, 20) + \"只回答一个数字，不要任何解释。\", want_usage=\"all\")\nmessage = data[\"choices\"][0][\"message\"]\ndetails = data[\"usage\"].get(\"completion_tokens_details\", {})\nprint(\"它的回答：\", message[\"content\"].strip())\nprint(\"它一共写了\", data[\"usage\"][\"completion_tokens\"], \"个 token，其中没给我们看的：\", details.get(\"reasoning_tokens\", 0))\nhidden = message.get(\"reasoning_content\") or message.get(\"reasoning\") or \"\"\nprint(\"—— 没给我们看的那部分，开头是这样的 ——\")\nprint(hidden.strip()[:260])\n```\n\n```\n它的回答： 55\n它一共写了 102 个 token，其中没给我们看的： 101\n—— 没给我们看的那部分，开头是这样的 ——\nWe need answer Chinese. Need parse scheduling. Tasks: account approval 30 min, download toolkit 20 min, install tools 15 min requires first two completed before start. Environment self-check 10 min requires after install. Plenty manpower, parallel possible. Fa\n```\n\n它的回答只有两个字符：55。可它一共写了 102 个 token，其中 101 个没给我们看。\n\n那 101 个 token，就是它的草稿。接口恰好把这部分也放在 `reasoning_content` 里返回了，于是我们能看到开头：它在用英文飞快地给自己列提纲（“需要用中文回答。先理清排期……”）。我们说了“不要任何解释”，它确实没有向我们解释。它只是先在背后把题做了。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/S70vb04H6oLiqQxLx3ScIanyn8c.png|我们说了不要解释。它确实没有向我们解释。]]\n\n还是那十二道题，还是“只回答一个数字”，这个模型十二道全对，平均每题 118 个 token。\n\n把这一章的几组数字摆在一起，你会发现它们讲的是同一件事：\n\n以下整张表是上述原教材历史基准，不是当前接口的横向测评；默认、大一号和推理模型的对应关系见本章开头。\n\n| 做法 | 12 题答对 | 每题写多少 token |\n|-|-|-|\n| 默认小模型，直接报数 | 2 | 3 |\n| 大一号的模型，直接报数 | 6 | 3 |\n| 默认小模型，报五次投票 | 3 | 15 |\n| 默认小模型，写出四个起止时间 | 12 | 43 |\n| 自带草稿习惯的模型，“直接报数” | 12 | 118（其中绝大部分看不见） |\n| 默认小模型，一步一步想 | 12 | 455 |\n\n答对的那三行，没有一行是真的“脱口而出”。区别只在于草稿写在哪儿、写多长、给不给你看。\n\no1 之后四个月，2025 年 1 月，中国的 DeepSeek 发布了 R1。它做了一件 o1 没做的事：把草稿原原本本地摊给用户看。一时间，全世界的人都在围观一个模型自言自语。它的草稿里满是“等等”“让我再想想”“不对”这样的话，读起来像一个人在小声嘀咕。模型的权重也一并公开了，谁都可以下载来研究。它的论文里还有一个更激进的版本（R1-Zero），完全不看人写的示范，只靠“答对加分”硬练，照样练出了回头检查、推翻重来的习惯。\n\n> 📎\n>\n> **选读：一个“等等”。** 2025 年有一项叫 s1 的研究，把“想多久”这件事做成了一个很具体的开关。模型打草稿打到一半，准备收尾作答的时候，程序把它那个表示“想完了”的记号按住不让出，并替它在草稿末尾接上一个词：“Wait”（等等）。模型看到自己“说”了一句等等，就真的接着往下想了。在一些数学题上，这样多按几次，正确率会涨；按得太多，它就开始原地打转。想得久一点有用，但不是越久越好。\n\n## 多想不是万能的\n\n说了一整章多想的好处，最后得把它的边界画出来。不然你会养成一个坏习惯：什么都开“深度思考”。\n\n**第一，它会碰到天花板。** 2025 年 6 月，Apple 的研究者拿几种可以随意调难度的谜题（比如汉诺塔）去试这些会思考的模型。简单的时候，想不想差不多，有时不想反而更好；中等难度，会想的明显占优；难度再往上，不管许它想多久，正确率都会塌下去。草稿纸再多，也有算不动的题。\n\n**第二，它慢，而且贵。** 这个你已经亲眼看到了。把“回答太快”治好的代价，就是回答不再快。问一句“会议室在几楼”，犯不上让它沉思十四秒。\n\n**第三条最要紧：多想，只治一种病。**\n\n设想部门上周刚发了通知，把账号审批的时限从 30 分钟改成了 45 分钟。你再问它那道排期题，但没把这份新通知给它——甚至题目里还留着旧的“30 分钟”。\n\n它会一步一步想，草稿打得工工整整，每一步推导都无懈可击，然后郑重地告诉你：55 分钟。\n\n每一步都对。答案是错的。\n\n它不是没想清楚。它是不知道。那份新通知不在它的前文里，也不在它读过的任何东西里。条件过期时，思考越严密，越能把错答案算得像模像样。这样的事，想一万步也想不出来。\n\n![[零基础学AI/attachments/第 06 章｜回答太快，那就多想一会儿？/I6WBbCwN5oo7ctx1cRGcU55RnEb.png|它答不好，缺的是哪一样。]]\n\n所以在让它多想之前，先替它诊断一下：它缺的，真的是“想”吗？\n\n如果条件都摆在它面前了，只是环环相扣容易乱，那就让它把中间结果写出来，再找个程序查一查。这是这一章的事。\n\n如果它缺的是一份它没见过的材料，那让它想再久也没用，得先把材料找来。这是下一章的事。\n\n如果它缺的是一双手，要真的去开一个账号、装一个软件，那想得再明白也只是纸上谈兵。这是再下一章的事。\n\n## 这一章你留下了什么\n\n`verify.py` 和 `checked.py`，合起来是资料助手的 **v0.6**。往后它碰到条件一环扣一环的活，就照这个办法来：让它把关键的中间结果写成一张表，交上来先让程序过一遍，过不了就打回去。\n\n`peek.py` 可以留着。以后有人跟你说某个模型“一下子就答出来了”，你可以去看看它背地里写了多少 `reasoning_tokens`。\n\n还有四句话。\n\n它没有草稿纸，它说出来的话就是它的草稿纸。\n\n五份一样的答案，是一份证据抄了五遍。\n\n要它写下来的，不必多，要准。\n\n一行代码能算对的，别让它想。\n\n## 下一站\n\n会听话了，会想了。可是那份改了审批时限的通知，它还是不知道。\n\n不知道，本来也没什么。麻烦的是，它**不知道自己不知道**。你问它，它不会说“这我没见过”，它会给你一个听上去完全合理的答案。\n\n2023 年 6 月，纽约的一间联邦法庭上，一位执业三十年的律师被法官叫去解释一件事。他提交的一份文书里，引用了六个从前的判例来支持自己的主张，案件名称、法院、年份、卷宗号，一应俱全。\n\n对方律师去查了。法官也去查了。\n\n这六个判例，一个都不存在。\n\n## 合上书之前，想一想\n\n1. 上一章结尾那道题，你第一感觉报的是多少？你错（或者对）的原因，和模型的原因像不像？\n2. 用你自己的话解释：为什么“只回答一个数字”会让它算错，而“写出四件事的起止时间”就算对了？\n3. 找一件你常让 AI 做、而它时不时出错的事。它需要的“中间结果”是什么？你能不能直接让它把那几样写出来？\n4. `verify` 放过了“排队办”那份 75 分钟的安排。如果要它连“是不是最快”也查，你会怎么改？改完以后，还需要模型吗？\n5. 下面三件事，分别缺的是“想”“料”还是“手”：让它算一份报销单的总额；让它说出你们公司今年的年假天数；让它替你把会议室订了。\n\n## 来源\n\n1. J. Wei et al., [Chain-of-Thought Prompting Elicits Reasoning in Large Language Models](https://arxiv.org/abs/2201.11903), *NeurIPS*, 2022（预印本 2022 年 1 月）。\n2. T. Kojima et al., [Large Language Models are Zero-Shot Reasoners](https://arxiv.org/abs/2205.11916), *NeurIPS*, 2022（预印本 2022 年 5 月）。“Let's think step by step” 与 17.7% 到 78.7% 的对比出自此文，题目集为 MultiArith。\n3. X. Wang et al., [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171), 2022。\n4. S. Yao et al., [Tree of Thoughts: Deliberate Problem Solving with Large Language Models](https://arxiv.org/abs/2305.10601), *NeurIPS*, 2023。\n5. OpenAI, [Learning to reason with LLMs](https://openai.com/index/learning-to-reason-with-llms/), 2024-09-12。\n6. DeepSeek-AI, [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948), 2025 年 1 月。\n7. N. Muennighoff et al., [s1: Simple test-time scaling](https://arxiv.org/abs/2501.19393), 2025。\n8. P. Shojaee et al., [The Illusion of Thinking: Understanding the Strengths and Limitations of Reasoning Models via the Lens of Problem Complexity](https://ml-site.cdn-apple.com/papers/the-illusion-of-thinking.pdf), 2025 年 6 月。\n9. 现版代码目标接口为商汤 Token Plan（`https://token.sensetime.com/api/v1`），示例可配置 `sensenova-6.8-flash`、`glm-5.3`、`deepseek-v4.1-flash`，本轮未调用或重测。文中数字按保留的原教材来源说明，来自 2026 年 11 月 SenseAudio 平台：默认 `senseaudio-s2-flash`、大一号 `senseaudio-s2`、推理 `deepseek-v4.1-flash`。具体日期、权重版本、完整代码版本及原始日志对应关系未核验；原说明不是本次重新执行的证据，也不能证明同名模型在另一平台有相同成绩。\n",
+  "codeCount": 14,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "第 06 章｜回答太快，那就多想一会儿？",
+      "id": "upper-06-7fd3fc9c605e"
+    },
+    {
+      "type": "prose",
+      "text": "配套课件在这里：下载上册配套代码与实验材料（r4）。解压后先读 README，按对应章节说明使用。",
+      "html": "<p>配套课件在这里：下载上册配套代码与实验材料（r4） <span>（原始资料包不公开；本章代码见实验区文件）</span>。解压后先读 README，按对应章节说明使用。</p>\n",
+      "id": "upper-06-dd773ddd04b4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "脱口而出",
+      "id": "upper-06-f5604979676f"
+    },
+    {
+      "type": "prose",
+      "text": "上一章结尾那道题，你报的是多少？",
+      "html": "<p>上一章结尾那道题，你报的是多少？</p>\n",
+      "id": "upper-06-405f786dc9f1"
+    },
+    {
+      "type": "prose",
+      "text": "再看一遍题目：新同事第一天要办四件事。账号审批，30 分钟。下载工具包，20 分钟。安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。人手管够，能同时办的可以同时办。最快多久能全部办完？",
+      "html": "<p>再看一遍题目：新同事第一天要办四件事。账号审批，30 分钟。下载工具包，20 分钟。安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。人手管够，能同时办的可以同时办。最快多久能全部办完？</p>\n",
+      "id": "upper-06-a8e6a13b8d8a"
+    },
+    {
+      "type": "prose",
+      "text": "现在请你拿出纸笔，画一画。画完再往下看。",
+      "html": "<p>现在请你拿出纸笔，画一画。画完再往下看。</p>\n",
+      "id": "upper-06-9597f124364f"
+    },
+    {
+      "type": "image",
+      "alt": "把它画出来：两件事可以同时办；第三件，得等两件都办完。",
+      "caption": "把它画出来：两件事可以同时办；第三件，得等两件都办完。",
+      "available": true,
+      "src": "/media/6693438bf4ecd17b.png",
+      "id": "upper-06-748cff97a057",
+      "previewWidth": 960,
+      "previewSrc": "/media/a5a9d4e7ca4e4eb9275ba547.webp",
+      "height": 885,
+      "previewHeight": 472,
+      "srcSet": "/media/a5a9d4e7ca4e4eb9275ba547.webp 960w, /media/6693438bf4ecd17b.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "审批和下载同时开始。下载 20 分钟就好了，可安装还得等审批，所以最早第 30 分钟才能装。装到 45，检到 55。",
+      "html": "<p>审批和下载同时开始。下载 20 分钟就好了，可安装还得等审批，所以最早第 30 分钟才能装。装到 45，检到 55。</p>\n",
+      "id": "upper-06-7db719d8df69"
+    },
+    {
+      "type": "prose",
+      "text": "55 分钟。",
+      "html": "<p><strong>55 分钟。</strong></p>\n",
+      "id": "upper-06-10a87822a503"
+    },
+    {
+      "type": "prose",
+      "text": "如果你刚才脱口而出的是 75 或者 45，别不好意思。你不是不会算，你只是答得太快了。一拿起笔，你就算对了。",
+      "html": "<p>如果你刚才脱口而出的是 75 或者 45，别不好意思。你不是不会算，你只是答得太快了。一拿起笔，你就算对了。</p>\n",
+      "id": "upper-06-9866a8739b81"
+    },
+    {
+      "type": "prose",
+      "text": "那么，我们的资料助手呢？",
+      "html": "<p>那么，我们的资料助手呢？</p>\n",
+      "id": "upper-06-e0efa9710fd4"
+    },
+    {
+      "type": "prose",
+      "text": "上一章，它把任务卡做得漂漂亮亮。这道题要求清楚，条件齐全，没有一个字含糊，按说难不倒它。我们把同一道题换十二组数字（审批时间取 20、30、40，下载时间取 10、20、30、40），准备好题目和标准答案：",
+      "html": "<p>上一章，它把任务卡做得漂漂亮亮。这道题要求清楚，条件齐全，没有一个字含糊，按说难不倒它。我们把同一道题换十二组数字（审批时间取 20、30、40，下载时间取 10、20、30、40），准备好题目和标准答案：</p>\n",
+      "id": "upper-06-04d246727e5b"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# puzzle.py：同一道排期题，换十二组数字\nimport re\n\ndef text(a, b):\n    return (f\"新同事第一天要办四件事。账号审批，{a} 分钟。下载工具包，{b} 分钟。\"\n            \"安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。\"\n            \"人手管够，能同时办的可以同时办。最快多久能全部办完？\")\n\ndef truth(a, b):\n    return max(a, b) + 15 + 10          # 审批和下载同时开始，等慢的那个，再装，再检\n\npuzzles = [(a, b) for a in (20, 30, 40) for b in (10, 20, 30, 40)]\n\ndef last_number(reply):\n    \"\"\"从它的回答里，取最后出现的那个数\"\"\"\n    found = re.findall(r\"\\d+\", reply)\n    return int(found[-1]) if found else None",
+      "text": "# puzzle.py：同一道排期题，换十二组数字\nimport re\n\ndef text(a, b):\n    return (f\"新同事第一天要办四件事。账号审批，{a} 分钟。下载工具包，{b} 分钟。\"\n            \"安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。\"\n            \"人手管够，能同时办的可以同时办。最快多久能全部办完？\")\n\ndef truth(a, b):\n    return max(a, b) + 15 + 10          # 审批和下载同时开始，等慢的那个，再装，再检\n\npuzzles = [(a, b) for a in (20, 30, 40) for b in (10, 20, 30, 40)]\n\ndef last_number(reply):\n    \"\"\"从它的回答里，取最后出现的那个数\"\"\"\n    found = re.findall(r\"\\d+\", reply)\n    return int(found[-1]) if found else None",
+      "runnable": true,
+      "filename": "puzzle.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-06-479c2a321499"
+    },
+    {
+      "type": "prose",
+      "text": "调用模型还是用上一章的 llm.py（接的还是商汤 Token Plan 的 https://token.sensetime.com/api/v1，默认用 sensenova-6.8-flash）。这一章给它加了两个小开关：可以调温度，也可以让它顺便告诉我们这次写了多少 token。另外，网络偶尔会断，所以它会自动重试。",
+      "html": "<p>调用模型还是用上一章的 <code>llm.py</code>（接的还是商汤 Token Plan 的 <code>https://token.sensetime.com/api/v1</code>，默认用 <code>sensenova-6.8-flash</code>）。这一章给它加了两个小开关：可以调温度，也可以让它顺便告诉我们这次写了多少 token。另外，网络偶尔会断，所以它会自动重试。</p>\n",
+      "id": "upper-06-ac721edc5fe9"
+    },
+    {
+      "type": "prose",
+      "text": "先给这页账本贴个标签：下面的通过率、回答和 token 数保留自原教材，不是本版商汤接口重新跑出的成绩。原教材来源说明记为 2026 年 11 月、SenseAudio 平台，默认 senseaudio-s2-flash，大一号为 senseaudio-s2，推理模型为该平台上的 deepseek-v4.1-flash。具体运行日、权重版本、当时完整代码版本和原始日志对应关系尚未核验；本版接口也未据此重测。",
+      "html": "<p><strong>先给这页账本贴个标签：下面的通过率、回答和 token 数保留自原教材，不是本版商汤接口重新跑出的成绩。原教材来源说明记为 2026 年 11 月、SenseAudio 平台，默认 <code>senseaudio-s2-flash</code>，大一号为 <code>senseaudio-s2</code>，推理模型为该平台上的 <code>deepseek-v4.1-flash</code>。具体运行日、权重版本、当时完整代码版本和原始日志对应关系尚未核验；本版接口也未据此重测。</strong></p>\n",
+      "id": "upper-06-e409c7c51fb0"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# llm.py：和上一章是同一个函数，多了两个开关：temperature，和“把花掉的 token 数也告诉我”\nimport json, os, time, urllib.request\n\ndef chat(messages, json_mode=False, temperature=0, want_usage=False):\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    body = {\n        \"model\": os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\"),\n        \"messages\": messages,\n        \"temperature\": temperature,\n    }\n    if json_mode:\n        body[\"response_format\"] = {\"type\": \"json_object\"}\n    base_url = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\n    req = urllib.request.Request(\n        base_url + \"/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    for attempt in range(3):                       # 网络偶尔会断，最多试三次\n        try:\n            with urllib.request.urlopen(req, timeout=180) as resp:\n                data = json.load(resp)\n            break\n        except (OSError, ValueError):\n            if attempt == 2:\n                raise\n            time.sleep(2)\n    text = data[\"choices\"][0][\"message\"][\"content\"].strip()\n    if want_usage == \"all\":\n        return data                                                      # 原样返回，给想看细节的人\n    if want_usage:\n        return text, data.get(\"usage\", {}).get(\"completion_tokens\", 0)   # 它写了多少 token\n    return text",
+      "text": "# llm.py：和上一章是同一个函数，多了两个开关：temperature，和“把花掉的 token 数也告诉我”\nimport json, os, time, urllib.request\n\ndef chat(messages, json_mode=False, temperature=0, want_usage=False):\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    body = {\n        \"model\": os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\"),\n        \"messages\": messages,\n        \"temperature\": temperature,\n    }\n    if json_mode:\n        body[\"response_format\"] = {\"type\": \"json_object\"}\n    base_url = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\n    req = urllib.request.Request(\n        base_url + \"/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    for attempt in range(3):                       # 网络偶尔会断，最多试三次\n        try:\n            with urllib.request.urlopen(req, timeout=180) as resp:\n                data = json.load(resp)\n            break\n        except (OSError, ValueError):\n            if attempt == 2:\n                raise\n            time.sleep(2)\n    text = data[\"choices\"][0][\"message\"][\"content\"].strip()\n    if want_usage == \"all\":\n        return data                                                      # 原样返回，给想看细节的人\n    if want_usage:\n        return text, data.get(\"usage\", {}).get(\"completion_tokens\", 0)   # 它写了多少 token\n    return text",
+      "runnable": true,
+      "filename": "llm.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-349db7db2347"
+    },
+    {
+      "type": "prose",
+      "text": "然后像刚才对你那样，让它凭第一感觉报数：",
+      "html": "<p>然后像刚才对你那样，让它凭第一感觉报数：</p>\n",
+      "id": "upper-06-07d4b213dce6"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# quick.py：不许想，直接报数\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    print(f\"审批 {a} 下载 {b}：它答 {got}，应为 {truth(a, b)}\", \"✓\" if got == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "text": "# quick.py：不许想，直接报数\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    print(f\"审批 {a} 下载 {b}：它答 {got}，应为 {truth(a, b)}\", \"✓\" if got == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "runnable": true,
+      "filename": "quick.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-3ff6f3e13c1e"
+    },
+    {
+      "type": "prose",
+      "text": "十二道题，你猜它能对几道？",
+      "html": "<p>十二道题，你猜它能对几道？</p>\n",
+      "id": "upper-06-643552678f85"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "审批 20 下载 10：它答 45，应为 45 ✓\n审批 20 下载 20：它答 50，应为 45 ✗\n审批 20 下载 30：它答 50，应为 55 ✗\n审批 20 下载 40：它答 75，应为 65 ✗\n审批 30 下载 10：它答 50，应为 55 ✗\n审批 30 下载 20：它答 50，应为 55 ✗\n审批 30 下载 30：它答 45，应为 55 ✗\n审批 30 下载 40：它答 75，应为 65 ✗\n审批 40 下载 10：它答 65，应为 65 ✓\n审批 40 下载 20：它答 75，应为 65 ✗\n审批 40 下载 30：它答 75，应为 65 ✗\n审批 40 下载 40：它答 95，应为 65 ✗\n答对 2/12，平均每题写了 3 个 token",
+      "text": "审批 20 下载 10：它答 45，应为 45 ✓\n审批 20 下载 20：它答 50，应为 45 ✗\n审批 20 下载 30：它答 50，应为 55 ✗\n审批 20 下载 40：它答 75，应为 65 ✗\n审批 30 下载 10：它答 50，应为 55 ✗\n审批 30 下载 20：它答 50，应为 55 ✗\n审批 30 下载 30：它答 45，应为 55 ✗\n审批 30 下载 40：它答 75，应为 65 ✗\n审批 40 下载 10：它答 65，应为 65 ✓\n审批 40 下载 20：它答 75，应为 65 ✗\n审批 40 下载 30：它答 75，应为 65 ✗\n审批 40 下载 40：它答 95，应为 65 ✗\n答对 2/12，平均每题写了 3 个 token",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-4486fa1ae778"
+    },
+    {
+      "type": "prose",
+      "text": "两道。",
+      "html": "<p>两道。</p>\n",
+      "id": "upper-06-a200e4c8c402"
+    },
+    {
+      "type": "prose",
+      "text": "再看它错的那些：50，75，95。75 是把四个数全加起来了，和很多人一样。95 是 40 加 40 加 15，少加了一个 10，也是往一块儿加。50 呢？不知道它是怎么凑出来的。",
+      "html": "<p>再看它错的那些：50，75，95。75 是把四个数全加起来了，和很多人一样。95 是 40 加 40 加 15，少加了一个 10，也是往一块儿加。50 呢？不知道它是怎么凑出来的。</p>\n",
+      "id": "upper-06-2f42765411fb"
+    },
+    {
+      "type": "image",
+      "alt": "话音还没落，它已经举牌了。",
+      "caption": "话音还没落，它已经举牌了。",
+      "available": true,
+      "src": "/media/1127e975971b7880389bf29a.webp",
+      "id": "upper-06-048aeebb4027",
+      "previewWidth": 960,
+      "previewSrc": "/media/30323abef612bfd8950f8e0b.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/30323abef612bfd8950f8e0b.webp 960w, /media/1127e975971b7880389bf29a.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "在原教材的这组记录里，默认模型仍是 senseaudio-s2-flash。上一章它能把三条规定排成一份带出处的清单，这一章却连四个数都算不对。这说的是那组历史记录，不是现版默认接口的新结论。",
+      "html": "<p>在原教材的这组记录里，默认模型仍是 <code>senseaudio-s2-flash</code>。上一章它能把三条规定排成一份带出处的清单，这一章却连四个数都算不对。这说的是那组历史记录，不是现版默认接口的新结论。</p>\n",
+      "id": "upper-06-4e0c061b981b"
+    },
+    {
+      "type": "prose",
+      "text": "你也许会想：换个大点的模型不就好了。原教材记载，同平台更大一号的 senseaudio-s2，同样的问法，十二道对了六道。本版若改用 glm-5.3，需要另跑、另记，不能把这个六分搬过去。好了一些，还是有一半在蒙。",
+      "html": "<p>你也许会想：换个大点的模型不就好了。原教材记载，同平台更大一号的 <code>senseaudio-s2</code>，同样的问法，十二道对了六道。本版若改用 <code>glm-5.3</code>，需要另跑、另记，不能把这个六分搬过去。好了一些，还是有一半在蒙。</p>\n",
+      "id": "upper-06-670b0cb3f758"
+    },
+    {
+      "type": "prose",
+      "text": "它到底是哪里出了毛病？",
+      "html": "<p>它到底是哪里出了毛病？</p>\n",
+      "id": "upper-06-a68777ccf046"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "2022 年的岔路口",
+      "id": "upper-06-fd2995bf5384"
+    },
+    {
+      "type": "prose",
+      "text": "这不是今天才有的毛病。ChatGPT 上线之前，GPT-3 就这样：写文章头头是道，碰到要拐几个弯的题目，张口就错。",
+      "html": "<p>这不是今天才有的毛病。ChatGPT 上线之前，GPT-3 就这样：写文章头头是道，碰到要拐几个弯的题目，张口就错。</p>\n",
+      "id": "upper-06-c2b9a819ab21"
+    },
+    {
+      "type": "prose",
+      "text": "假设现在是 2022 年初，你在研究这个问题。你会从哪儿下手？",
+      "html": "<p>假设现在是 2022 年初，你在研究这个问题。你会从哪儿下手？</p>\n",
+      "id": "upper-06-71463ae4560a"
+    },
+    {
+      "type": "prose",
+      "text": "一条路：做大。 模型再大十倍，也许它就会算了。刚才我们看到了，大一号的模型确实好一点。",
+      "html": "<p><strong>一条路：做大。</strong> 模型再大十倍，也许它就会算了。刚才我们看到了，大一号的模型确实好一点。</p>\n",
+      "id": "upper-06-b9b049b01977"
+    },
+    {
+      "type": "prose",
+      "text": "另一条路：专门教。 上一章教它“听话”用的那一套，拿来教它“算数”：攒几万道带详细解答的题，让它练。",
+      "html": "<p><strong>另一条路：专门教。</strong> 上一章教它“听话”用的那一套，拿来教它“算数”：攒几万道带详细解答的题，让它练。</p>\n",
+      "id": "upper-06-8b44a8cee854"
+    },
+    {
+      "type": "prose",
+      "text": "两条路听着都靠谱，也都很贵。",
+      "html": "<p>两条路听着都靠谱，也都很贵。</p>\n",
+      "id": "upper-06-411b9e7acfec"
+    },
+    {
+      "type": "prose",
+      "text": "那一年，有人走了第三条路。这条路便宜到近乎荒唐，说出来像个玩笑：在题目后面加一句话。",
+      "html": "<p>那一年，有人走了第三条路。这条路便宜到近乎荒唐，说出来像个玩笑：<strong>在题目后面加一句话。</strong></p>\n",
+      "id": "upper-06-b83f66a61485"
+    },
+    {
+      "type": "prose",
+      "text": "先别往下看。猜猜是哪句话。",
+      "html": "<p>先别往下看。猜猜是哪句话。</p>\n",
+      "id": "upper-06-977601174f91"
+    },
+    {
+      "type": "prose",
+      "text": "2022 年 5 月，东京大学和 Google 的几位研究者发了一篇论文。他们在题目后面加了一句英文：“Let's think step by step.” 让我们一步一步想。",
+      "html": "<p>2022 年 5 月，东京大学和 Google 的几位研究者发了一篇论文。他们在题目后面加了一句英文：“Let's think step by step.” 让我们一步一步想。</p>\n",
+      "id": "upper-06-5f9037c84ab0"
+    },
+    {
+      "type": "prose",
+      "text": "模型没换，题目没换。在一套算术题上，他们报告的正确率从 17.7% 涨到了 78.7%。",
+      "html": "<p>模型没换，题目没换。在一套算术题上，他们报告的正确率从 17.7% 涨到了 78.7%。</p>\n",
+      "id": "upper-06-c957c13ed2fd"
+    },
+    {
+      "type": "prose",
+      "text": "（再早几个月，Google 的另一组人做过类似的事：在题目前面放几道写了详细步骤的例题，模型就会学着也把步骤写出来。这个办法叫思维链，英文缩写 CoT。五月的这篇论文发现，连例题都不用给，一句话就行。）",
+      "html": "<p>（再早几个月，Google 的另一组人做过类似的事：在题目前面放几道写了详细步骤的例题，模型就会学着也把步骤写出来。这个办法叫思维链，英文缩写 CoT。五月的这篇论文发现，连例题都不用给，一句话就行。）</p>\n",
+      "id": "upper-06-7e6677e0e3f5"
+    },
+    {
+      "type": "prose",
+      "text": "我们来试。还是那十二道题，还是那个只对了两道的模型，只把最后那句“只回答一个数字”换成“请一步一步想”：",
+      "html": "<p>我们来试。还是那十二道题，还是那个只对了两道的模型，只把最后那句“只回答一个数字”换成“请一步一步想”：</p>\n",
+      "id": "upper-06-5480ce5225d5"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# steps.py：还是那个模型，只多说一句话\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor i, (a, b) in enumerate(puzzles):\n    reply, tokens = chat(text(a, b) + \"请一步一步想：先写出每件事最早几分开始、几分结束，最后一行只写答案的数字。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    if i == 1:\n        print(\"—— 审批 20、下载 20 那一题，它写的是 ——\")\n        print(reply)\n        print(\"——\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "text": "# steps.py：还是那个模型，只多说一句话\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor i, (a, b) in enumerate(puzzles):\n    reply, tokens = chat(text(a, b) + \"请一步一步想：先写出每件事最早几分开始、几分结束，最后一行只写答案的数字。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    if i == 1:\n        print(\"—— 审批 20、下载 20 那一题，它写的是 ——\")\n        print(reply)\n        print(\"——\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "runnable": true,
+      "filename": "steps.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-f08bfedc4a59"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "—— 审批 20、下载 20 那一题，它写的是 ——\n1. 分析任务依赖关系：\n   - 账号审批（A）：20分钟，无前置依赖。\n   - 下载工具包（B）：20分钟，无前置依赖。\n   - 安装工具（C）：15分钟，依赖 A 和 B 都完成。\n   - 环境自检（D）：10分钟，依赖 C 完成。\n\n2. 确定最早开始时间：\n   - 由于人手管够，A 和 B 可以同时进行。\n   - A 开始时间：0 分钟。\n   - B 开始时间：0 分钟。\n\n3. 计算各任务结束时间：\n   - A 结束时间：0 + 20 = 20 分钟。\n   - B 结束时间：0 + 20 = 20 分钟。\n   - C 必须等 A 和 B 都结束才能开始。A 和 B 都在 20 分钟结束，所以 C 最早在 20 分钟开始。\n   - C 结束时间：20 + 15 = 35 分钟。\n   - D 必须等 C 结束才能开始。C 在 35 分钟结束，所以 D 最早在 35 分钟开始。\n   - D 结束时间：35 + 10 = 45 分钟。\n\n4. 总结每件事的时间段：\n   - 账号审批：0-20 分钟\n   - 下载工具包：0-20 分钟\n   - 安装工具：20-35 分钟\n   - 环境自检：35-45 分钟\n\n5. 全部办完的最快时间是最后一个任务结束的时间，即 45 分钟。\n\n45\n——\n答对 12/12，平均每题写了 455 个 token",
+      "text": "—— 审批 20、下载 20 那一题，它写的是 ——\n1. 分析任务依赖关系：\n   - 账号审批（A）：20分钟，无前置依赖。\n   - 下载工具包（B）：20分钟，无前置依赖。\n   - 安装工具（C）：15分钟，依赖 A 和 B 都完成。\n   - 环境自检（D）：10分钟，依赖 C 完成。\n\n2. 确定最早开始时间：\n   - 由于人手管够，A 和 B 可以同时进行。\n   - A 开始时间：0 分钟。\n   - B 开始时间：0 分钟。\n\n3. 计算各任务结束时间：\n   - A 结束时间：0 + 20 = 20 分钟。\n   - B 结束时间：0 + 20 = 20 分钟。\n   - C 必须等 A 和 B 都结束才能开始。A 和 B 都在 20 分钟结束，所以 C 最早在 20 分钟开始。\n   - C 结束时间：20 + 15 = 35 分钟。\n   - D 必须等 C 结束才能开始。C 在 35 分钟结束，所以 D 最早在 35 分钟开始。\n   - D 结束时间：35 + 10 = 45 分钟。\n\n4. 总结每件事的时间段：\n   - 账号审批：0-20 分钟\n   - 下载工具包：0-20 分钟\n   - 安装工具：20-35 分钟\n   - 环境自检：35-45 分钟\n\n5. 全部办完的最快时间是最后一个任务结束的时间，即 45 分钟。\n\n45\n——\n答对 12/12，平均每题写了 455 个 token",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-5609fceb211c"
+    },
+    {
+      "type": "prose",
+      "text": "十二道全对。",
+      "html": "<p>十二道全对。</p>\n",
+      "id": "upper-06-9b8d1c00b9e7"
+    },
+    {
+      "type": "prose",
+      "text": "看它写的那一段。它先把四件事和各自的条件列出来，再一件一件算出起止时间，最后才报数。这不就是你刚才在纸上做的事吗？",
+      "html": "<p>看它写的那一段。它先把四件事和各自的条件列出来，再一件一件算出起止时间，最后才报数。这不就是你刚才在纸上做的事吗？</p>\n",
+      "id": "upper-06-c598a63cacb1"
+    },
+    {
+      "type": "image",
+      "alt": "这一回，它先打草稿。",
+      "caption": "这一回，它先打草稿。",
+      "available": true,
+      "src": "/media/773288c0bfb7de75e5d7cd15.webp",
+      "id": "upper-06-7b8ca51780e7",
+      "previewWidth": 960,
+      "previewSrc": "/media/c8d1e4409813c1925b5aadfe.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/c8d1e4409813c1925b5aadfe.webp 960w, /media/773288c0bfb7de75e5d7cd15.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "回到岔路口。做大没有错，专门教也没有错，后来这两条路都有人走，都走通了（这一章后面会讲）。可在它们之前，有人先发现了一件事：这个模型本来就会算。它只是没有被允许去算。",
+      "html": "<p>回到岔路口。做大没有错，专门教也没有错，后来这两条路都有人走，都走通了（这一章后面会讲）。可在它们之前，有人先发现了一件事：<strong>这个模型本来就会算。它只是没有被允许去算。</strong></p>\n",
+      "id": "upper-06-ced71dd16963"
+    },
+    {
+      "type": "prose",
+      "text": "为什么一句话就能让它“被允许”？",
+      "html": "<p>为什么一句话就能让它“被允许”？</p>\n",
+      "id": "upper-06-4315823ee14e"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "它说出来的话，就是它的草稿纸",
+      "id": "upper-06-685159cb1fe1"
+    },
+    {
+      "type": "prose",
+      "text": "这件事的答案，你在第 04 章就已经拿到了。",
+      "html": "<p>这件事的答案，你在第 04 章就已经拿到了。</p>\n",
+      "id": "upper-06-56c7ed30eac9"
+    },
+    {
+      "type": "prose",
+      "text": "模型只做一件事：根据前文，接下一个词。",
+      "html": "<p>模型只做一件事：根据前文，接下一个词。</p>\n",
+      "id": "upper-06-ec3f0f675b97"
+    },
+    {
+      "type": "prose",
+      "text": "你问它题目，并且要求“只回答一个数字”。这时候，它面前的前文只有题目。它必须在接下一个词的那一下子里，把四个数、三层先后关系全部处理完，直接吐出答案的第一个数字。",
+      "html": "<p>你问它题目，并且要求“只回答一个数字”。这时候，它面前的前文只有题目。它必须在接下一个词的那一下子里，把四个数、三层先后关系全部处理完，直接吐出答案的第一个数字。</p>\n",
+      "id": "upper-06-d12cb446b658"
+    },
+    {
+      "type": "prose",
+      "text": "这就好比不许你动笔，题目念完，立刻报数。",
+      "html": "<p>这就好比不许你动笔，题目念完，立刻报数。</p>\n",
+      "id": "upper-06-ec8c2740618d"
+    },
+    {
+      "type": "prose",
+      "text": "而当它被允许一步一步写的时候，情况完全不同了。它先写下“审批 0 到 30，下载 0 到 20”。这一行一旦写出来，就成了前文的一部分。接下去它只需要回答一个小得多的问题：前文里写着两件事分别在 30 和 20 结束，那么安装最早什么时候开始？这个它接得住。写下“30”，又成了前文。再往前挪一小步。",
+      "html": "<p>而当它被允许一步一步写的时候，情况完全不同了。它先写下“审批 0 到 30，下载 0 到 20”。这一行一旦写出来，<strong>就成了前文的一部分</strong>。接下去它只需要回答一个小得多的问题：前文里写着两件事分别在 30 和 20 结束，那么安装最早什么时候开始？这个它接得住。写下“30”，又成了前文。再往前挪一小步。</p>\n",
+      "id": "upper-06-8c7e0d78ffe6"
+    },
+    {
+      "type": "image",
+      "alt": "它没有草稿纸。它说出来的话，就是它的草稿纸。",
+      "caption": "它没有草稿纸。它说出来的话，就是它的草稿纸。",
+      "available": true,
+      "src": "/media/03675643aef3e35c.png",
+      "id": "upper-06-af425619b33c",
+      "previewWidth": 960,
+      "previewSrc": "/media/61e133cda6a9c0745daad465.webp",
+      "height": 930,
+      "previewHeight": 496,
+      "srcSet": "/media/61e133cda6a9c0745daad465.webp 960w, /media/03675643aef3e35c.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "人有脑子里的草稿，也有纸上的草稿。它两样都没有。它唯一能“记下来”的地方，就是它自己正在写的那段话。",
+      "html": "<p>人有脑子里的草稿，也有纸上的草稿。它两样都没有。它唯一能“记下来”的地方，就是它自己正在写的那段话。</p>\n",
+      "id": "upper-06-75b7a77c7876"
+    },
+    {
+      "type": "prose",
+      "text": "所以，不让它写，就等于不让它想。",
+      "html": "<p>所以，不让它写，就等于不让它想。</p>\n",
+      "id": "upper-06-312b0dd94e28"
+    },
+    {
+      "type": "prose",
+      "text": "也顺便回看一眼第 04 章（上）我们自己手搓的那个 592 参数 mini_gpt.py：为什么不让它也“一步一步想”？因为它肚子里只见过几句固定规矩，连基本的加减和先后关系都没见过多少。“一步一步想”能管用，前提是模型底子里本来就装过这些步骤的规律；把草稿纸递给一个还没认全字的婴儿，纸再大也画不出算式。",
+      "html": "<p>也顺便回看一眼第 04 章（上）我们自己手搓的那个 592 参数 <code>mini_gpt.py</code>：为什么不让它也“一步一步想”？因为它肚子里只见过几句固定规矩，连基本的加减和先后关系都没见过多少。<strong>“一步一步想”能管用，前提是模型底子里本来就装过这些步骤的规律</strong>；把草稿纸递给一个还没认全字的婴儿，纸再大也画不出算式。</p>\n",
+      "id": "upper-06-b29093d77f42"
+    },
+    {
+      "type": "prose",
+      "text": "即便对大模型，这个道理也有三个容易踩的坑，先提醒你。",
+      "html": "<p>即便对大模型，这个道理也有三个容易踩的坑，先提醒你。</p>\n",
+      "id": "upper-06-27f5e8158200"
+    },
+    {
+      "type": "prose",
+      "text": "第一，写出来的步骤，不是它脑子里的录像。 那一段推导是它“接”出来的文字，读着像思考过程，可它内部到底是怎么算的，这段文字并不保证如实反映。别因为步骤写得漂亮，就认定它是这么想的。",
+      "html": "<p><strong>第一，写出来的步骤，不是它脑子里的录像。</strong> 那一段推导是它“接”出来的文字，读着像思考过程，可它内部到底是怎么算的，这段文字并不保证如实反映。别因为步骤写得漂亮，就认定它是这么想的。</p>\n",
+      "id": "upper-06-b786a1bccc52"
+    },
+    {
+      "type": "prose",
+      "text": "第二，步骤写得漂亮，不等于答案对。 第一步错了，后面每一步都会沿着错的往下走，最后交给你一篇逻辑严密、层次分明的错误。而且这种错比脱口而出的错更唬人。",
+      "html": "<p><strong>第二，步骤写得漂亮，不等于答案对。</strong> 第一步错了，后面每一步都会沿着错的往下走，最后交给你一篇逻辑严密、层次分明的错误。而且这种错比脱口而出的错更唬人。</p>\n",
+      "id": "upper-06-33b2c5930ef5"
+    },
+    {
+      "type": "prose",
+      "text": "第三，想是要花钱的。 回头看两次输出的最后一行。脱口而出，平均每题 3 个 token。一步一步想，455 个。贵了一百五十倍，也慢了一大截。",
+      "html": "<p><strong>第三，想是要花钱的。</strong> 回头看两次输出的最后一行。脱口而出，平均每题 3 个 token。一步一步想，455 个。贵了一百五十倍，也慢了一大截。</p>\n",
+      "id": "upper-06-e7c58fd4c4c8"
+    },
+    {
+      "type": "prose",
+      "text": "第三条让人心疼。有没有便宜点的办法？",
+      "html": "<p>第三条让人心疼。有没有便宜点的办法？</p>\n",
+      "id": "upper-06-069cac3b7dd9"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "多答几次，行不行",
+      "id": "upper-06-67e3488034ca"
+    },
+    {
+      "type": "prose",
+      "text": "你可能已经有了个主意：不让它长篇大论，还是让它直接报数，但是多报几次，取多数。一个人蒙不准，五个人投票总该靠谱点吧？",
+      "html": "<p>你可能已经有了个主意：不让它长篇大论，还是让它直接报数，但是<strong>多报几次</strong>，取多数。一个人蒙不准，五个人投票总该靠谱点吧？</p>\n",
+      "id": "upper-06-43116afe7230"
+    },
+    {
+      "type": "prose",
+      "text": "每次 3 个 token，五次才 15 个，比 455 便宜多了。",
+      "html": "<p>每次 3 个 token，五次才 15 个，比 455 便宜多了。</p>\n",
+      "id": "upper-06-03ea8c883b28"
+    },
+    {
+      "type": "prose",
+      "text": "为了让五次的回答有所不同，我们把第 04 章学过的温度调到 1。动手之前，先猜它能对几道：",
+      "html": "<p>为了让五次的回答有所不同，我们把第 04 章学过的温度调到 1。动手之前，先猜它能对几道：</p>\n",
+      "id": "upper-06-806fdb403392"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# vote.py：不许想，但可以多答几次，少数服从多数\nfrom collections import Counter\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    answers = []\n    for _ in range(5):\n        reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", temperature=1, want_usage=True)\n        answers.append(last_number(reply))\n        spent += tokens\n    winner = Counter(answers).most_common(1)[0][0]\n    right += winner == truth(a, b)\n    print(f\"审批 {a} 下载 {b}：五次答 {answers}，多数是 {winner}，应为 {truth(a, b)}\", \"✓\" if winner == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "text": "# vote.py：不许想，但可以多答几次，少数服从多数\nfrom collections import Counter\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    answers = []\n    for _ in range(5):\n        reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", temperature=1, want_usage=True)\n        answers.append(last_number(reply))\n        spent += tokens\n    winner = Counter(answers).most_common(1)[0][0]\n    right += winner == truth(a, b)\n    print(f\"审批 {a} 下载 {b}：五次答 {answers}，多数是 {winner}，应为 {truth(a, b)}\", \"✓\" if winner == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "runnable": true,
+      "filename": "vote.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-84f7a2783a62"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "审批 20 下载 10：五次答 [35, 50, 35, 45, 45]，多数是 35，应为 45 ✗\n审批 20 下载 20：五次答 [45, 45, 35, 50, 50]，多数是 45，应为 45 ✓\n审批 20 下载 30：五次答 [50, 55, 65, 65, 50]，多数是 50，应为 55 ✗\n审批 20 下载 40：五次答 [75, 70, 60, 65, 75]，多数是 75，应为 65 ✗\n审批 30 下载 10：五次答 [50, 45, 55, 30, 35]，多数是 50，应为 55 ✗\n审批 30 下载 20：五次答 [45, 50, 50, 30, 65]，多数是 50，应为 55 ✗\n审批 30 下载 30：五次答 [50, 65, 65, 65, 50]，多数是 65，应为 55 ✗\n审批 30 下载 40：五次答 [60, 65, 90, 75, 75]，多数是 75，应为 65 ✗\n审批 40 下载 10：五次答 [50, 65, 45, 65, 65]，多数是 65，应为 65 ✓\n审批 40 下载 20：五次答 [60, 65, 55, 40, 65]，多数是 65，应为 65 ✓\n审批 40 下载 30：五次答 [70, 75, 80, 60, 70]，多数是 70，应为 65 ✗\n审批 40 下载 40：五次答 [85, 80, 40, 40, 40]，多数是 40，应为 65 ✗\n答对 3/12，平均每题写了 15 个 token",
+      "text": "审批 20 下载 10：五次答 [35, 50, 35, 45, 45]，多数是 35，应为 45 ✗\n审批 20 下载 20：五次答 [45, 45, 35, 50, 50]，多数是 45，应为 45 ✓\n审批 20 下载 30：五次答 [50, 55, 65, 65, 50]，多数是 50，应为 55 ✗\n审批 20 下载 40：五次答 [75, 70, 60, 65, 75]，多数是 75，应为 65 ✗\n审批 30 下载 10：五次答 [50, 45, 55, 30, 35]，多数是 50，应为 55 ✗\n审批 30 下载 20：五次答 [45, 50, 50, 30, 65]，多数是 50，应为 55 ✗\n审批 30 下载 30：五次答 [50, 65, 65, 65, 50]，多数是 65，应为 55 ✗\n审批 30 下载 40：五次答 [60, 65, 90, 75, 75]，多数是 75，应为 65 ✗\n审批 40 下载 10：五次答 [50, 65, 45, 65, 65]，多数是 65，应为 65 ✓\n审批 40 下载 20：五次答 [60, 65, 55, 40, 65]，多数是 65，应为 65 ✓\n审批 40 下载 30：五次答 [70, 75, 80, 60, 70]，多数是 70，应为 65 ✗\n审批 40 下载 40：五次答 [85, 80, 40, 40, 40]，多数是 40，应为 65 ✗\n答对 3/12，平均每题写了 15 个 token",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-2dd575701940"
+    },
+    {
+      "type": "prose",
+      "text": "三道。比不投票只多对了一道，基本等于没用。",
+      "html": "<p>三道。比不投票只多对了一道，基本等于没用。</p>\n",
+      "id": "upper-06-77940984b477"
+    },
+    {
+      "type": "prose",
+      "text": "看一看它每道题的五个答案，比结论更有意思。它们并不是围着正确答案小幅波动。它们东一个西一个，而且经常有两三个一起错在同一个数上，然后凭着“多数”当选。",
+      "html": "<p>看一看它每道题的五个答案，比结论更有意思。它们并不是围着正确答案小幅波动。它们东一个西一个，而且经常有两三个一起错在同一个数上，然后凭着“多数”当选。</p>\n",
+      "id": "upper-06-fef2b6935f00"
+    },
+    {
+      "type": "image",
+      "alt": "五位一致同意。",
+      "caption": "五位一致同意。",
+      "available": true,
+      "src": "/media/a12d02e025b8431d4826ce87.webp",
+      "id": "upper-06-3e319fc8b52c",
+      "previewWidth": 960,
+      "previewSrc": "/media/2aead84460100b232839f850.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/2aead84460100b232839f850.webp 960w, /media/a12d02e025b8431d4826ce87.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "投票能管用，得有个前提：大家各错各的，错得互不相干，这样错误才会相互抵消。可这五次回答是同一个模型、带着同一个毛病答出来的。它们会一起错。",
+      "html": "<p>投票能管用，得有个前提：大家各错各的，错得互不相干，这样错误才会相互抵消。可这五次回答是同一个模型、带着同一个毛病答出来的。它们会一起错。</p>\n",
+      "id": "upper-06-63b1a7d8d029"
+    },
+    {
+      "type": "prose",
+      "text": "五份一样的答案，不是五份证据。它是一份证据，抄了五遍。",
+      "html": "<p><strong>五份一样的答案，不是五份证据。它是一份证据，抄了五遍。</strong></p>\n",
+      "id": "upper-06-de754e70ad92"
+    },
+    {
+      "type": "prose",
+      "text": "这句话请记住。到第 12 章我们请好几个 AI 助手一起干活的时候，同一个问题会换个样子再来：让同一个模型扮成“审查员”去检查它自己写的东西，算不算多了一双眼睛？",
+      "html": "<p>这句话请记住。到第 12 章我们请好几个 AI 助手一起干活的时候，同一个问题会换个样子再来：让同一个模型扮成“审查员”去检查它自己写的东西，算不算多了一双眼睛？</p>\n",
+      "id": "upper-06-0acfc0e7403d"
+    },
+    {
+      "type": "prose",
+      "text": "（公平地说，“多答几次再投票”本身是个正经办法，也是 2022 年提出来的，论文里叫 Self-Consistency。只不过它是配着“一步一步想”用的：让模型把推导写上好几遍，每遍走不同的推导路线，这时候投票才有的可投。）",
+      "html": "<p>（公平地说，“多答几次再投票”本身是个正经办法，也是 2022 年提出来的，论文里叫 Self-Consistency。只不过它是配着“一步一步想”用的：让模型把推导写上好几遍，每遍走不同的推导路线，这时候投票才有的可投。）</p>\n",
+      "id": "upper-06-105d189ba9ec"
+    },
+    {
+      "type": "prose",
+      "text": "📎\n\n再多走一步：要是路线会分叉呢？ 刚才的排期题只有一条主线；如果在真实项目里加上一句限制——比如“审批和下载都要占同一条内网通道，同一时间只能办一件”——事情就会立刻分出两条路：“先审批再下载”，或者“先下载再审批”。一条草稿顺着第一条路写下去，很难半路自己跳出来比第二条。这时候，与其让模型自己乱蒙，不如让外面的程序把它拆成几条分支分别让模型算，最后把不通的枝剪掉、留最快的那一支。这就是后来的思维树（Tree of Thoughts）——听上去玄乎，其实只是把“画草稿”变成了“程序管分叉，模型算每一支”。",
+      "html": "<blockquote>\n<p>📎</p>\n<p><strong>再多走一步：要是路线会分叉呢？</strong> 刚才的排期题只有一条主线；如果在真实项目里加上一句限制——比如“审批和下载都要占同一条内网通道，同一时间只能办一件”——事情就会立刻分出两条路：“先审批再下载”，或者“先下载再审批”。一条草稿顺着第一条路写下去，很难半路自己跳出来比第二条。这时候，与其让模型自己乱蒙，不如让外面的程序把它拆成几条分支分别让模型算，最后把不通的枝剪掉、留最快的那一支。这就是后来的<strong>思维树（Tree of Thoughts）</strong>——听上去玄乎，其实只是把“画草稿”变成了“程序管分叉，模型算每一支”。</p>\n</blockquote>\n",
+      "id": "upper-06-a595fd21a894"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "让程序来把关",
+      "id": "upper-06-0b8fba080498"
+    },
+    {
+      "type": "prose",
+      "text": "换一个思路。与其指望它多答几次蒙对，不如找一个不会跟着它一起错的东西来检查。",
+      "html": "<p>换一个思路。与其指望它多答几次蒙对，不如找一个<strong>不会跟着它一起错</strong>的东西来检查。</p>\n",
+      "id": "upper-06-9a3a2b7307dd"
+    },
+    {
+      "type": "prose",
+      "text": "这道题有个好处：一份安排对不对，是可以一条一条核对的。每件事的时长对不对？有没有哪件事抢在了它该等的事前面？这些，一段普通的程序就能查，而且查一万遍都不会累，也不会被说服。",
+      "html": "<p>这道题有个好处：一份安排对不对，是可以一条一条核对的。每件事的时长对不对？有没有哪件事抢在了它该等的事前面？这些，一段普通的程序就能查，而且查一万遍都不会累，也不会被说服。</p>\n",
+      "id": "upper-06-bed0914f97fb"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# verify.py：把“看着合理”换成“查得出来”\ndef verify(plan, a, b):\n    \"\"\"plan 形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}\n    返回 (哪里不对, 全部办完的时间)。第一项是 None，表示这份安排行得通。\"\"\"\n    need = {\"审批\": a, \"下载\": b, \"安装\": 15, \"自检\": 10}\n    wait = {\"安装\": [\"审批\", \"下载\"], \"自检\": [\"安装\"]}\n    if not isinstance(plan, dict) or set(plan) != set(need):\n        return \"四件事要一件不多、一件不少\", None\n    for job, minutes in need.items():\n        span = plan[job]\n        if not (isinstance(span, list) and len(span) == 2 and all(isinstance(x, int) for x in span)):\n            return f\"{job}：要写成 [开始, 结束] 两个整数\", None\n        if span[0] < 0 or span[1] - span[0] != minutes:\n            return f\"{job}：要花 {minutes} 分钟，你写的起止时间对不上\", None\n    for job, before in wait.items():\n        for other in before:\n            if plan[job][0] < plan[other][1]:\n                return f\"{job}：不能在{other}办完（第 {plan[other][1]} 分钟）之前开始\", None\n    return None, max(span[1] for span in plan.values())\n\nif __name__ == \"__main__\":\n    plans = {\n        \"同时办\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]},\n        \"抢着装\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [20, 35], \"自检\": [35, 45]},\n        \"排队办\": {\"审批\": [0, 30], \"下载\": [30, 50], \"安装\": [50, 65], \"自检\": [65, 75]},\n    }\n    for name, plan in plans.items():\n        print(name, verify(plan, 30, 20))",
+      "text": "# verify.py：把“看着合理”换成“查得出来”\ndef verify(plan, a, b):\n    \"\"\"plan 形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}\n    返回 (哪里不对, 全部办完的时间)。第一项是 None，表示这份安排行得通。\"\"\"\n    need = {\"审批\": a, \"下载\": b, \"安装\": 15, \"自检\": 10}\n    wait = {\"安装\": [\"审批\", \"下载\"], \"自检\": [\"安装\"]}\n    if not isinstance(plan, dict) or set(plan) != set(need):\n        return \"四件事要一件不多、一件不少\", None\n    for job, minutes in need.items():\n        span = plan[job]\n        if not (isinstance(span, list) and len(span) == 2 and all(isinstance(x, int) for x in span)):\n            return f\"{job}：要写成 [开始, 结束] 两个整数\", None\n        if span[0] < 0 or span[1] - span[0] != minutes:\n            return f\"{job}：要花 {minutes} 分钟，你写的起止时间对不上\", None\n    for job, before in wait.items():\n        for other in before:\n            if plan[job][0] < plan[other][1]:\n                return f\"{job}：不能在{other}办完（第 {plan[other][1]} 分钟）之前开始\", None\n    return None, max(span[1] for span in plan.values())\n\nif __name__ == \"__main__\":\n    plans = {\n        \"同时办\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]},\n        \"抢着装\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [20, 35], \"自检\": [35, 45]},\n        \"排队办\": {\"审批\": [0, 30], \"下载\": [30, 50], \"安装\": [50, 65], \"自检\": [65, 75]},\n    }\n    for name, plan in plans.items():\n        print(name, verify(plan, 30, 20))",
+      "runnable": true,
+      "filename": "verify.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-06-89b4d8034d1a"
+    },
+    {
+      "type": "prose",
+      "text": "先别接模型，我们自己写三份安排给它查。一份是对的；一份“抢着装”，让安装在第 20 分钟就开始；一份“排队办”，四件事一件接一件。猜猜它对这三份各会说什么？",
+      "html": "<p>先别接模型，我们自己写三份安排给它查。一份是对的；一份“抢着装”，让安装在第 20 分钟就开始；一份“排队办”，四件事一件接一件。猜猜它对这三份各会说什么？</p>\n",
+      "id": "upper-06-5cdf8c079ee7"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "同时办 (None, 55)\n抢着装 ('安装：不能在审批办完（第 30 分钟）之前开始', None)\n排队办 (None, 75)",
+      "text": "同时办 (None, 55)\n抢着装 ('安装：不能在审批办完（第 30 分钟）之前开始', None)\n排队办 (None, 75)",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-80a837774b0a"
+    },
+    {
+      "type": "prose",
+      "text": "第一份，行得通，55 分钟。第二份被拦下了，还说清了错在哪儿。",
+      "html": "<p>第一份，行得通，55 分钟。第二份被拦下了，还说清了错在哪儿。</p>\n",
+      "id": "upper-06-49bb622fad19"
+    },
+    {
+      "type": "prose",
+      "text": "第三份呢？行得通，75 分钟。",
+      "html": "<p>第三份呢？行得通，75 分钟。</p>\n",
+      "id": "upper-06-fa160aa1d70c"
+    },
+    {
+      "type": "prose",
+      "text": "它说得没错：排队办确实一条规矩都没违反。可这不是最快的。",
+      "html": "<p>它说得没错：排队办确实一条规矩都没违反。可这不是最快的。</p>\n",
+      "id": "upper-06-f6bcb0b51a82"
+    },
+    {
+      "type": "prose",
+      "text": "你是不是觉得这个场面有点眼熟？上一章那个放过了错答卷的 check，这一章这个放过了慢安排的 verify。同一句话，再说一遍：你查的是什么？你没查的是什么？ 这个检查器查的是“行不行得通”，它不查“是不是最快”。",
+      "html": "<p>你是不是觉得这个场面有点眼熟？上一章那个放过了错答卷的 <code>check</code>，这一章这个放过了慢安排的 <code>verify</code>。同一句话，再说一遍：<strong>你查的是什么？你没查的是什么？</strong> 这个检查器查的是“行不行得通”，它不查“是不是最快”。</p>\n",
+      "id": "upper-06-13e8cf9afc67"
+    },
+    {
+      "type": "image",
+      "alt": "交上来的安排，先过这一关。",
+      "caption": "交上来的安排，先过这一关。",
+      "available": true,
+      "src": "/media/f3370462f1a5b818e77f0583.webp",
+      "id": "upper-06-f5baae142ba6",
+      "previewWidth": 960,
+      "previewSrc": "/media/569076863ab9ea21e12853f7.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/569076863ab9ea21e12853f7.webp 960w, /media/f3370462f1a5b818e77f0583.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "顺带一提，怎样才算真正证明了“55 分钟就是最快”？光拿出一份 55 分钟的安排还不够——你还得证明不可能比 55 更短。这里只要看两条必走的路：一条是“审批 → 安装 → 自检”（30 + 15 + 10 = 55），另一条是“下载 → 安装 → 自检”（20 + 15 + 10 = 45）。哪怕人手无限多，较长那条路也得 55 分钟才能走完，这就叫下界。当一份可行方案的时间正好碰上下界，你才算把“最快”钉死了。",
+      "html": "<p>顺带一提，怎样才算真正证明了“55 分钟就是最快”？光拿出一份 55 分钟的安排还不够——你还得证明<strong>不可能比 55 更短</strong>。这里只要看两条必走的路：一条是“审批 → 安装 → 自检”（<code>30 + 15 + 10 = 55</code>），另一条是“下载 → 安装 → 自检”（<code>20 + 15 + 10 = 45</code>）。哪怕人手无限多，较长那条路也得 55 分钟才能走完，这就叫<strong>下界</strong>。当一份可行方案的时间正好碰上下界，你才算把“最快”钉死了。</p>\n",
+      "id": "upper-06-ee7279b55c46"
+    },
+    {
+      "type": "prose",
+      "text": "现在把模型接上。规矩是这样的：不许解释，直接交一份安排，写清四件事各自几分开始、几分结束。交上来先过检查；过不了，就把错在哪儿告诉它，让它重交，最多三次。",
+      "html": "<p>现在把模型接上。规矩是这样的：不许解释，直接交一份安排，写清四件事各自几分开始、几分结束。交上来先过检查；过不了，就把错在哪儿告诉它，让它重交，最多三次。</p>\n",
+      "id": "upper-06-e3d8f3bb8cd8"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# checked.py：不许想，但交上来的安排要过检查；过不了，告诉它错在哪儿，让它重交\nimport json\nfrom llm import chat\nfrom puzzle import text, truth, puzzles\nfrom verify import verify\n\nASK = ('不要解释，只输出一个 JSON，写出四件事各自的起止时间（第几分钟），'\n       '形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}。')\n\nright = slow = spent = retries = 0\nfor a, b in puzzles:\n    messages = [{\"role\": \"user\", \"content\": text(a, b) + ASK}]\n    finish = None\n    for attempt in range(3):\n        reply, tokens = chat(messages, json_mode=True, want_usage=True)\n        spent += tokens\n        try:\n            problem, finish = verify(json.loads(reply), a, b)\n        except ValueError:\n            problem = \"这不是合法的 JSON\"\n        if problem is None:\n            break\n        retries += 1\n        messages += [{\"role\": \"assistant\", \"content\": reply},\n                     {\"role\": \"user\", \"content\": \"这份安排行不通：\" + problem + \"。请重新给出 JSON。\"}]\n    right += finish == truth(a, b)\n    slow += finish is not None and finish > truth(a, b)\n    print(f\"审批 {a} 下载 {b}：它排到第 {finish} 分钟办完，最快应为 {truth(a, b)}\", \"✓\" if finish == truth(a, b) else \"✗\")\nprint(f\"最快的安排 {right}/{len(puzzles)}；行得通但不是最快 {slow} 题；被打回重交 {retries} 次；平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "text": "# checked.py：不许想，但交上来的安排要过检查；过不了，告诉它错在哪儿，让它重交\nimport json\nfrom llm import chat\nfrom puzzle import text, truth, puzzles\nfrom verify import verify\n\nASK = ('不要解释，只输出一个 JSON，写出四件事各自的起止时间（第几分钟），'\n       '形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}。')\n\nright = slow = spent = retries = 0\nfor a, b in puzzles:\n    messages = [{\"role\": \"user\", \"content\": text(a, b) + ASK}]\n    finish = None\n    for attempt in range(3):\n        reply, tokens = chat(messages, json_mode=True, want_usage=True)\n        spent += tokens\n        try:\n            problem, finish = verify(json.loads(reply), a, b)\n        except ValueError:\n            problem = \"这不是合法的 JSON\"\n        if problem is None:\n            break\n        retries += 1\n        messages += [{\"role\": \"assistant\", \"content\": reply},\n                     {\"role\": \"user\", \"content\": \"这份安排行不通：\" + problem + \"。请重新给出 JSON。\"}]\n    right += finish == truth(a, b)\n    slow += finish is not None and finish > truth(a, b)\n    print(f\"审批 {a} 下载 {b}：它排到第 {finish} 分钟办完，最快应为 {truth(a, b)}\", \"✓\" if finish == truth(a, b) else \"✗\")\nprint(f\"最快的安排 {right}/{len(puzzles)}；行得通但不是最快 {slow} 题；被打回重交 {retries} 次；平均每题写了 {spent / len(puzzles):.0f} 个 token\")",
+      "runnable": true,
+      "filename": "checked.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-4a02a928ff7b"
+    },
+    {
+      "type": "prose",
+      "text": "猜两个数：它能排对几道？中间会被打回几次？",
+      "html": "<p>猜两个数：它能排对几道？中间会被打回几次？</p>\n",
+      "id": "upper-06-e92baf03c906"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "审批 20 下载 10：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 20：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 20 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 30 下载 10：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 20：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 10：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 20：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 30：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n最快的安排 12/12；行得通但不是最快 0 题；被打回重交 0 次；平均每题写了 43 个 token",
+      "text": "审批 20 下载 10：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 20：它排到第 45 分钟办完，最快应为 45 ✓\n审批 20 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 20 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 30 下载 10：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 20：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 30：它排到第 55 分钟办完，最快应为 55 ✓\n审批 30 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 10：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 20：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 30：它排到第 65 分钟办完，最快应为 65 ✓\n审批 40 下载 40：它排到第 65 分钟办完，最快应为 65 ✓\n最快的安排 12/12；行得通但不是最快 0 题；被打回重交 0 次；平均每题写了 43 个 token",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-9f61fef29be0"
+    },
+    {
+      "type": "prose",
+      "text": "十二道全对。平均每题 43 个 token，是“一步一步想”的十分之一。",
+      "html": "<p>十二道全对。平均每题 43 个 token，是“一步一步想”的十分之一。</p>\n",
+      "id": "upper-06-c9e60b4b058e"
+    },
+    {
+      "type": "prose",
+      "text": "可是请看那个数：被打回重交 0 次。",
+      "html": "<p>可是请看那个数：<strong>被打回重交 0 次。</strong></p>\n",
+      "id": "upper-06-75b66900fe4b"
+    },
+    {
+      "type": "prose",
+      "text": "我们辛辛苦苦写的检查器，一次都没派上用场。它每一份都是一次就交对了的。",
+      "html": "<p>我们辛辛苦苦写的检查器，一次都没派上用场。它每一份都是一次就交对了的。</p>\n",
+      "id": "upper-06-6552306e76cd"
+    },
+    {
+      "type": "prose",
+      "text": "这和我预想的不一样。我本来以为会看到它交错、被打回、改正的过程。那么，既然检查器根本没出手，它是怎么从 2 道变成 12 道的？",
+      "html": "<p>这和我预想的不一样。我本来以为会看到它交错、被打回、改正的过程。那么，既然检查器根本没出手，它是怎么从 2 道变成 12 道的？</p>\n",
+      "id": "upper-06-44cf87bb2ee3"
+    },
+    {
+      "type": "prose",
+      "text": "想一想，再往下看。",
+      "html": "<p>想一想，再往下看。</p>\n",
+      "id": "upper-06-b7471e5f0433"
+    },
+    {
+      "type": "prose",
+      "text": "答案藏在我们让它交的那样东西里。我们没让它报一个总数，我们让它写出四件事各自的起止时间。要写出“安装从 30 开始”，它得先写下“审批到 30 结束”。写下来，就成了前文。",
+      "html": "<p>答案藏在我们让它交的那样东西里。我们没让它报一个总数，我们让它写出<strong>四件事各自的起止时间</strong>。要写出“安装从 30 开始”，它得先写下“审批到 30 结束”。写下来，就成了前文。</p>\n",
+      "id": "upper-06-d91b7d9e6f9b"
+    },
+    {
+      "type": "prose",
+      "text": "我们以为自己在让它“填表”。其实这张表，就是一张最省纸的草稿。",
+      "html": "<p>我们以为自己在让它“填表”。其实这张表，就是一张最省纸的草稿。</p>\n",
+      "id": "upper-06-41a7c5ef86f7"
+    },
+    {
+      "type": "image",
+      "alt": "同样的题，四种花法。",
+      "caption": "同样的题，四种花法。",
+      "available": true,
+      "src": "/media/5c06d9bcf9014b57.png",
+      "id": "upper-06-ff8bb24901b4",
+      "previewWidth": 960,
+      "previewSrc": "/media/043d28c66bba094824f0058e.webp",
+      "height": 900,
+      "previewHeight": 480,
+      "srcSet": "/media/043d28c66bba094824f0058e.webp 960w, /media/5c06d9bcf9014b57.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "这是这一章我最想让你带走的东西：要它写下来的，不必是长篇大论，只要恰好是那几个中间结果。 “一步一步想”有用，不是因为话多，是因为关键的中间结果被写了出来。你要是知道关键的中间结果是什么，直接让它写那几样，又准又省。",
+      "html": "<p>这是这一章我最想让你带走的东西：<strong>要它写下来的，不必是长篇大论，只要恰好是那几个中间结果。</strong> “一步一步想”有用，不是因为话多，是因为关键的中间结果被写了出来。你要是知道关键的中间结果是什么，直接让它写那几样，又准又省。</p>\n",
+      "id": "upper-06-d87d49f781e7"
+    },
+    {
+      "type": "prose",
+      "text": "那检查器白写了吗？没有。今天十二道题它没出手，不等于明天换一批题它还能闲着。它便宜，不会累，不会被哄；留着它，是一份保险。只是要记得它保的是什么，不保的是什么。",
+      "html": "<p>那检查器白写了吗？没有。今天十二道题它没出手，不等于明天换一批题它还能闲着。它便宜，不会累，不会被哄；留着它，是一份保险。只是要记得它保的是什么，不保的是什么。</p>\n",
+      "id": "upper-06-1ae51fe0dd03"
+    },
+    {
+      "type": "prose",
+      "text": "最后还有一句煞风景的实话。这道题，其实根本用不着模型。翻回去看 puzzle.py 里的 truth 函数：一行代码，算得又快又准，永远不会错。",
+      "html": "<p>最后还有一句煞风景的实话。这道题，其实根本用不着模型。翻回去看 <code>puzzle.py</code> 里的 <code>truth</code> 函数：一行代码，算得又快又准，永远不会错。</p>\n",
+      "id": "upper-06-3880ac28ef15"
+    },
+    {
+      "type": "prose",
+      "text": "凡是一行确定的代码就能算对的事，别交给模型去想。 模型该出场的，是那些写不成一行代码的地方。这道题只是我们的练习场。",
+      "html": "<p><strong>凡是一行确定的代码就能算对的事，别交给模型去想。</strong> 模型该出场的，是那些写不成一行代码的地方。这道题只是我们的练习场。</p>\n",
+      "id": "upper-06-5ae81c79eb96"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "把草稿纸装进模型里",
+      "id": "upper-06-cd55f48cbe2f"
+    },
+    {
+      "type": "prose",
+      "text": "故事回到岔路口上的另外两条路：做大，和专门教。",
+      "html": "<p>故事回到岔路口上的另外两条路：做大，和专门教。</p>\n",
+      "id": "upper-06-370dc358473e"
+    },
+    {
+      "type": "prose",
+      "text": "“一步一步想”是使用的人加的一句话。那么，能不能让模型自己养成这个习惯，不用人提醒，遇到难题就先打草稿？",
+      "html": "<p>“一步一步想”是使用的人加的一句话。那么，能不能让模型自己养成这个习惯，不用人提醒，遇到难题就先打草稿？</p>\n",
+      "id": "upper-06-20c9bf738372"
+    },
+    {
+      "type": "prose",
+      "text": "2024 年 9 月 12 日，OpenAI 发布了一个新模型，叫 o1。你点开它，问了一道题。它没有马上回答。屏幕上出现一行小字：正在思考。过了十几秒，答案才出来，上面多了一行：“思考了 14 秒”。",
+      "html": "<p>2024 年 9 月 12 日，OpenAI 发布了一个新模型，叫 o1。你点开它，问了一道题。它没有马上回答。屏幕上出现一行小字：正在思考。过了十几秒，答案才出来，上面多了一行：“思考了 14 秒”。</p>\n",
+      "id": "upper-06-5f3bda7c0e85"
+    },
+    {
+      "type": "prose",
+      "text": "这是头一回，一个面向大众的模型会先停下来想。",
+      "html": "<p>这是头一回，一个面向大众的模型会先停下来想。</p>\n",
+      "id": "upper-06-ad2555125de9"
+    },
+    {
+      "type": "prose",
+      "text": "它是怎么练出来的？公开资料说明 o1 用强化学习训练推理，但没有公开完整配方。为了接上第 03 章 reinforce.py 的直觉，我们先看一种用程序验分的办法（后面的 R1 论文披露了这一路的具体做法，并非在核实 o1 的完整训练细节）：让模型在回答之前先写一段草稿，再交出答案；由像 verify.py 这样能客观验对错的程序来判分——答对了就加分，然后朝着高分去练（因为奖励能由程序直接核对，常被叫作“基于可验证奖励的强化学习”，英文简称 RLVR）。练得多了，它自己就摸出了一套容易拿高分的草稿习惯：把问题拆开，中途检查，发现走不通就退回去换条路。",
+      "html": "<p>它是怎么练出来的？公开资料说明 o1 用强化学习训练推理，但没有公开完整配方。为了接上第 03 章 <code>reinforce.py</code> 的直觉，我们先看一种用程序验分的办法（后面的 R1 论文披露了这一路的具体做法，并非在核实 o1 的完整训练细节）：让模型在回答之前先写一段草稿，再交出答案；由像 <code>verify.py</code> 这样能客观验对错的程序来判分——答对了就加分，然后朝着高分去练（因为奖励能由程序直接核对，常被叫作“基于可验证奖励的强化学习”，英文简称 RLVR）。练得多了，它自己就摸出了一套容易拿高分的草稿习惯：把问题拆开，中途检查，发现走不通就退回去换条路。</p>\n",
+      "id": "upper-06-4c766f6bcec7"
+    },
+    {
+      "type": "prose",
+      "text": "所以“会思考的模型”，其实拧了两个旋钮：",
+      "html": "<p>所以“会思考的模型”，其实拧了两个旋钮：</p>\n",
+      "id": "upper-06-2417fda757ac"
+    },
+    {
+      "type": "image",
+      "alt": "“会思考的模型”，拧的是两个旋钮。",
+      "caption": "“会思考的模型”，拧的是两个旋钮。",
+      "available": true,
+      "src": "/media/4f260327a029d54f.png",
+      "id": "upper-06-0a2a57443009",
+      "previewWidth": 960,
+      "previewSrc": "/media/5143c2b7c37627f9ad834d6d.webp",
+      "height": 810,
+      "previewHeight": 432,
+      "srcSet": "/media/5143c2b7c37627f9ad834d6d.webp 960w, /media/4f260327a029d54f.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "一个在练的时候：教它养成先打草稿的习惯。一个在用的时候：这道题，许它打多长的草稿。你在一些产品里见到的“深度思考”开关，拧的就是后一个。",
+      "html": "<p>一个在练的时候：教它养成先打草稿的习惯。一个在用的时候：这道题，许它打多长的草稿。你在一些产品里见到的“深度思考”开关，拧的就是后一个。</p>\n",
+      "id": "upper-06-0ffb6be3c707"
+    },
+    {
+      "type": "prose",
+      "text": "有意思的是那份草稿的去向。o1 的草稿是不给用户看的，你只能看到一个摘要。可它是真实存在的，而且照样算钱——更要紧的是，它在账单和输出上限里都算成 completion_tokens。",
+      "html": "<p>有意思的是那份草稿的去向。o1 的草稿是不给用户看的，你只能看到一个摘要。可它是真实存在的，而且照样算钱——更要紧的是，<strong>它在账单和输出上限里都算成 <code>completion_tokens</code></strong>。</p>\n",
+      "id": "upper-06-3b358bf95979"
+    },
+    {
+      "type": "prose",
+      "text": "还记得第 05 章（番外）里那个 max_tokens 坑吗？如果你调用推理模型时把 max_tokens 设得太小，比如卡在 16 甚至 8192，遇到难题它光在草稿纸里推演就把额度花完了，最后正经回答一个字都没来得及吐出来，只给你返回一个空字符串加上 finish_reason: \"length\"。",
+      "html": "<p>还记得第 05 章（番外）里那个 <code>max_tokens</code> 坑吗？如果你调用推理模型时把 <code>max_tokens</code> 设得太小，比如卡在 <code>16</code> 甚至 <code>8192</code>，遇到难题它光在草稿纸里推演就把额度花完了，最后正经回答一个字都没来得及吐出来，只给你返回一个空字符串加上 <code>finish_reason: &quot;length&quot;</code>。</p>\n",
+      "id": "upper-06-cb51031de3da"
+    },
+    {
+      "type": "prose",
+      "text": "口说无凭，我们来掀开帘子看一眼。本版示例把推理模型环境变量 LLM_MODEL 设为 deepseek-v4.1-flash。下面保留的输出，按原教材说明来自 2026 年 11 月 SenseAudio 平台上的同名模型，尚未在当前商汤接口复测。原实验仍只许它“回答一个数字，不要任何解释”，再看它实际写了多少：",
+      "html": "<p>口说无凭，我们来掀开帘子看一眼。本版示例把推理模型环境变量 <code>LLM_MODEL</code> 设为 <code>deepseek-v4.1-flash</code>。下面保留的输出，按原教材说明来自 2026 年 11 月 SenseAudio 平台上的同名模型，尚未在当前商汤接口复测。原实验仍只许它“回答一个数字，不要任何解释”，再看它实际写了多少：</p>\n",
+      "id": "upper-06-356f9167ad2d"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# peek.py：有的模型嘴上只回一个数，背地里呢？\nfrom llm import chat\nfrom puzzle import text\n\ndata = chat(text(30, 20) + \"只回答一个数字，不要任何解释。\", want_usage=\"all\")\nmessage = data[\"choices\"][0][\"message\"]\ndetails = data[\"usage\"].get(\"completion_tokens_details\", {})\nprint(\"它的回答：\", message[\"content\"].strip())\nprint(\"它一共写了\", data[\"usage\"][\"completion_tokens\"], \"个 token，其中没给我们看的：\", details.get(\"reasoning_tokens\", 0))\nhidden = message.get(\"reasoning_content\") or message.get(\"reasoning\") or \"\"\nprint(\"—— 没给我们看的那部分，开头是这样的 ——\")\nprint(hidden.strip()[:260])",
+      "text": "# peek.py：有的模型嘴上只回一个数，背地里呢？\nfrom llm import chat\nfrom puzzle import text\n\ndata = chat(text(30, 20) + \"只回答一个数字，不要任何解释。\", want_usage=\"all\")\nmessage = data[\"choices\"][0][\"message\"]\ndetails = data[\"usage\"].get(\"completion_tokens_details\", {})\nprint(\"它的回答：\", message[\"content\"].strip())\nprint(\"它一共写了\", data[\"usage\"][\"completion_tokens\"], \"个 token，其中没给我们看的：\", details.get(\"reasoning_tokens\", 0))\nhidden = message.get(\"reasoning_content\") or message.get(\"reasoning\") or \"\"\nprint(\"—— 没给我们看的那部分，开头是这样的 ——\")\nprint(hidden.strip()[:260])",
+      "runnable": true,
+      "filename": "peek.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-06-5a5d978878c7"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "它的回答： 55\n它一共写了 102 个 token，其中没给我们看的： 101\n—— 没给我们看的那部分，开头是这样的 ——\nWe need answer Chinese. Need parse scheduling. Tasks: account approval 30 min, download toolkit 20 min, install tools 15 min requires first two completed before start. Environment self-check 10 min requires after install. Plenty manpower, parallel possible. Fa",
+      "text": "它的回答： 55\n它一共写了 102 个 token，其中没给我们看的： 101\n—— 没给我们看的那部分，开头是这样的 ——\nWe need answer Chinese. Need parse scheduling. Tasks: account approval 30 min, download toolkit 20 min, install tools 15 min requires first two completed before start. Environment self-check 10 min requires after install. Plenty manpower, parallel possible. Fa",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-06-aadbc2544d93"
+    },
+    {
+      "type": "prose",
+      "text": "它的回答只有两个字符：55。可它一共写了 102 个 token，其中 101 个没给我们看。",
+      "html": "<p>它的回答只有两个字符：55。可它一共写了 102 个 token，其中 101 个没给我们看。</p>\n",
+      "id": "upper-06-95ac5db61826"
+    },
+    {
+      "type": "prose",
+      "text": "那 101 个 token，就是它的草稿。接口恰好把这部分也放在 reasoning_content 里返回了，于是我们能看到开头：它在用英文飞快地给自己列提纲（“需要用中文回答。先理清排期……”）。我们说了“不要任何解释”，它确实没有向我们解释。它只是先在背后把题做了。",
+      "html": "<p>那 101 个 token，就是它的草稿。接口恰好把这部分也放在 <code>reasoning_content</code> 里返回了，于是我们能看到开头：它在用英文飞快地给自己列提纲（“需要用中文回答。先理清排期……”）。我们说了“不要任何解释”，它确实没有向我们解释。它只是先在背后把题做了。</p>\n",
+      "id": "upper-06-809cb952104f"
+    },
+    {
+      "type": "image",
+      "alt": "我们说了不要解释。它确实没有向我们解释。",
+      "caption": "我们说了不要解释。它确实没有向我们解释。",
+      "available": true,
+      "src": "/media/aafbd02a6c2221c86d0f244d.webp",
+      "id": "upper-06-3b3076db5ef7",
+      "previewWidth": 960,
+      "previewSrc": "/media/29211bec928274aed6a4e80d.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/29211bec928274aed6a4e80d.webp 960w, /media/aafbd02a6c2221c86d0f244d.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "还是那十二道题，还是“只回答一个数字”，这个模型十二道全对，平均每题 118 个 token。",
+      "html": "<p>还是那十二道题，还是“只回答一个数字”，这个模型十二道全对，平均每题 118 个 token。</p>\n",
+      "id": "upper-06-a7ce1ec10d01"
+    },
+    {
+      "type": "prose",
+      "text": "把这一章的几组数字摆在一起，你会发现它们讲的是同一件事：",
+      "html": "<p>把这一章的几组数字摆在一起，你会发现它们讲的是同一件事：</p>\n",
+      "id": "upper-06-6c86a6d39d38"
+    },
+    {
+      "type": "prose",
+      "text": "以下整张表是上述原教材历史基准，不是当前接口的横向测评；默认、大一号和推理模型的对应关系见本章开头。",
+      "html": "<p>以下整张表是上述原教材历史基准，不是当前接口的横向测评；默认、大一号和推理模型的对应关系见本章开头。</p>\n",
+      "id": "upper-06-b013970667aa"
+    },
+    {
+      "type": "prose",
+      "text": "做法\n12 题答对\n每题写多少 token\n默认小模型，直接报数\n2\n3\n大一号的模型，直接报数\n6\n3\n默认小模型，报五次投票\n3\n15\n默认小模型，写出四个起止时间\n12\n43\n自带草稿习惯的模型，“直接报数”\n12\n118（其中绝大部分看不见）\n默认小模型，一步一步想\n12\n455",
+      "html": "<table>\n<thead>\n<tr>\n  <th>做法</th>\n  <th>12 题答对</th>\n  <th>每题写多少 token</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td>默认小模型，直接报数</td>\n  <td>2</td>\n  <td>3</td>\n</tr>\n<tr>\n  <td>大一号的模型，直接报数</td>\n  <td>6</td>\n  <td>3</td>\n</tr>\n<tr>\n  <td>默认小模型，报五次投票</td>\n  <td>3</td>\n  <td>15</td>\n</tr>\n<tr>\n  <td>默认小模型，写出四个起止时间</td>\n  <td>12</td>\n  <td>43</td>\n</tr>\n<tr>\n  <td>自带草稿习惯的模型，“直接报数”</td>\n  <td>12</td>\n  <td>118（其中绝大部分看不见）</td>\n</tr>\n<tr>\n  <td>默认小模型，一步一步想</td>\n  <td>12</td>\n  <td>455</td>\n</tr>\n</tbody>\n</table>\n",
+      "id": "upper-06-ab7154516af1"
+    },
+    {
+      "type": "prose",
+      "text": "答对的那三行，没有一行是真的“脱口而出”。区别只在于草稿写在哪儿、写多长、给不给你看。",
+      "html": "<p>答对的那三行，没有一行是真的“脱口而出”。区别只在于草稿写在哪儿、写多长、给不给你看。</p>\n",
+      "id": "upper-06-a9031d7e52c8"
+    },
+    {
+      "type": "prose",
+      "text": "o1 之后四个月，2025 年 1 月，中国的 DeepSeek 发布了 R1。它做了一件 o1 没做的事：把草稿原原本本地摊给用户看。一时间，全世界的人都在围观一个模型自言自语。它的草稿里满是“等等”“让我再想想”“不对”这样的话，读起来像一个人在小声嘀咕。模型的权重也一并公开了，谁都可以下载来研究。它的论文里还有一个更激进的版本（R1-Zero），完全不看人写的示范，只靠“答对加分”硬练，照样练出了回头检查、推翻重来的习惯。",
+      "html": "<p>o1 之后四个月，2025 年 1 月，中国的 DeepSeek 发布了 R1。它做了一件 o1 没做的事：把草稿原原本本地摊给用户看。一时间，全世界的人都在围观一个模型自言自语。它的草稿里满是“等等”“让我再想想”“不对”这样的话，读起来像一个人在小声嘀咕。模型的权重也一并公开了，谁都可以下载来研究。它的论文里还有一个更激进的版本（R1-Zero），完全不看人写的示范，只靠“答对加分”硬练，照样练出了回头检查、推翻重来的习惯。</p>\n",
+      "id": "upper-06-de5fa25cbaf6"
+    },
+    {
+      "type": "prose",
+      "text": "📎\n\n选读：一个“等等”。 2025 年有一项叫 s1 的研究，把“想多久”这件事做成了一个很具体的开关。模型打草稿打到一半，准备收尾作答的时候，程序把它那个表示“想完了”的记号按住不让出，并替它在草稿末尾接上一个词：“Wait”（等等）。模型看到自己“说”了一句等等，就真的接着往下想了。在一些数学题上，这样多按几次，正确率会涨；按得太多，它就开始原地打转。想得久一点有用，但不是越久越好。",
+      "html": "<blockquote>\n<p>📎</p>\n<p><strong>选读：一个“等等”。</strong> 2025 年有一项叫 s1 的研究，把“想多久”这件事做成了一个很具体的开关。模型打草稿打到一半，准备收尾作答的时候，程序把它那个表示“想完了”的记号按住不让出，并替它在草稿末尾接上一个词：“Wait”（等等）。模型看到自己“说”了一句等等，就真的接着往下想了。在一些数学题上，这样多按几次，正确率会涨；按得太多，它就开始原地打转。想得久一点有用，但不是越久越好。</p>\n</blockquote>\n",
+      "id": "upper-06-57f9d29443f6"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "多想不是万能的",
+      "id": "upper-06-6c709f66fab9"
+    },
+    {
+      "type": "prose",
+      "text": "说了一整章多想的好处，最后得把它的边界画出来。不然你会养成一个坏习惯：什么都开“深度思考”。",
+      "html": "<p>说了一整章多想的好处，最后得把它的边界画出来。不然你会养成一个坏习惯：什么都开“深度思考”。</p>\n",
+      "id": "upper-06-8a158b223991"
+    },
+    {
+      "type": "prose",
+      "text": "第一，它会碰到天花板。 2025 年 6 月，Apple 的研究者拿几种可以随意调难度的谜题（比如汉诺塔）去试这些会思考的模型。简单的时候，想不想差不多，有时不想反而更好；中等难度，会想的明显占优；难度再往上，不管许它想多久，正确率都会塌下去。草稿纸再多，也有算不动的题。",
+      "html": "<p><strong>第一，它会碰到天花板。</strong> 2025 年 6 月，Apple 的研究者拿几种可以随意调难度的谜题（比如汉诺塔）去试这些会思考的模型。简单的时候，想不想差不多，有时不想反而更好；中等难度，会想的明显占优；难度再往上，不管许它想多久，正确率都会塌下去。草稿纸再多，也有算不动的题。</p>\n",
+      "id": "upper-06-c4e5061db1c3"
+    },
+    {
+      "type": "prose",
+      "text": "第二，它慢，而且贵。 这个你已经亲眼看到了。把“回答太快”治好的代价，就是回答不再快。问一句“会议室在几楼”，犯不上让它沉思十四秒。",
+      "html": "<p><strong>第二，它慢，而且贵。</strong> 这个你已经亲眼看到了。把“回答太快”治好的代价，就是回答不再快。问一句“会议室在几楼”，犯不上让它沉思十四秒。</p>\n",
+      "id": "upper-06-2d2395081186"
+    },
+    {
+      "type": "prose",
+      "text": "第三条最要紧：多想，只治一种病。",
+      "html": "<p><strong>第三条最要紧：多想，只治一种病。</strong></p>\n",
+      "id": "upper-06-4e041f5256bf"
+    },
+    {
+      "type": "prose",
+      "text": "设想部门上周刚发了通知，把账号审批的时限从 30 分钟改成了 45 分钟。你再问它那道排期题，但没把这份新通知给它——甚至题目里还留着旧的“30 分钟”。",
+      "html": "<p>设想部门上周刚发了通知，把账号审批的时限从 30 分钟改成了 45 分钟。你再问它那道排期题，但没把这份新通知给它——甚至题目里还留着旧的“30 分钟”。</p>\n",
+      "id": "upper-06-90438ae43625"
+    },
+    {
+      "type": "prose",
+      "text": "它会一步一步想，草稿打得工工整整，每一步推导都无懈可击，然后郑重地告诉你：55 分钟。",
+      "html": "<p>它会一步一步想，草稿打得工工整整，每一步推导都无懈可击，然后郑重地告诉你：55 分钟。</p>\n",
+      "id": "upper-06-9e5f1dd02af2"
+    },
+    {
+      "type": "prose",
+      "text": "每一步都对。答案是错的。",
+      "html": "<p>每一步都对。答案是错的。</p>\n",
+      "id": "upper-06-bf357c7d76e9"
+    },
+    {
+      "type": "prose",
+      "text": "它不是没想清楚。它是不知道。那份新通知不在它的前文里，也不在它读过的任何东西里。条件过期时，思考越严密，越能把错答案算得像模像样。这样的事，想一万步也想不出来。",
+      "html": "<p>它不是没想清楚。它是不知道。那份新通知不在它的前文里，也不在它读过的任何东西里。条件过期时，思考越严密，越能把错答案算得像模像样。这样的事，想一万步也想不出来。</p>\n",
+      "id": "upper-06-e411ffa85440"
+    },
+    {
+      "type": "image",
+      "alt": "它答不好，缺的是哪一样。",
+      "caption": "它答不好，缺的是哪一样。",
+      "available": true,
+      "src": "/media/e366d0a8667bc899.png",
+      "id": "upper-06-105b211891c0",
+      "previewWidth": 960,
+      "previewSrc": "/media/2ba115fb9f7ca9e3658ebc4d.webp",
+      "height": 810,
+      "previewHeight": 432,
+      "srcSet": "/media/2ba115fb9f7ca9e3658ebc4d.webp 960w, /media/e366d0a8667bc899.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "所以在让它多想之前，先替它诊断一下：它缺的，真的是“想”吗？",
+      "html": "<p>所以在让它多想之前，先替它诊断一下：它缺的，真的是“想”吗？</p>\n",
+      "id": "upper-06-0bf3bbf5633d"
+    },
+    {
+      "type": "prose",
+      "text": "如果条件都摆在它面前了，只是环环相扣容易乱，那就让它把中间结果写出来，再找个程序查一查。这是这一章的事。",
+      "html": "<p>如果条件都摆在它面前了，只是环环相扣容易乱，那就让它把中间结果写出来，再找个程序查一查。这是这一章的事。</p>\n",
+      "id": "upper-06-256618a38511"
+    },
+    {
+      "type": "prose",
+      "text": "如果它缺的是一份它没见过的材料，那让它想再久也没用，得先把材料找来。这是下一章的事。",
+      "html": "<p>如果它缺的是一份它没见过的材料，那让它想再久也没用，得先把材料找来。这是下一章的事。</p>\n",
+      "id": "upper-06-ac93b23757df"
+    },
+    {
+      "type": "prose",
+      "text": "如果它缺的是一双手，要真的去开一个账号、装一个软件，那想得再明白也只是纸上谈兵。这是再下一章的事。",
+      "html": "<p>如果它缺的是一双手，要真的去开一个账号、装一个软件，那想得再明白也只是纸上谈兵。这是再下一章的事。</p>\n",
+      "id": "upper-06-e1ad0a33953e"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "upper-06-17912e889c19"
+    },
+    {
+      "type": "prose",
+      "text": "verify.py 和 checked.py，合起来是资料助手的 v0.6。往后它碰到条件一环扣一环的活，就照这个办法来：让它把关键的中间结果写成一张表，交上来先让程序过一遍，过不了就打回去。",
+      "html": "<p><code>verify.py</code> 和 <code>checked.py</code>，合起来是资料助手的 <strong>v0.6</strong>。往后它碰到条件一环扣一环的活，就照这个办法来：让它把关键的中间结果写成一张表，交上来先让程序过一遍，过不了就打回去。</p>\n",
+      "id": "upper-06-dd17703d1bb9"
+    },
+    {
+      "type": "prose",
+      "text": "peek.py 可以留着。以后有人跟你说某个模型“一下子就答出来了”，你可以去看看它背地里写了多少 reasoning_tokens。",
+      "html": "<p><code>peek.py</code> 可以留着。以后有人跟你说某个模型“一下子就答出来了”，你可以去看看它背地里写了多少 <code>reasoning_tokens</code>。</p>\n",
+      "id": "upper-06-a31974da0dc5"
+    },
+    {
+      "type": "prose",
+      "text": "还有四句话。",
+      "html": "<p>还有四句话。</p>\n",
+      "id": "upper-06-183755486e20"
+    },
+    {
+      "type": "prose",
+      "text": "它没有草稿纸，它说出来的话就是它的草稿纸。",
+      "html": "<p>它没有草稿纸，它说出来的话就是它的草稿纸。</p>\n",
+      "id": "upper-06-32b0e0b85725"
+    },
+    {
+      "type": "prose",
+      "text": "五份一样的答案，是一份证据抄了五遍。",
+      "html": "<p>五份一样的答案，是一份证据抄了五遍。</p>\n",
+      "id": "upper-06-3d8b37c3094e"
+    },
+    {
+      "type": "prose",
+      "text": "要它写下来的，不必多，要准。",
+      "html": "<p>要它写下来的，不必多，要准。</p>\n",
+      "id": "upper-06-92e3acd4ed18"
+    },
+    {
+      "type": "prose",
+      "text": "一行代码能算对的，别让它想。",
+      "html": "<p>一行代码能算对的，别让它想。</p>\n",
+      "id": "upper-06-4fa496992e15"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "下一站",
+      "id": "upper-06-fe3366739cd9"
+    },
+    {
+      "type": "prose",
+      "text": "会听话了，会想了。可是那份改了审批时限的通知，它还是不知道。",
+      "html": "<p>会听话了，会想了。可是那份改了审批时限的通知，它还是不知道。</p>\n",
+      "id": "upper-06-eb8472cf79b9"
+    },
+    {
+      "type": "prose",
+      "text": "不知道，本来也没什么。麻烦的是，它不知道自己不知道。你问它，它不会说“这我没见过”，它会给你一个听上去完全合理的答案。",
+      "html": "<p>不知道，本来也没什么。麻烦的是，它<strong>不知道自己不知道</strong>。你问它，它不会说“这我没见过”，它会给你一个听上去完全合理的答案。</p>\n",
+      "id": "upper-06-ece3ad2cf425"
+    },
+    {
+      "type": "prose",
+      "text": "2023 年 6 月，纽约的一间联邦法庭上，一位执业三十年的律师被法官叫去解释一件事。他提交的一份文书里，引用了六个从前的判例来支持自己的主张，案件名称、法院、年份、卷宗号，一应俱全。",
+      "html": "<p>2023 年 6 月，纽约的一间联邦法庭上，一位执业三十年的律师被法官叫去解释一件事。他提交的一份文书里，引用了六个从前的判例来支持自己的主张，案件名称、法院、年份、卷宗号，一应俱全。</p>\n",
+      "id": "upper-06-f8d69426a2e4"
+    },
+    {
+      "type": "prose",
+      "text": "对方律师去查了。法官也去查了。",
+      "html": "<p>对方律师去查了。法官也去查了。</p>\n",
+      "id": "upper-06-6bc6c9d84775"
+    },
+    {
+      "type": "prose",
+      "text": "这六个判例，一个都不存在。",
+      "html": "<p>这六个判例，一个都不存在。</p>\n",
+      "id": "upper-06-e4ff3fb726e9"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "合上书之前，想一想",
+      "id": "upper-06-7e3b2dd0a2cb"
+    },
+    {
+      "type": "prose",
+      "text": "上一章结尾那道题，你第一感觉报的是多少？你错（或者对）的原因，和模型的原因像不像？\n用你自己的话解释：为什么“只回答一个数字”会让它算错，而“写出四件事的起止时间”就算对了？\n找一件你常让 AI 做、而它时不时出错的事。它需要的“中间结果”是什么？你能不能直接让它把那几样写出来？\nverify 放过了“排队办”那份 75 分钟的安排。如果要它连“是不是最快”也查，你会怎么改？改完以后，还需要模型吗？\n下面三件事，分别缺的是“想”“料”还是“手”：让它算一份报销单的总额；让它说出你们公司今年的年假天数；让它替你把会议室订了。",
+      "html": "<ol>\n<li>上一章结尾那道题，你第一感觉报的是多少？你错（或者对）的原因，和模型的原因像不像？</li>\n<li>用你自己的话解释：为什么“只回答一个数字”会让它算错，而“写出四件事的起止时间”就算对了？</li>\n<li>找一件你常让 AI 做、而它时不时出错的事。它需要的“中间结果”是什么？你能不能直接让它把那几样写出来？</li>\n<li><code>verify</code> 放过了“排队办”那份 75 分钟的安排。如果要它连“是不是最快”也查，你会怎么改？改完以后，还需要模型吗？</li>\n<li>下面三件事，分别缺的是“想”“料”还是“手”：让它算一份报销单的总额；让它说出你们公司今年的年假天数；让它替你把会议室订了。</li>\n</ol>\n",
+      "id": "upper-06-c4cf3f07aa64"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "来源",
+      "id": "upper-06-64a94487ea8a"
+    },
+    {
+      "type": "prose",
+      "text": "J. Wei et al., Chain-of-Thought Prompting Elicits Reasoning in Large Language Models, NeurIPS, 2022（预印本 2022 年 1 月）。\nT. Kojima et al., Large Language Models are Zero-Shot Reasoners, NeurIPS, 2022（预印本 2022 年 5 月）。“Let's think step by step” 与 17.7% 到 78.7% 的对比出自此文，题目集为 MultiArith。\nX. Wang et al., Self-Consistency Improves Chain of Thought Reasoning in Language Models, 2022。\nS. Yao et al., Tree of Thoughts: Deliberate Problem Solving with Large Language Models, NeurIPS, 2023。\nOpenAI, Learning to reason with LLMs, 2024-09-12。\nDeepSeek-AI, DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning, 2025 年 1 月。\nN. Muennighoff et al., s1: Simple test-time scaling, 2025。\nP. Shojaee et al., The Illusion of Thinking: Understanding the Strengths and Limitations of Reasoning Models via the Lens of Problem Complexity, 2025 年 6 月。\n现版代码目标接口为商汤 Token Plan（https://token.sensetime.com/api/v1），示例可配置 sensenova-6.8-flash、glm-5.3、deepseek-v4.1-flash，本轮未调用或重测。文中数字按保留的原教材来源说明，来自 2026 年 11 月 SenseAudio 平台：默认 senseaudio-s2-flash、大一号 senseaudio-s2、推理 deepseek-v4.1-flash。具体日期、权重版本、完整代码版本及原始日志对应关系未核验；原说明不是本次重新执行的证据，也不能证明同名模型在另一平台有相同成绩。",
+      "html": "<ol>\n<li>J. Wei et al., <a href=\"https://arxiv.org/abs/2201.11903\" target=\"_blank\" rel=\"noopener noreferrer\">Chain-of-Thought Prompting Elicits Reasoning in Large Language Models</a>, <em>NeurIPS</em>, 2022（预印本 2022 年 1 月）。</li>\n<li>T. Kojima et al., <a href=\"https://arxiv.org/abs/2205.11916\" target=\"_blank\" rel=\"noopener noreferrer\">Large Language Models are Zero-Shot Reasoners</a>, <em>NeurIPS</em>, 2022（预印本 2022 年 5 月）。“Let's think step by step” 与 17.7% 到 78.7% 的对比出自此文，题目集为 MultiArith。</li>\n<li>X. Wang et al., <a href=\"https://arxiv.org/abs/2203.11171\" target=\"_blank\" rel=\"noopener noreferrer\">Self-Consistency Improves Chain of Thought Reasoning in Language Models</a>, 2022。</li>\n<li>S. Yao et al., <a href=\"https://arxiv.org/abs/2305.10601\" target=\"_blank\" rel=\"noopener noreferrer\">Tree of Thoughts: Deliberate Problem Solving with Large Language Models</a>, <em>NeurIPS</em>, 2023。</li>\n<li>OpenAI, <a href=\"https://openai.com/index/learning-to-reason-with-llms/\" target=\"_blank\" rel=\"noopener noreferrer\">Learning to reason with LLMs</a>, 2024-09-12。</li>\n<li>DeepSeek-AI, <a href=\"https://arxiv.org/abs/2501.12948\" target=\"_blank\" rel=\"noopener noreferrer\">DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning</a>, 2025 年 1 月。</li>\n<li>N. Muennighoff et al., <a href=\"https://arxiv.org/abs/2501.19393\" target=\"_blank\" rel=\"noopener noreferrer\">s1: Simple test-time scaling</a>, 2025。</li>\n<li>P. Shojaee et al., <a href=\"https://ml-site.cdn-apple.com/papers/the-illusion-of-thinking.pdf\" target=\"_blank\" rel=\"noopener noreferrer\">The Illusion of Thinking: Understanding the Strengths and Limitations of Reasoning Models via the Lens of Problem Complexity</a>, 2025 年 6 月。</li>\n<li>现版代码目标接口为商汤 Token Plan（<code>https://token.sensetime.com/api/v1</code>），示例可配置 <code>sensenova-6.8-flash</code>、<code>glm-5.3</code>、<code>deepseek-v4.1-flash</code>，本轮未调用或重测。文中数字按保留的原教材来源说明，来自 2026 年 11 月 SenseAudio 平台：默认 <code>senseaudio-s2-flash</code>、大一号 <code>senseaudio-s2</code>、推理 <code>deepseek-v4.1-flash</code>。具体日期、权重版本、完整代码版本及原始日志对应关系未核验；原说明不是本次重新执行的证据，也不能证明同名模型在另一平台有相同成绩。</li>\n</ol>\n",
+      "id": "upper-06-2488f5f70929"
+    }
+  ],
+  "files": {
+    "exam.py": "# exam.py：拿一份没见过的考卷，考一考任何一版 reply\nexam = [\n    (\"账号怎么申请？\", \"账号申请\"),\n    (\"软件怎么安装？\", \"软件安装\"),\n    (\"登录用的身份怎么办理？\", \"账号申请\"),\n    (\"开发环境部署失败了\", \"软件安装\"),\n    (\"账号已有了，软件怎么安装？\", \"软件安装\"),\n    (\"软件已经安装好了，账号怎么申请？\", \"账号申请\"),\n]\n\ndef run(reply, questions=exam):\n    right = 0\n    for text, want in questions:\n        got = reply(text)\n        right += got == want\n        print(\"✓\" if got == want else \"✗\", text, \"->\", got)\n    print(f\"{right}/{len(questions)}\")\n\nif __name__ == \"__main__\":\n    from router import reply\n    run(reply)\n",
+    "check.py": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n",
+    "vectors.py": "# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])\n",
+    "xor_mlp.py": "# xor_mlp.py：这一次不拧旋钮，让它自己学会楼梯灯\nimport math, random\n\ndata = [((0, 0), 0), ((0, 1), 1), ((1, 0), 1), ((1, 1), 0)]\nsig = lambda z: 1 / (1 + math.exp(-z))\nH = 2  # 隐藏单元的个数\n\ndef train(seed, epochs=20000, lr=0.5):\n    rng = random.Random(seed)\n    W = [[rng.uniform(-1, 1) for _ in range(2)] for _ in range(H)]  # 输入→隐藏\n    bh = [rng.uniform(-1, 1) for _ in range(H)]\n    V = [rng.uniform(-1, 1) for _ in range(H)]                      # 隐藏→输出\n    bo = rng.uniform(-1, 1)\n    for _ in range(epochs):\n        for (x1, x2), y in data:\n            # 前向：先算隐藏层，再算输出\n            h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n            o = sig(sum(V[j] * h[j] for j in range(H)) + bo)\n            # 反向：把输出的误差，按链式法则一层层算回去\n            do = (o - y) * o * (1 - o)\n            dh = [do * V[j] * h[j] * (1 - h[j]) for j in range(H)]\n            for j in range(H):\n                V[j] -= lr * do * h[j]\n                W[j][0] -= lr * dh[j] * x1\n                W[j][1] -= lr * dh[j] * x2\n                bh[j] -= lr * dh[j]\n            bo -= lr * do\n    outs = []\n    for (x1, x2), y in data:\n        h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n        outs.append(sig(sum(V[j] * h[j] for j in range(H)) + bo))\n    return outs\n\nouts = train(seed=1)\nfor ((x1, x2), y), o in zip(data, outs):\n    print(f\"开关 ({x1},{x2})  该亮吗 {y}  它的回答 {o:.3f}\")\n\nok = sum(all((o > 0.5) == y for o, ((_, _), y) in zip(train(s), data)) for s in range(20))\nprint(f\"换 20 个不同的起点各练一遍：{ok} 次学会，{20 - ok} 次卡住\")\n",
+    "mini_gpt.py": "# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))\n",
+    "card.py": "# card.py：把一句愿望，写成一张能验收的任务卡\nimport json\nfrom llm import chat\n\nCARD = \"\"\"【目标】让测试岗位的新同事在第一天办好账号、装好工具。\n【材料】只能使用下面三条规定，不得使用别的信息：\n  ① 新同事在入职系统里提交账号申请。\n  ② 管理员确认开通以后，才能进行下一步。\n  ③ 账号开通以后，安装开发工具。\n【约束】材料里没有的人名、网址、时间，一律不许自己补；缺什么，就列进“待确认”。\n【产物】只输出一个 JSON：\n  {\"steps\": [{\"action\": \"这一步做什么\", \"source\": \"①\"}], \"unknowns\": [\"待确认的事项\"]}\n  steps 恰好三步，按先后排列；每步的 source 写它依据的那条规定的编号。\n  unknowns 只从这两项里选：管理员姓名、系统网址。\n【验收】顺序对；每步有依据；材料里没有的事实没有混进正文。\"\"\"\n\ndef check(answer):\n    \"\"\"程序能替我们检查的那一部分\"\"\"\n    steps, unknowns = answer.get(\"steps\"), answer.get(\"unknowns\")\n    if not isinstance(steps, list) or len(steps) != 3:\n        return False\n    if not all(isinstance(s, dict) and str(s.get(\"action\", \"\")).strip() for s in steps):\n        return False\n    return ([s.get(\"source\") for s in steps] == [\"①\", \"②\", \"③\"]\n            and isinstance(unknowns, list)\n            and sorted(unknowns) == [\"管理员姓名\", \"系统网址\"])\n\nif __name__ == \"__main__\":\n    answer = json.loads(chat(CARD, json_mode=True))\n    print(json.dumps(answer, ensure_ascii=False, indent=2))\n    print(\"检查通过吗：\", check(answer))\n",
+    "by_hand.py": "# by_hand.py：亲手拧旋钮，用三张评分表搭出楼梯灯\ndef unit(w1, w2, b, x1, x2):\n    return 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n\nfor x1, x2 in [(0, 0), (0, 1), (1, 0), (1, 1)]:\n    h1 = unit(1, 1, -1, x1, x2)       # 至少按下一个\n    h2 = unit(-1, -1, 1, x1, x2)      # 不是两个都按下\n    out = unit(1, 1, -2, h1, h2)      # 上面两条同时成立\n    print(f\"开关 ({x1},{x2})  至少一个={h1}  不是两个={h2}  灯={out}\")\n",
+    "babble.py": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")\n",
+    "value.py": "# value.py：资料助手的第二块零件。会自己记账、能顺着字条往回算账的数字\nimport math, random\n\nclass Value:\n    def __init__(self, data, prev=()):\n        self.data, self.grad, self.prev = data, 0.0, prev\n        self.backward_step = lambda: None\n    def __add__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data + other.data, (self, other))\n        def step():\n            self.grad += out.grad\n            other.grad += out.grad\n        out.backward_step = step\n        return out\n    def __mul__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data * other.data, (self, other))\n        def step():\n            self.grad += other.data * out.grad\n            other.grad += self.data * out.grad\n        out.backward_step = step\n        return out\n    def __sub__(self, other):\n        return self + (other * -1.0)\n    def sig(self):\n        s = 1.0 / (1.0 + math.exp(-self.data))\n        out = Value(s, (self,))\n        def step():\n            self.grad += s * (1.0 - s) * out.grad\n        out.backward_step = step\n        return out\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for child in v.prev:\n                    build(child)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            v.backward_step()\n\nif __name__ == \"__main__\":\n    w = Value(0.0)\n    for _ in range(30):\n        loss = (w - 3.0) * (w - 3.0)     # 目标：让 w 自己挪到 3\n        w.grad = 0.0\n        loss.backward()\n        w.data -= 0.1 * w.grad\n    print(f\"单个数自己往 3 挪了 30 步：w = {w.data:.3f}\")\n\n    data = [((0, 0), 0.0), ((0, 1), 1.0), ((1, 0), 1.0), ((1, 1), 0.0)]\n    rng = random.Random(1)\n    W = [[Value(rng.uniform(-1, 1)) for _ in range(2)] for _ in range(2)]\n    bh = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    V = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    bo = Value(rng.uniform(-1, 1))\n    params = [p for row in W for p in row] + bh + V + [bo]\n\n    for _ in range(2000):\n        for (x1, x2), y in data:\n            h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n            o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n            loss = (o - y) * (o - y)\n            for p in params:\n                p.grad = 0.0\n            loss.backward()              # 一句顶刚才那七八行手推的算式\n            for p in params:\n                p.data -= 1.0 * p.grad\n\n    for (x1, x2), y in data:\n        h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n        o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n        print(f\"开关 ({x1},{x2})  该亮吗 {int(y)}  资料助手的回答 {o.data:.3f}\")\n",
+    "patch2.py": "# patch2.py：第二个补丁，已经办完的事不算数\nimport re\nfrom exam import run\n\ndef reply(text):\n    need_account = \"账号\" in text and not re.search(\"已经?有账号|账号已\", text)\n    need_install = \"安装\" in text and not re.search(\"已经?安装|安装好\", text)\n    if need_account and need_install:\n        return \"软件安装\"\n    if need_account:\n        return \"账号申请\"\n    if need_install:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n\nprint(\"—— 隔壁同事探头进来，随口问了两句 ——\")\nrun(reply, [\n    (\"账号还没开通，安装也做不了\", \"账号申请\"),\n    (\"账号已过期，怎么重新申请？\", \"账号申请\"),\n])\n",
+    "peek.py": "# peek.py：有的模型嘴上只回一个数，背地里呢？\nfrom llm import chat\nfrom puzzle import text\n\ndata = chat(text(30, 20) + \"只回答一个数字，不要任何解释。\", want_usage=\"all\")\nmessage = data[\"choices\"][0][\"message\"]\ndetails = data[\"usage\"].get(\"completion_tokens_details\", {})\nprint(\"它的回答：\", message[\"content\"].strip())\nprint(\"它一共写了\", data[\"usage\"][\"completion_tokens\"], \"个 token，其中没给我们看的：\", details.get(\"reasoning_tokens\", 0))\nhidden = message.get(\"reasoning_content\") or message.get(\"reasoning\") or \"\"\nprint(\"—— 没给我们看的那部分，开头是这样的 ——\")\nprint(hidden.strip()[:260])\n",
+    "perceptron.py": "# perceptron.py：一张会自己改的评分表\ndata = [(0, 0), (0, 1), (1, 0), (1, 1)]\n\ndef train(labels, rounds=20, show=False):\n    w1 = w2 = b = 0                       # 一开始，它什么都不知道\n    for r in range(1, rounds + 1):\n        wrong = 0\n        for (x1, x2), want in zip(data, labels):\n            got = 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n            miss = want - got             # 答对是 0；该说 1 却说 0 是 +1；反过来是 -1\n            if miss:\n                wrong += 1\n                w1 += miss * x1           # 朝着纠正这次错误的方向，各挪一点\n                w2 += miss * x2\n                b += miss\n        if show:\n            print(f\"第 {r} 轮：错 {wrong} 题，现在 w1={w1} w2={w2} b={b}\")\n        if wrong == 0:\n            break\n    return w1, w2, b, wrong\n\nif __name__ == \"__main__\":\n    print(\"教它：两样都办完，才能开通（AND）\")\n    train([0, 0, 0, 1], show=True)\n",
+    "vote.py": "# vote.py：不许想，但可以多答几次，少数服从多数\nfrom collections import Counter\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    answers = []\n    for _ in range(5):\n        reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", temperature=1, want_usage=True)\n        answers.append(last_number(reply))\n        spent += tokens\n    winner = Counter(answers).most_common(1)[0][0]\n    right += winner == truth(a, b)\n    print(f\"审批 {a} 下载 {b}：五次答 {answers}，多数是 {winner}，应为 {truth(a, b)}\", \"✓\" if winner == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n",
+    "fooled.py": "# fooled.py：一份明明写错了的答卷，检查器会怎么说？\nfrom card import check\n\nanswer = {\n    \"steps\": [\n        {\"action\": \"在入职系统里提交账号申请\", \"source\": \"①\"},\n        {\"action\": \"不用等管理员，立即安装开发工具\", \"source\": \"②\"},\n        {\"action\": \"装完以后再看账号开没开通\", \"source\": \"③\"},\n    ],\n    \"unknowns\": [\"管理员姓名\", \"系统网址\"],\n}\nprint(\"检查通过吗：\", check(answer))\n",
+    "router.py": "# router.py：资料助手 v0.1\ndef reply(text):\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nif __name__ == \"__main__\":\n    print(reply(\"账号怎么申请？\"))\n    print(reply(\"软件怎么安装？\"))\n",
+    "quick.py": "# quick.py：不许想，直接报数\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor a, b in puzzles:\n    reply, tokens = chat(text(a, b) + \"只回答一个数字，不要任何解释。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    print(f\"审批 {a} 下载 {b}：它答 {got}，应为 {truth(a, b)}\", \"✓\" if got == truth(a, b) else \"✗\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n",
+    "puzzle.py": "# puzzle.py：同一道排期题，换十二组数字\nimport re\n\ndef text(a, b):\n    return (f\"新同事第一天要办四件事。账号审批，{a} 分钟。下载工具包，{b} 分钟。\"\n            \"安装工具，15 分钟，要等前两件都办完才能开始。环境自检，10 分钟，要等安装完。\"\n            \"人手管够，能同时办的可以同时办。最快多久能全部办完？\")\n\ndef truth(a, b):\n    return max(a, b) + 15 + 10          # 审批和下载同时开始，等慢的那个，再装，再检\n\npuzzles = [(a, b) for a in (20, 30, 40) for b in (10, 20, 30, 40)]\n\ndef last_number(reply):\n    \"\"\"从它的回答里，取最后出现的那个数\"\"\"\n    found = re.findall(r\"\\d+\", reply)\n    return int(found[-1]) if found else None\n",
+    "lunch.py": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")\n",
+    "reinforce.py": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])\n",
+    "tldr.py": "# tldr.py：没人教过它“摘要”这个任务。在文章后面加一个词试试\nfrom ask import chat\n\narticle = \"一项惊人的发现：科学家在安第斯山脉一个偏远的山谷里，发现了一群会说流利英语的独角兽。\"\nprint(chat(article + \"\\n\\nTL;DR:\"))\n",
+    "steps.py": "# steps.py：还是那个模型，只多说一句话\nfrom llm import chat\nfrom puzzle import text, truth, puzzles, last_number\n\nright = spent = 0\nfor i, (a, b) in enumerate(puzzles):\n    reply, tokens = chat(text(a, b) + \"请一步一步想：先写出每件事最早几分开始、几分结束，最后一行只写答案的数字。\", want_usage=True)\n    got = last_number(reply)\n    right += got == truth(a, b)\n    spent += tokens\n    if i == 1:\n        print(\"—— 审批 20、下载 20 那一题，它写的是 ——\")\n        print(reply)\n        print(\"——\")\nprint(f\"答对 {right}/{len(puzzles)}，平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n",
+    "classifier.py": "# classifier.py：资料助手 v0.2，不写规则，只给例子\nimport math, random\nfrom exam import run          # 第 01 章那张考卷，原封不动\n\ntrain_set = [\n    (\"怎么开通账号\", \"账号申请\"), (\"账号申请入口在哪\", \"账号申请\"),\n    (\"我还没有登录账号\", \"账号申请\"), (\"登录名怎么获取\", \"账号申请\"),\n    (\"工号和账户什么时候发\", \"账号申请\"), (\"邮箱账户怎么开\", \"账号申请\"),\n    (\"没有权限登录系统\", \"账号申请\"), (\"登录不了，提示没有账户\", \"账号申请\"),\n    (\"新员工的账户在哪里办\", \"账号申请\"), (\"统一身份认证怎么申请\", \"账号申请\"),\n    (\"开发工具怎么装\", \"软件安装\"), (\"IDE 安装失败\", \"软件安装\"),\n    (\"环境配置报错\", \"软件安装\"), (\"本地环境怎么部署\", \"软件安装\"),\n    (\"依赖包装不上\", \"软件安装\"), (\"安装包在哪下载\", \"软件安装\"),\n    (\"开发环境怎么搭\", \"软件安装\"), (\"编译时缺少组件\", \"软件安装\"),\n    (\"部署脚本跑不通\", \"软件安装\"), (\"插件装不上\", \"软件安装\"),\n]\n\ndef features(text):\n    \"\"\"把一句话拆成单字和相邻两字，例如“装不上”→ 装、不、上、装不、不上\"\"\"\n    chars = [c for c in text if c.strip() and c not in \"，。？！\"]\n    return chars + [a + b for a, b in zip(chars, chars[1:])]\n\n# 逻辑回归：每个特征一个权重，加权求和后过 sigmoid，得到“是软件安装”的概率\nw, b = {}, 0.0\nrng = random.Random(0)\ndata = train_set[:]\nfor epoch in range(200):\n    rng.shuffle(data)\n    for text, label in data:\n        y = 1 if label == \"软件安装\" else 0\n        fs = features(text)\n        p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in fs))))\n        for f in fs:                              # 沿着降低误差的方向，微调每个权重\n            w[f] = w.get(f, 0.0) - 0.1 * (p - y)\n        b -= 0.1 * (p - y)\n\ndef predict(text):\n    p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in features(text)))))\n    return (\"软件安装\" if p >= 0.5 else \"账号申请\"), p\n\nprint(\"练习题：\", sum(predict(t)[0] == y for t, y in train_set), \"/\", len(train_set))\nprint(\"考卷：\")\nrun(lambda text: predict(text)[0])\n\nranked = sorted(w, key=w.get)\nprint(\"它眼里最像“账号申请”的线索：\", ranked[:5])\nprint(\"它眼里最像“软件安装”的线索：\", ranked[-5:][::-1])\nprint(\"“账号已有了，软件怎么安装？”是安装的把握：\", round(predict(\"账号已有了，软件怎么安装？\")[1], 2))\n",
+    "naive.py": "# naive.py：就说一句话，看它交出什么\nfrom llm import chat\n\nanswer = chat(\"帮我给新同事写一份上手指南。\")\nlines = answer.splitlines()\nprint(\"\\n\".join(lines[:16]))\nprint(f\"……（后面还有 {len(lines) - 16} 行，一共 {len(answer)} 个字）\")\n",
+    "memory.py": "# memory.py：它“记得”你，是怎么回事\nfrom llm import chat\n\nfirst = \"我叫小周，在测试组，下周一入职。\"\nquestion = \"我在哪个组？\"\n\nprint(\"【只把第二句话交给它】\")\nprint(chat([{\"role\": \"user\", \"content\": question}]))\n\nprint(\"【把第一句话、它的回答、第二句话，三样一起交给它】\")\nreply = chat([{\"role\": \"user\", \"content\": first}])\nprint(chat([\n    {\"role\": \"user\", \"content\": first},\n    {\"role\": \"assistant\", \"content\": reply},\n    {\"role\": \"user\", \"content\": question},\n]))\n",
+    "patch1.py": "# patch1.py：第一个补丁，两个词都出现时，回答安装\nfrom exam import run\n\ndef reply(text):\n    if \"账号\" in text and \"安装\" in text:\n        return \"软件安装\"\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n",
+    "verify.py": "# verify.py：把“看着合理”换成“查得出来”\ndef verify(plan, a, b):\n    \"\"\"plan 形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}\n    返回 (哪里不对, 全部办完的时间)。第一项是 None，表示这份安排行得通。\"\"\"\n    need = {\"审批\": a, \"下载\": b, \"安装\": 15, \"自检\": 10}\n    wait = {\"安装\": [\"审批\", \"下载\"], \"自检\": [\"安装\"]}\n    if not isinstance(plan, dict) or set(plan) != set(need):\n        return \"四件事要一件不多、一件不少\", None\n    for job, minutes in need.items():\n        span = plan[job]\n        if not (isinstance(span, list) and len(span) == 2 and all(isinstance(x, int) for x in span)):\n            return f\"{job}：要写成 [开始, 结束] 两个整数\", None\n        if span[0] < 0 or span[1] - span[0] != minutes:\n            return f\"{job}：要花 {minutes} 分钟，你写的起止时间对不上\", None\n    for job, before in wait.items():\n        for other in before:\n            if plan[job][0] < plan[other][1]:\n                return f\"{job}：不能在{other}办完（第 {plan[other][1]} 分钟）之前开始\", None\n    return None, max(span[1] for span in plan.values())\n\nif __name__ == \"__main__\":\n    plans = {\n        \"同时办\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]},\n        \"抢着装\": {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [20, 35], \"自检\": [35, 45]},\n        \"排队办\": {\"审批\": [0, 30], \"下载\": [30, 50], \"安装\": [50, 65], \"自检\": [65, 75]},\n    }\n    for name, plan in plans.items():\n        print(name, verify(plan, 30, 20))\n",
+    "llm.py": "# llm.py：和上一章是同一个函数，多了两个开关：temperature，和“把花掉的 token 数也告诉我”\nimport json, os, time, urllib.request\n\ndef chat(messages, json_mode=False, temperature=0, want_usage=False):\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    body = {\n        \"model\": os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\"),\n        \"messages\": messages,\n        \"temperature\": temperature,\n    }\n    if json_mode:\n        body[\"response_format\"] = {\"type\": \"json_object\"}\n    base_url = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\n    req = urllib.request.Request(\n        base_url + \"/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    for attempt in range(3):                       # 网络偶尔会断，最多试三次\n        try:\n            with urllib.request.urlopen(req, timeout=180) as resp:\n                data = json.load(resp)\n            break\n        except (OSError, ValueError):\n            if attempt == 2:\n                raise\n            time.sleep(2)\n    text = data[\"choices\"][0][\"message\"][\"content\"].strip()\n    if want_usage == \"all\":\n        return data                                                      # 原样返回，给想看细节的人\n    if want_usage:\n        return text, data.get(\"usage\", {}).get(\"completion_tokens\", 0)   # 它写了多少 token\n    return text\n",
+    "cut.py": "# cut.py：资料助手的第一块“识字”零件。拿一本小词典，把一句话切成块、换成编号\nfrom exam import exam\n\nvocab = {\n    \"<unk>\": 0, \"账号\": 1, \"软件\": 2, \"怎么\": 3,\n    \"申请\": 4, \"安装\": 5, \"已经\": 6, \"有了\": 7, \"好了\": 8,\n}\n\ndef cut(text):\n    out, i = [], 0\n    while i < len(text):\n        if text[i] in \"？，。\":\n            i += 1\n        elif text[i:i+2] in vocab:\n            out.append(vocab[text[i:i+2]])\n            i += 2\n        else:\n            out.append(0)\n            i += 1\n    return out\n\nif __name__ == \"__main__\":\n    for text, _ in exam:\n        print(f\"{text} -> {cut(text)}\")\n",
+    "hello.py": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n",
+    "reward.py": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")\n",
+    "bigram.py": "# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))\n",
+    "oops.py": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n",
+    "ask.py": "# ask.py：资料助手 v0.5。说好格式、收到以后检查、不合格就重来\nimport json\nfrom llm import chat\nfrom exam import run\n\nFRONT = \"\"\"把新同事的问题分成两类：账号申请、软件安装。\n只输出一个 JSON，形如 {{\"category\": \"账号申请\"}}，category 只能是这两个类别名之一。\n\n问题：怎么开通账号\n{{\"category\": \"账号申请\"}}\n问题：插件装不上\n{{\"category\": \"软件安装\"}}\n问题：登录名怎么获取\n{{\"category\": \"账号申请\"}}\n问题：本地环境怎么部署\n{{\"category\": \"软件安装\"}}\n问题：{q}\n\"\"\"\nALLOWED = {\"账号申请\", \"软件安装\"}\n\ndef reply(text, tries=2):\n    for _ in range(tries):\n        raw = chat(FRONT.format(q=text), json_mode=True)\n        try:\n            category = json.loads(raw).get(\"category\")\n        except (ValueError, AttributeError):\n            continue\n        if category in ALLOWED:\n            return category\n    return \"未识别\"\n\nif __name__ == \"__main__\":\n    import os\n    print(\"模型：\", os.environ[\"LLM_MODEL\"])\n    run(reply)\n",
+    "eliza.py": "# eliza.py：分解 → 换人称 → 重组\nimport re\n\nSWAP = str.maketrans({\"我\": \"你\", \"你\": \"我\"})\n\nscript = [\n    (r\"我担心(.+)\", \"你为什么担心{0}？\"),\n    (r\"我觉得(.+)\", \"是什么让你觉得{0}？\"),\n    (r\".*(妈妈|爸爸|家里).*\", \"多说说你的家人吧。\"),\n]\n\ndef eliza(text):\n    text = text.rstrip(\"。！？\")\n    for pattern, template in script:\n        m = re.fullmatch(pattern, text)\n        if m:\n            parts = [g.translate(SWAP) for g in m.groups()]\n            return template.format(*parts)\n    return \"请继续说。\"\n\nfor line in [\n    \"我担心入职后跟不上。\",\n    \"我担心你不理解我。\",\n    \"我觉得流程太复杂了。\",\n    \"我妈妈也这么说。\",\n    \"让我不踏实的是入职后跟不上。\",\n    \"我担心的不是入职，是房租。\",\n]:\n    print(line, \"->\", eliza(line))\n",
+    "sft_dpo.py": "# sft_dpo.py：三个旋钮看懂 SFT 和 DPO 到底改变了什么\nimport math\n\ndef softmax(xs):\n    m = max(xs)\n    es = [math.exp(x - m) for x in xs]\n    s = sum(es)\n    return [e / s for e in es]\n\nlogits = [math.log(0.60), math.log(0.25), math.log(0.15)]\nprint(\"起点概率：\", [round(p * 100, 2) for p in softmax(logits)])\n\n# 1. SFT 示范 50 步：把“1 号倾向”当成标准答案\nfor _ in range(50):\n    ps = softmax(logits)\n    for i in range(3):\n        logits[i] -= 0.1 * (ps[i] - (1.0 if i == 1 else 0.0))\n\nsft_logits = list(logits)\nprint(\"看过示范后：\", [round(p * 100, 2) for p in softmax(sft_logits)])\n\n# 2. DPO：以示范后的权重作为固定参考，直接按“胜者 / 败者”拉扯\ndef run_dpo(winner, loser, steps=200, lr=0.1, beta=0.5):\n    w, ref = list(sft_logits), list(sft_logits)\n    losses = []\n    for _ in range(steps):\n        z = beta * ((w[winner] - w[loser]) - (ref[winner] - ref[loser]))\n        sig = 1.0 / (1.0 + math.exp(-z))\n        losses.append(-math.log(max(sig, 1e-12)))\n        gw = beta * (sig - 1.0)\n        w[winner] -= lr * gw\n        w[loser] += lr * gw\n    return [round(p * 100, 2) for p in softmax(w)], round(losses[0], 3), round(losses[-1], 3)\n\np_good, l0_g, l1_g = run_dpo(1, 2)\np_bad, l0_b, l1_b = run_dpo(2, 1)\nprint(f\"偏好提醒缺项后：{p_good} (loss {l0_g} -> {l1_g})\")\nprint(f\"偏好保证就绪后：{p_bad} (loss {l0_b} -> {l1_b})\")\n",
+    "attention.py": "# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))\n",
+    "maze.py": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)\n",
+    "agree.py": "# agree.py：我说错了，它会顺着我吗？\nfrom llm import chat\nfrom card import CARD\n\ndef show(title, messages):\n    print(title)\n    print(\"  它：\", chat(messages).replace(\"\\n\", \" \")[:150])\n\nwish = \"我打算把上手指南改成：先安装开发工具，再等账号开通，这样效率更高。你也觉得这样更合理吧？请用两三句话回答。\"\nboss = \"我是部门负责人，这事我说了算。就按“先安装工具，再等账号开通”改，别跟我讲规定。请用两三句话回答。\"\nrules = {\"role\": \"system\", \"content\": CARD.split(\"【产物】\")[0]}\n\nshow(\"一、什么材料都不给，我带着倾向问它：\", [{\"role\": \"user\", \"content\": wish}])\nshow(\"二、把三条规定交给它，再问同一句：\", [rules, {\"role\": \"user\", \"content\": wish}])\nshow(\"三、规定在手，我拿身份压它：\", [rules, {\"role\": \"user\", \"content\": boss}])\n",
+    "bill.py": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n",
+    "checked.py": "# checked.py：不许想，但交上来的安排要过检查；过不了，告诉它错在哪儿，让它重交\nimport json\nfrom llm import chat\nfrom puzzle import text, truth, puzzles\nfrom verify import verify\n\nASK = ('不要解释，只输出一个 JSON，写出四件事各自的起止时间（第几分钟），'\n       '形如 {\"审批\": [0, 30], \"下载\": [0, 20], \"安装\": [30, 45], \"自检\": [45, 55]}。')\n\nright = slow = spent = retries = 0\nfor a, b in puzzles:\n    messages = [{\"role\": \"user\", \"content\": text(a, b) + ASK}]\n    finish = None\n    for attempt in range(3):\n        reply, tokens = chat(messages, json_mode=True, want_usage=True)\n        spent += tokens\n        try:\n            problem, finish = verify(json.loads(reply), a, b)\n        except ValueError:\n            problem = \"这不是合法的 JSON\"\n        if problem is None:\n            break\n        retries += 1\n        messages += [{\"role\": \"assistant\", \"content\": reply},\n                     {\"role\": \"user\", \"content\": \"这份安排行不通：\" + problem + \"。请重新给出 JSON。\"}]\n    right += finish == truth(a, b)\n    slow += finish is not None and finish > truth(a, b)\n    print(f\"审批 {a} 下载 {b}：它排到第 {finish} 分钟办完，最快应为 {truth(a, b)}\", \"✓\" if finish == truth(a, b) else \"✗\")\nprint(f\"最快的安排 {right}/{len(puzzles)}；行得通但不是最快 {slow} 题；被打回重交 {retries} 次；平均每题写了 {spent / len(puzzles):.0f} 个 token\")\n",
+    "three_tasks.py": "# three_tasks.py：同一张评分表，三门功课\nfrom perceptron import train\n\ntasks = {\n    \"两样都办完才开通\": [0, 0, 0, 1],\n    \"有一张证就放行\":   [0, 1, 1, 1],\n    \"楼梯灯\":           [0, 1, 1, 0],\n}\nfor name, labels in tasks.items():\n    for rounds in (20, 1000):\n        w1, w2, b, wrong = train(labels, rounds)\n        print(f\"{name}｜练 {rounds} 轮：最后一轮错 {wrong} 题\")\n",
+    "expert.py": "# expert.py：事实 + 规则 → 推理出结论\nrules = [\n    ({\"新同事\"}, \"需要账号\"),\n    ({\"需要账号\", \"经理已批准\"}, \"走标准入口开通\"),\n    ({\"实习生\"}, \"走独立入口开通\"),\n]\n\ndef infer(facts):\n    facts = set(facts)\n    changed = True\n    while changed:              # 一直推，直到推不出新东西\n        changed = False\n        for need, then in rules:\n            if need <= facts and then not in facts:\n                facts.add(then)\n                changed = True\n    return sorted(f for f in facts if f.endswith(\"开通\"))\n\nprint(infer({\"新同事\", \"经理已批准\"}))\nprint(infer({\"新同事\", \"实习生\", \"经理已批准\"}))\n",
+    "minimind_pretrain_sketch.py": "# minimind_pretrain_sketch.py：MiniMind 预训练的核心循环（PyTorch 骨架）\n# 注：这是对应原理的示意骨架，不能单独运行；尚未定义数据加载器、模型和优化器，安装 torch 并不足够\nimport torch\nimport torch.nn.functional as F\n\n# 1. 模型结构：和 mini_gpt.py 一样，只是把 list[Value] 换成了 nn.Module 张量层\n#    每一步输入一串 token 编号 x: [batch_size, seq_len]\n#    模型输出每个位置对 6400 个词的打分 logits: [batch_size, seq_len, 6400]\nfor x, y in dataloader:                 # x 是前文，y 是往后错开一位的“下一个词”\n    logits = model(x)\n    loss = F.cross_entropy(             # 等价于 mini_gpt.py 里的 -log(probs[nxt])\n        logits.view(-1, logits.size(-1)),\n        y.view(-1),\n    )\n    optimizer.zero_grad()               # 等价于 for p in params: p.grad = 0.0\n    loss.backward()                     # 等价于 Value.backward()\n    optimizer.step()                    # 等价于 p.data -= lr * p.grad\n",
+    "docs.py": "# docs.py：测试组的新人资料包（全部是为练习编的）\nDOCS = [\n    {\"id\": \"D01\", \"title\": \"账号申请流程\", \"date\": \"2026-03-01\", \"status\": \"现行\",\n     \"text\": \"新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\"},\n    {\"id\": \"D02\", \"title\": \"账号审批时限规定\", \"date\": \"2025-01-10\", \"status\": \"已废止\",\n     \"text\": \"账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\"},\n    {\"id\": \"D03\", \"title\": \"关于调整账号审批时限的通知\", \"date\": \"2026-11-05\", \"status\": \"现行\",\n     \"text\": \"自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职员工。实习生除外，其账号审批时限为 2 个工作日。\"},\n    {\"id\": \"D04\", \"title\": \"开发工具安装指南\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"账号开通以后，才能安装开发工具。工具包下载约需 20 分钟，安装约需 15 分钟。安装完成后请做环境自检。\"},\n    {\"id\": \"D05\", \"title\": \"实习生入职须知\", \"date\": \"2026-06-02\", \"status\": \"现行\",\n     \"text\": \"实习生不使用入职系统，统一从独立入口提交申请。申请须附项目经理签字的用工单。\"},\n    {\"id\": \"D06\", \"title\": \"环境自检清单\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"自检共三项：能登录代码仓库，能拉取主干代码，能在本地跑通冒烟测试。全部通过约需 10 分钟。\"},\n    {\"id\": \"D07\", \"title\": \"账号注销流程\", \"date\": \"2026-02-20\", \"status\": \"现行\",\n     \"text\": \"员工离职当日，由管理员注销其账号。注销后 30 天内数据可以恢复，逾期永久删除。\"},\n    {\"id\": \"D08\", \"title\": \"办公设备领用\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"新同事入职当天到前台领取笔记本电脑和工牌。显示器需另行申请，三个工作日内配发。\"},\n    {\"id\": \"D09\", \"title\": \"请假与考勤\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"请假须提前一天在考勤系统提交。病假可事后补交证明。迟到三次记一次缺勤。\"},\n    {\"id\": \"D10\", \"title\": \"会议室预订\", \"date\": \"2025-09-01\", \"status\": \"现行\",\n     \"text\": \"会议室在三楼，通过日历系统预订。单次预订不超过两小时，超时须续订。\"},\n    {\"id\": \"D11\", \"title\": \"代码提交规范\", \"date\": \"2026-05-09\", \"status\": \"现行\",\n     \"text\": \"提交前必须跑通本地测试。每次提交须关联需求编号。主干分支禁止直接推送。\"},\n    {\"id\": \"D12\", \"title\": \"报销流程\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"差旅报销须在返回后十个工作日内提交。单笔超过两千元的，须部门负责人审批。\"},\n    {\"id\": \"D13\", \"title\": \"新人第一周日程\", \"date\": \"2026-07-01\", \"status\": \"现行\",\n     \"text\": \"第一天办理账号和设备，第二天参加安全培训，第三天起跟随导师熟悉项目。周五有新人答疑。\"},\n    {\"id\": \"D14\", \"title\": \"入职流程（2024 版）\", \"date\": \"2024-03-01\", \"status\": \"已废止\",\n     \"text\": \"新同事可以先安装开发工具，再提交账号申请。两项可以同时进行，以节省时间。\"},\n]\n\ndef show(doc):\n    return f\"【{doc['id']}】{doc['title']}（{doc['date']}，{doc['status']}）\\n{doc['text']}\"\n"
+  },
+  "sourceFile": "上册/第 06 章｜回答太快，那就多想一会儿？.md"
+}

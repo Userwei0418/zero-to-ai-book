@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#233c63"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1200" height="420" rx="14" fill="#f7f0e2"/>
+  <text x="56" y="58" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="30" font-weight="700" fill="#233c63">把文件名交过去，不算把图片交过去</text>
+  <text x="56" y="90" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#6b6457">同一道提问：“活动几点开始？活动室是否已确认预订？”</text>
+
+  <!-- Row 1 -->
+  <rect x="56" y="122" width="360" height="74" rx="14" fill="#f2e6cf" stroke="#b59d79" stroke-width="1.8"/>
+  <text x="236" y="154" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" font-weight="700" fill="#2d2922">① 只传文件名："活动海报.png"</text>
+  <text x="236" y="180" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#6b6457">没有图片字节</text>
+  <line x1="424" y1="159" x2="496" y2="159" stroke="#233c63" stroke-width="2.5" marker-end="url(#arr2)"/>
+  <rect x="506" y="122" width="638" height="74" rx="14" fill="#ffffff" stroke="#b59d79" stroke-width="1.8"/>
+  <text x="530" y="165" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#4f493e">时间：不知道　｜　预订状态：不知道（没看到图，不乱编）</text>
+
+  <!-- Row 2 -->
+  <rect x="56" y="216" width="360" height="74" rx="14" fill="#e5ebf6" stroke="#2c4975" stroke-width="1.8"/>
+  <text x="236" y="248" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" font-weight="700" fill="#2d2922">② 传原版海报的图片字节</text>
+  <text x="236" y="274" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#4f493e">图上写着 14:00 · 三楼活动室</text>
+  <line x1="424" y1="253" x2="496" y2="253" stroke="#233c63" stroke-width="2.5" marker-end="url(#arr2)"/>
+  <rect x="506" y="216" width="638" height="74" rx="14" fill="#e5ebf6" stroke="#2c4975" stroke-width="1.8"/>
+  <text x="530" y="259" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#233c63">时间：14:00　｜　预订状态：不知道（海报不是预订回执）</text>
+
+  <!-- Row 3 -->
+  <rect x="56" y="310" width="360" height="74" rx="14" fill="#faebc3" stroke="#ca9b37" stroke-width="2"/>
+  <text x="236" y="342" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" font-weight="700" fill="#2d2922">③ 传改后海报的图片字节</text>
+  <text x="236" y="368" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#4f493e">图上改成了 15:00 · 三楼活动室</text>
+  <line x1="424" y1="347" x2="496" y2="347" stroke="#233c63" stroke-width="2.5" marker-end="url(#arr2)"/>
+  <rect x="506" y="310" width="638" height="74" rx="14" fill="#e0ece6" stroke="#4f8b75" stroke-width="2"/>
+  <text x="530" y="353" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#2d2922">时间：15:00　｜　预订状态：不知道（守住画面外的边界）</text>
+</svg>

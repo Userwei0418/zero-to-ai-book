@@ -1,0 +1,635 @@
+{
+  "id": "upper-04a",
+  "title": "第 04 章（上）｜学着接下一句：从字模到迷你大脑",
+  "shortTitle": "学着接下一句：从字模到迷你大脑",
+  "volume": "upper",
+  "group": "第一篇 · 学会学习",
+  "order": 6,
+  "kind": "chapter",
+  "minutes": 21,
+  "summary": "2019 年 2 月 14 日，情人节。你打开一家叫 OpenAI 的研究机构的博客，想看看他们又做了什么。",
+  "text": "# 第 04 章（上）｜学着接下一句：从字模到迷你大脑\n\n配套课件在这里：[[零基础学AI/attachments/mygpt-companion-20261117-r4-8c90a8fb.zip|下载上册配套代码与实验材料（r4）]]。解压后先读 README，按对应章节说明使用。\n## 安第斯山上的独角兽\n\n2019 年 2 月 14 日，情人节。你打开一家叫 OpenAI 的研究机构的博客，想看看他们又做了什么。\n\n文章里贴着一篇新闻。开头两句是人写的，大意是这样：\n\n> 一项惊人的发现：科学家在安第斯山脉一个从未有人到过的偏远山谷里，发现了一群独角兽。更让研究者吃惊的是，这些独角兽说一口流利的英语。\n\n接下来的好几段，是他们新训练的程序接着写的。它给带队的科学家起了名字，说他是某大学的进化生物学家；它描写了这群银白色的动物；它让科学家一本正经地推测，独角兽的英语大概是从哪儿学来的。前后连贯，腔调十足，活像一篇真的科学报道，只不过报道的是独角兽。\n\n研究者在旁边老老实实注了一句：这是试了十次里最好的一次。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/Ij8nbK4L7oh5jzxtFiScVoW1n9A.png|2019 年 2 月。一篇关于独角兽的科学报道，作者是一个程序。]]\n\n这个程序叫 GPT-2。它从头到尾只练过一件事：读一段文字，**猜下一个词**。练习材料是八百万个网页。\n\n然后是整篇博客里最出名的一段话。他们说，这东西有可能被拿去批量生产假新闻和垃圾信息，所以完整的版本暂时不公开，先放出一个小得多的。\n\n消息一出，热闹得很。有人说这是负责任的榜样。也有人笑得很大声：一个猜词的程序，你们说它太危险？这是研究机构，还是广告公司？\n\n好，两个问题，请你先在心里答一下。\n\n第一个：一个只会猜下一个词的程序，值得担心吗？\n\n第二个：没有人教过它翻译，没有人教过它写摘要，也没有人教过它回答问题。光靠“猜下一个词”，这些事它学得会吗？\n\n我猜你对第二个问题的回答是“学不会”，或者“不好说”。2019 年的时候，很多研究者也这么想。\n\n要想清楚这件事，最好的办法是自己造一个。\n\n## 自己造一个猜词的\n\n先玩个游戏。“新同事先申请……”，后面你会接什么？\n\n账号？权限？工牌？\n\n再给你一点前文：“新同事还没有登录身份，先申请……”这回你多半接“账号”。如果是“新同事已经能登录，但打不开项目，先申请……”你会接“权限”。\n\n**同样的结尾，怎么接取决于前文。** 所谓语言模型，干的就是这个：给它一段前文，它估计下一个词是各种可能的把握分别有多大。\n\n有件事先交代一下。第 01 章我们给资料助手打第一块零件 `cut.py` 时，管它叫“活字字模箱”。在真正的模型里，那盒字模叫**词表**，切句子的小程序叫**分词器**，切出来的一块块小碎片叫 **token**：有时是一个字，有时是半个词，有时只是一个标点。\n\n最简单的猜词程序，连神经网络都不用。找一些句子，数一数每个词后面都跟过哪些词、各跟过几次。生成的时候，看着最后一个词，按次数抓阄决定下一个。\n\n```python\n# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))\n```\n\n`counts` 是个账本：“先”后面，“申请”出现过 2 次，“安装”1 次，“检查”1 次。`generate` 就是抓阄，抓到表示结尾的 `$` 就停。\n\n```\n“先”后面： {'申请': 0.5, '安装': 0.25, '检查': 0.25}\n温度 0.3： 新同事 先 申请 权限 ｜ 新同事 先 安装 软件 ｜ 安装 软件\n温度 1.0： 新同事 先 申请 权限 ｜ 管理员 确认 后 开通 后 安装 软件 ｜ 安装 软件\n温度 3.0： 安装 失败 先 安装 失败 先 检查 网络 ｜ 新同事 先 检查 网络 ｜ 新同事 先 申请 账号\n```\n\n看“温度 1.0”那一行中间那句：“管理员 确认 后 开通 后 安装 软件”。我们给的六句话里没有这一句，它是自己拼出来的。\n\n**温度**是个旋钮，管的是抓阄时的胆子。温度低，它专挑最常见的接法，稳，但翻来覆去就那几句。温度高，冷门的接法也有机会，花样多，也容易出事——比如“温度 3.0”第一句：“安装 失败 先 安装 失败 先 检查 网络”。每两个挨着的词都说得通，连起来却在原地转圈。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/X98NbkLtEoTI2zxm2UNcBNWenqh.png|它只看手里的那一张。]]\n\n毛病出在哪儿，你已经看出来了：它每次只看**最后一个词**。它不记得自己三个词之前刚说过“安装 失败”。\n\n顺便澄清一件事，免得以后误会：温度只管“怎么挑”。把温度调低，它不会变得更懂；把温度调高，它也不会更有创意，只是更敢乱来。\n\n## 多看几个词，行不行\n\n只看一个词太短视，那就多看几个。看两个，看三个，账本照记，不就行了？\n\n算一笔账。假设常用的词有五万个。\n\n只看前一个词，账本有五万页，每页记着后面跟过什么。  \n看前两个词，账本要 五万 × 五万 ＝ 二十五亿页。  \n看前三个词，是一百二十五万亿页。\n\n世界上所有写下来的文字加在一起，也填不满这个账本的一个角。绝大多数页是空的：不是因为那种说法不对，只是因为碰巧没人这么写过。\n\n再想一个更要命的问题。“新同事先申请工牌。”这句话我们的六句语料里没有，按账本，“申请”后面从没跟过“工牌”，把握是零。\n\n可是你一眼就知道这句话没毛病。因为你知道，工牌和账号、权限是**一类东西**。而在账本眼里，“账号”和“工牌”就是两个不相干的编号，和“账号”与“香蕉”没有区别。\n\n所以真正缺的不是更大的账本。缺的是一种办法，让机器知道**哪些词是相像的**。\n\n## 看它的邻居\n\n1957 年，英国语言学家 J. R. Firth 写过一句后来被引用了无数次的话：“You shall know a word by the company it keeps.” 看一个词平时和谁待在一起，你就知道它是个什么词。\n\n我们来做个小实验。给每个词记一张清单：它的左边出现过哪些词，右边出现过哪些词，各几次。这张清单就是一串数。两个词的清单越像，我们就说这两个词越接近。\n\n```python\n# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])\n```\n\n```\n账号 最像： ['账户 1.00', '锁定 0.45', '尽快 0.45']\n安装 最像： ['部署 1.00', '了 0.38', '申请 0.31']\n```\n\n“账号”最像“账户”，“安装”最像“部署”，相似度都是 1.00。它不知道账号是什么意思，但它知道账号和账户常出现在同样的左邻右舍里。\n\n现在我们手里有了一样新东西：把一个词变成一串数，让意思相近的词，数也相近。这串数叫**词向量**（也叫 embedding）。2013 年，Google 的 Tomas Mikolov 和同事把这件事做到了几十亿个词的规模，工具叫 word2vec，拿“国王”减去“男人”加上“女人”，离得最近的词就是“女王”。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/QJOYbXe8jovPtMxC1P7csczcndh.png|看它的邻居，就知道它是谁。]]\n\n先泼一点冷水，免得你太兴奋：**住得近，不等于是一回事。** “开通”和“注销”的邻居也很像，它俩可是反义词。这个提醒，到第 07 章讲检索的时候会变得很要紧。\n\n## 一句话太长，装不下\n\n词有了向量，下一步是句子。当时最热门的考题是机器翻译。\n\n2014 年，Google 的 Ilya Sutskever 和同事拿出了一个方案：用一个网络把原文从头读到尾（这种一个词一个词往下读的网络，叫循环神经网络，简称 RNN），把整句话的意思压成一个固定长短的向量；再用另一个网络，从这个向量出发，一个词一个词地写出译文。\n\n短句子，它翻得相当好。句子一长，就开始丢三落四——不管原文是五个词还是五十个词，都得硬塞进同样长短的一串数里。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/X8P9bbvCAooyDgx1dZtcIIBJnag.png|整句话，塞进一个向量。]]\n\n人是怎么翻译长句子的？你不会把整句话死背下来再合上书默写。你会翻一点，回头看一眼原文；再翻一点，再看一眼。\n\n同一年，Dzmitry Bahdanau、Kyunghyun Cho 和 Yoshua Bengio 让机器也这么干：每写一个词之前，先回头把原文扫一遍，算一算这一步最该看哪几个词，然后主要从那几个词里取信息。他们给这个办法起的名字很朴素，叫**注意力**。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/Uya3bjDwKofmRtx0oCScosMVnhb.png|翻译一句话的两种办法。]]\n\n“算一算该看哪几个词”，具体怎么算？就像一次相亲或者图书检索：当前正在读的词举着一张**需求单（Query）**，问“谁跟我最相关？”；前面每个词各自举着一块**招牌（Key）**，写着“我是干嘛的”；两下一对，对得上的就多取一点它的**真实内容（Value）**。\n\n我们手算一次，就不神秘了。假设前面写着“实习生同事使用独立入口”，后面问“这位同事该怎么申请”。为了看清过程，我们给每个词手写三个数的招牌：第一维表示“和人有关”，第二维表示“和入口有关”，第三维表示“和动作有关”。\n\n```python\n# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))\n```\n\n```\n实习生：0.25 ██████████\n入口：0.25 ██████████\n同事：0.11 ████\n独立：0.11 ████\n同事：0.11 ████\n权重合计： 1.0\n```\n\n“申请”把四分之一的注意力给了“实习生”，四分之一给了“入口”。隔着大半句话，它一步就够着了。\n\n![[零基础学AI/上册/attachments/注意力是怎么分的.svg|注意力是怎么分的。]]\n\n## 只用注意力\n\n2017 年，Google 的八位研究者发了一篇论文，标题相当不客气，叫《Attention Is All You Need》（你只需要注意力）。他们把那个一个词一个词往下读的老网络整个扔了，每个词直接向所有别的词提问、取回信息，叠上很多层。这个结构叫 **Transformer**。\n\nTransformer 有个工程上的巨大好处：老网络必须等前一个词算完才能算下一个词；Transformer 里所有词可以**同时算**，成百上千块显卡能一起上阵。\n\n不过，把老网络扔掉以后会立刻碰到一个新问题：如果我们把上面注意力卡片里的前两个词对调一下，算出来的加权结果**一模一样**——因为求和不在乎顺序。可人话在乎顺序啊，“今天用新稿，昨天用旧稿”跟“昨天用新稿，今天用旧稿”完全是两回事。所以 Transformer 必须给每个词再叠上一串**位置编号（位置向量）**，下面的 `mini_gpt.py` 里你马上就会看到 `wpe` 这张表。\n\n顺便解决一个直觉上的疑问：既然整句话都在面前，练“猜下一个词”的时候，它直接偷看后面的标准答案不就行了？所以有一条死规矩叫**因果遮罩**：每个词只许往前看，不许往后看。猜第五个词的时候，它能看到的只有前四个（哪怕你把第六个词的数值改得再大，只要遮罩还在，第五个词的计算结果纹丝不动）。\n\n## 零件合体：用纯 Python 拼出资料助手的迷你大脑\n\n好了，到这一步，我们在第一篇攒下的零件已经全齐了：\n- 第 01 章 **`cut.py` 的思路**：把句子切成编号。这一节改用四句话里全部出现过的汉字重建词表，不沿用原来的八词词表，也不导入那个文件；\n- 第 02 章 **`value.py` 的思路**：会自己记账、能倒着算梯度的数字。为了把本节代码放在一起看，下面重写了 `Value`：改用局部导数记账，并补上指数、对数、除法、幂和 ReLU 等运算。它不是给原文件添两行就能直接替换的同一个接口；\n- 刚刚手算过的**词向量 + 注意力**。\n\n现在不用任何第三方库，把这些思路放在一起，做出资料助手的第一个**会自己学着接下一句的迷你大脑** `mini_gpt.py`。\n\n为了让初学者一眼看清骨架，我们只做最迷你的配置：词表只有这 4 句话里出现的 19 个字（加起止符），每个字用 8 个数表示，1 层单头注意力，一共 **592 个参数**（全部随机初始化）。让它自己从这 4 句话里练 80 轮，猜猜它会变成什么样？\n\n```python\n# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))\n```\n\n看看实跑结果：\n\n```\n词表大小 19 个，参数一共 592 个\n第  1 轮，平均猜错代价（loss）：2.93\n第 20 轮，平均猜错代价（loss）：2.48\n第 80 轮，平均猜错代价（loss）：0.89\n它接出来的话： 新同事安装先^限\n它接出来的话： 新同事先申请账件\n它接出来的话： 新同事先开同请号\n```\n\n猜错的代价从 `2.93` 一路降到了 `0.89`。你亲手从零拼出来的 592 个数字，已经开始学着拼出“新同事先申请……”这样的人话了——虽然还是有点结巴（“账件”“同请号”），像个刚学说话的小娃娃。\n\n只有 592 个参数、4 句话、每个数字都拿 `Value` 盒子一个个手算，它能学到这个份上，已经证明一件事：**大模型里面没有魔法，就是这一百行代码的放大版。**\n\n> 🎬 **配套视频｜Ep 4.1：安第斯山的独角兽与 592 参数迷你大脑**\n![[零基础学AI/上册/videos/04-1_安第斯山的独角兽与592参数迷你大脑_v1.mp4]]\n\n## 下一篇\n\n592 个参数的迷你大脑已经转起来了。可真要让它学会像模像样地说话、甚至接住 `ask.py` 里的任务，我们得解决两件事：\n\n1. 对照“一个一个手拨算盘珠子”式的 `Value` 盒子与整张表同时乘加的工具（PyTorch），看 **MiniMind 预训练骨架**怎样对应这些步骤；完整训练与保存重载留待补齐，不能把看懂骨架当作已经跑通；\n2. 看看把“猜下一个词”练到互联网规模之后，为什么连**不用重新训练、把要求写在前文里**就能让它干活。\n\n我们到**第 04 章（下）** 接着走。\n",
+  "codeCount": 8,
+  "videoCount": 1,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "第 04 章（上）｜学着接下一句：从字模到迷你大脑",
+      "id": "upper-04a-eaf2c6713be9"
+    },
+    {
+      "type": "prose",
+      "text": "配套课件在这里：下载上册配套代码与实验材料（r4）。解压后先读 README，按对应章节说明使用。",
+      "html": "<p>配套课件在这里：下载上册配套代码与实验材料（r4） <span>（原始资料包不公开；本章代码见实验区文件）</span>。解压后先读 README，按对应章节说明使用。</p>\n",
+      "id": "upper-04a-dd773ddd04b4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "安第斯山上的独角兽",
+      "id": "upper-04a-cfb1a0b16ae3"
+    },
+    {
+      "type": "prose",
+      "text": "2019 年 2 月 14 日，情人节。你打开一家叫 OpenAI 的研究机构的博客，想看看他们又做了什么。",
+      "html": "<p>2019 年 2 月 14 日，情人节。你打开一家叫 OpenAI 的研究机构的博客，想看看他们又做了什么。</p>\n",
+      "id": "upper-04a-b44767fe8dae"
+    },
+    {
+      "type": "prose",
+      "text": "文章里贴着一篇新闻。开头两句是人写的，大意是这样：",
+      "html": "<p>文章里贴着一篇新闻。开头两句是人写的，大意是这样：</p>\n",
+      "id": "upper-04a-6dc86c9d35f9"
+    },
+    {
+      "type": "prose",
+      "text": "一项惊人的发现：科学家在安第斯山脉一个从未有人到过的偏远山谷里，发现了一群独角兽。更让研究者吃惊的是，这些独角兽说一口流利的英语。",
+      "html": "<blockquote>\n<p>一项惊人的发现：科学家在安第斯山脉一个从未有人到过的偏远山谷里，发现了一群独角兽。更让研究者吃惊的是，这些独角兽说一口流利的英语。</p>\n</blockquote>\n",
+      "id": "upper-04a-5158d60e5e69"
+    },
+    {
+      "type": "prose",
+      "text": "接下来的好几段，是他们新训练的程序接着写的。它给带队的科学家起了名字，说他是某大学的进化生物学家；它描写了这群银白色的动物；它让科学家一本正经地推测，独角兽的英语大概是从哪儿学来的。前后连贯，腔调十足，活像一篇真的科学报道，只不过报道的是独角兽。",
+      "html": "<p>接下来的好几段，是他们新训练的程序接着写的。它给带队的科学家起了名字，说他是某大学的进化生物学家；它描写了这群银白色的动物；它让科学家一本正经地推测，独角兽的英语大概是从哪儿学来的。前后连贯，腔调十足，活像一篇真的科学报道，只不过报道的是独角兽。</p>\n",
+      "id": "upper-04a-226803e1b3a8"
+    },
+    {
+      "type": "prose",
+      "text": "研究者在旁边老老实实注了一句：这是试了十次里最好的一次。",
+      "html": "<p>研究者在旁边老老实实注了一句：这是试了十次里最好的一次。</p>\n",
+      "id": "upper-04a-ebabc24ea8c7"
+    },
+    {
+      "type": "image",
+      "alt": "2019 年 2 月。一篇关于独角兽的科学报道，作者是一个程序。",
+      "caption": "2019 年 2 月。一篇关于独角兽的科学报道，作者是一个程序。",
+      "available": true,
+      "src": "/media/6851bea879b2d61e264f105a.webp",
+      "id": "upper-04a-92b302b7951c",
+      "previewWidth": 960,
+      "previewSrc": "/media/904c72bb28df7490b14ad728.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/904c72bb28df7490b14ad728.webp 960w, /media/6851bea879b2d61e264f105a.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "这个程序叫 GPT-2。它从头到尾只练过一件事：读一段文字，猜下一个词。练习材料是八百万个网页。",
+      "html": "<p>这个程序叫 GPT-2。它从头到尾只练过一件事：读一段文字，<strong>猜下一个词</strong>。练习材料是八百万个网页。</p>\n",
+      "id": "upper-04a-9d158b71f2bf"
+    },
+    {
+      "type": "prose",
+      "text": "然后是整篇博客里最出名的一段话。他们说，这东西有可能被拿去批量生产假新闻和垃圾信息，所以完整的版本暂时不公开，先放出一个小得多的。",
+      "html": "<p>然后是整篇博客里最出名的一段话。他们说，这东西有可能被拿去批量生产假新闻和垃圾信息，所以完整的版本暂时不公开，先放出一个小得多的。</p>\n",
+      "id": "upper-04a-d1df4227cc2f"
+    },
+    {
+      "type": "prose",
+      "text": "消息一出，热闹得很。有人说这是负责任的榜样。也有人笑得很大声：一个猜词的程序，你们说它太危险？这是研究机构，还是广告公司？",
+      "html": "<p>消息一出，热闹得很。有人说这是负责任的榜样。也有人笑得很大声：一个猜词的程序，你们说它太危险？这是研究机构，还是广告公司？</p>\n",
+      "id": "upper-04a-dcf2612783cc"
+    },
+    {
+      "type": "prose",
+      "text": "好，两个问题，请你先在心里答一下。",
+      "html": "<p>好，两个问题，请你先在心里答一下。</p>\n",
+      "id": "upper-04a-fa1c51477941"
+    },
+    {
+      "type": "prose",
+      "text": "第一个：一个只会猜下一个词的程序，值得担心吗？",
+      "html": "<p>第一个：一个只会猜下一个词的程序，值得担心吗？</p>\n",
+      "id": "upper-04a-abcbf33fc202"
+    },
+    {
+      "type": "prose",
+      "text": "第二个：没有人教过它翻译，没有人教过它写摘要，也没有人教过它回答问题。光靠“猜下一个词”，这些事它学得会吗？",
+      "html": "<p>第二个：没有人教过它翻译，没有人教过它写摘要，也没有人教过它回答问题。光靠“猜下一个词”，这些事它学得会吗？</p>\n",
+      "id": "upper-04a-010684233d22"
+    },
+    {
+      "type": "prose",
+      "text": "我猜你对第二个问题的回答是“学不会”，或者“不好说”。2019 年的时候，很多研究者也这么想。",
+      "html": "<p>我猜你对第二个问题的回答是“学不会”，或者“不好说”。2019 年的时候，很多研究者也这么想。</p>\n",
+      "id": "upper-04a-f4c71adb272f"
+    },
+    {
+      "type": "prose",
+      "text": "要想清楚这件事，最好的办法是自己造一个。",
+      "html": "<p>要想清楚这件事，最好的办法是自己造一个。</p>\n",
+      "id": "upper-04a-8c4d4bab154a"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "自己造一个猜词的",
+      "id": "upper-04a-e345348d110a"
+    },
+    {
+      "type": "prose",
+      "text": "先玩个游戏。“新同事先申请……”，后面你会接什么？",
+      "html": "<p>先玩个游戏。“新同事先申请……”，后面你会接什么？</p>\n",
+      "id": "upper-04a-284c145468e7"
+    },
+    {
+      "type": "prose",
+      "text": "账号？权限？工牌？",
+      "html": "<p>账号？权限？工牌？</p>\n",
+      "id": "upper-04a-8c77d7b58610"
+    },
+    {
+      "type": "prose",
+      "text": "再给你一点前文：“新同事还没有登录身份，先申请……”这回你多半接“账号”。如果是“新同事已经能登录，但打不开项目，先申请……”你会接“权限”。",
+      "html": "<p>再给你一点前文：“新同事还没有登录身份，先申请……”这回你多半接“账号”。如果是“新同事已经能登录，但打不开项目，先申请……”你会接“权限”。</p>\n",
+      "id": "upper-04a-19497576b476"
+    },
+    {
+      "type": "prose",
+      "text": "同样的结尾，怎么接取决于前文。 所谓语言模型，干的就是这个：给它一段前文，它估计下一个词是各种可能的把握分别有多大。",
+      "html": "<p><strong>同样的结尾，怎么接取决于前文。</strong> 所谓语言模型，干的就是这个：给它一段前文，它估计下一个词是各种可能的把握分别有多大。</p>\n",
+      "id": "upper-04a-20e99fa854c5"
+    },
+    {
+      "type": "prose",
+      "text": "有件事先交代一下。第 01 章我们给资料助手打第一块零件 cut.py 时，管它叫“活字字模箱”。在真正的模型里，那盒字模叫词表，切句子的小程序叫分词器，切出来的一块块小碎片叫 token：有时是一个字，有时是半个词，有时只是一个标点。",
+      "html": "<p>有件事先交代一下。第 01 章我们给资料助手打第一块零件 <code>cut.py</code> 时，管它叫“活字字模箱”。在真正的模型里，那盒字模叫<strong>词表</strong>，切句子的小程序叫<strong>分词器</strong>，切出来的一块块小碎片叫 <strong>token</strong>：有时是一个字，有时是半个词，有时只是一个标点。</p>\n",
+      "id": "upper-04a-2a74844f3de5"
+    },
+    {
+      "type": "prose",
+      "text": "最简单的猜词程序，连神经网络都不用。找一些句子，数一数每个词后面都跟过哪些词、各跟过几次。生成的时候，看着最后一个词，按次数抓阄决定下一个。",
+      "html": "<p>最简单的猜词程序，连神经网络都不用。找一些句子，数一数每个词后面都跟过哪些词、各跟过几次。生成的时候，看着最后一个词，按次数抓阄决定下一个。</p>\n",
+      "id": "upper-04a-127b453a5aea"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))",
+      "text": "# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))",
+      "runnable": true,
+      "filename": "bigram.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-04a-4d7734c8207b"
+    },
+    {
+      "type": "prose",
+      "text": "counts 是个账本：“先”后面，“申请”出现过 2 次，“安装”1 次，“检查”1 次。generate 就是抓阄，抓到表示结尾的 $ 就停。",
+      "html": "<p><code>counts</code> 是个账本：“先”后面，“申请”出现过 2 次，“安装”1 次，“检查”1 次。<code>generate</code> 就是抓阄，抓到表示结尾的 <code>$</code> 就停。</p>\n",
+      "id": "upper-04a-8e4647d0844d"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "“先”后面： {'申请': 0.5, '安装': 0.25, '检查': 0.25}\n温度 0.3： 新同事 先 申请 权限 ｜ 新同事 先 安装 软件 ｜ 安装 软件\n温度 1.0： 新同事 先 申请 权限 ｜ 管理员 确认 后 开通 后 安装 软件 ｜ 安装 软件\n温度 3.0： 安装 失败 先 安装 失败 先 检查 网络 ｜ 新同事 先 检查 网络 ｜ 新同事 先 申请 账号",
+      "text": "“先”后面： {'申请': 0.5, '安装': 0.25, '检查': 0.25}\n温度 0.3： 新同事 先 申请 权限 ｜ 新同事 先 安装 软件 ｜ 安装 软件\n温度 1.0： 新同事 先 申请 权限 ｜ 管理员 确认 后 开通 后 安装 软件 ｜ 安装 软件\n温度 3.0： 安装 失败 先 安装 失败 先 检查 网络 ｜ 新同事 先 检查 网络 ｜ 新同事 先 申请 账号",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04a-e6e68619faa8"
+    },
+    {
+      "type": "prose",
+      "text": "看“温度 1.0”那一行中间那句：“管理员 确认 后 开通 后 安装 软件”。我们给的六句话里没有这一句，它是自己拼出来的。",
+      "html": "<p>看“温度 1.0”那一行中间那句：“管理员 确认 后 开通 后 安装 软件”。我们给的六句话里没有这一句，它是自己拼出来的。</p>\n",
+      "id": "upper-04a-71214924be37"
+    },
+    {
+      "type": "prose",
+      "text": "温度是个旋钮，管的是抓阄时的胆子。温度低，它专挑最常见的接法，稳，但翻来覆去就那几句。温度高，冷门的接法也有机会，花样多，也容易出事——比如“温度 3.0”第一句：“安装 失败 先 安装 失败 先 检查 网络”。每两个挨着的词都说得通，连起来却在原地转圈。",
+      "html": "<p><strong>温度</strong>是个旋钮，管的是抓阄时的胆子。温度低，它专挑最常见的接法，稳，但翻来覆去就那几句。温度高，冷门的接法也有机会，花样多，也容易出事——比如“温度 3.0”第一句：“安装 失败 先 安装 失败 先 检查 网络”。每两个挨着的词都说得通，连起来却在原地转圈。</p>\n",
+      "id": "upper-04a-1418b57d6648"
+    },
+    {
+      "type": "image",
+      "alt": "它只看手里的那一张。",
+      "caption": "它只看手里的那一张。",
+      "available": true,
+      "src": "/media/c377e22fe47953bf981c21b5.webp",
+      "id": "upper-04a-0e0b08f8f020",
+      "previewWidth": 960,
+      "previewSrc": "/media/bb22e678a43e1e6f64ccc108.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/bb22e678a43e1e6f64ccc108.webp 960w, /media/c377e22fe47953bf981c21b5.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "毛病出在哪儿，你已经看出来了：它每次只看最后一个词。它不记得自己三个词之前刚说过“安装 失败”。",
+      "html": "<p>毛病出在哪儿，你已经看出来了：它每次只看<strong>最后一个词</strong>。它不记得自己三个词之前刚说过“安装 失败”。</p>\n",
+      "id": "upper-04a-f4202e31b094"
+    },
+    {
+      "type": "prose",
+      "text": "顺便澄清一件事，免得以后误会：温度只管“怎么挑”。把温度调低，它不会变得更懂；把温度调高，它也不会更有创意，只是更敢乱来。",
+      "html": "<p>顺便澄清一件事，免得以后误会：温度只管“怎么挑”。把温度调低，它不会变得更懂；把温度调高，它也不会更有创意，只是更敢乱来。</p>\n",
+      "id": "upper-04a-51aebe12ed5a"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "多看几个词，行不行",
+      "id": "upper-04a-504c965e7826"
+    },
+    {
+      "type": "prose",
+      "text": "只看一个词太短视，那就多看几个。看两个，看三个，账本照记，不就行了？",
+      "html": "<p>只看一个词太短视，那就多看几个。看两个，看三个，账本照记，不就行了？</p>\n",
+      "id": "upper-04a-f96a4e1115b3"
+    },
+    {
+      "type": "prose",
+      "text": "算一笔账。假设常用的词有五万个。",
+      "html": "<p>算一笔账。假设常用的词有五万个。</p>\n",
+      "id": "upper-04a-5c91288711d1"
+    },
+    {
+      "type": "prose",
+      "text": "只看前一个词，账本有五万页，每页记着后面跟过什么。\n看前两个词，账本要 五万 × 五万 ＝ 二十五亿页。\n看前三个词，是一百二十五万亿页。",
+      "html": "<p>只看前一个词，账本有五万页，每页记着后面跟过什么。<br>\n看前两个词，账本要 五万 × 五万 ＝ 二十五亿页。<br>\n看前三个词，是一百二十五万亿页。</p>\n",
+      "id": "upper-04a-fb70c8fc3550"
+    },
+    {
+      "type": "prose",
+      "text": "世界上所有写下来的文字加在一起，也填不满这个账本的一个角。绝大多数页是空的：不是因为那种说法不对，只是因为碰巧没人这么写过。",
+      "html": "<p>世界上所有写下来的文字加在一起，也填不满这个账本的一个角。绝大多数页是空的：不是因为那种说法不对，只是因为碰巧没人这么写过。</p>\n",
+      "id": "upper-04a-bef3883894c4"
+    },
+    {
+      "type": "prose",
+      "text": "再想一个更要命的问题。“新同事先申请工牌。”这句话我们的六句语料里没有，按账本，“申请”后面从没跟过“工牌”，把握是零。",
+      "html": "<p>再想一个更要命的问题。“新同事先申请工牌。”这句话我们的六句语料里没有，按账本，“申请”后面从没跟过“工牌”，把握是零。</p>\n",
+      "id": "upper-04a-06b83c9bc8cb"
+    },
+    {
+      "type": "prose",
+      "text": "可是你一眼就知道这句话没毛病。因为你知道，工牌和账号、权限是一类东西。而在账本眼里，“账号”和“工牌”就是两个不相干的编号，和“账号”与“香蕉”没有区别。",
+      "html": "<p>可是你一眼就知道这句话没毛病。因为你知道，工牌和账号、权限是<strong>一类东西</strong>。而在账本眼里，“账号”和“工牌”就是两个不相干的编号，和“账号”与“香蕉”没有区别。</p>\n",
+      "id": "upper-04a-514112547c46"
+    },
+    {
+      "type": "prose",
+      "text": "所以真正缺的不是更大的账本。缺的是一种办法，让机器知道哪些词是相像的。",
+      "html": "<p>所以真正缺的不是更大的账本。缺的是一种办法，让机器知道<strong>哪些词是相像的</strong>。</p>\n",
+      "id": "upper-04a-66b69c3617f3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "看它的邻居",
+      "id": "upper-04a-36c6964d0211"
+    },
+    {
+      "type": "prose",
+      "text": "1957 年，英国语言学家 J. R. Firth 写过一句后来被引用了无数次的话：“You shall know a word by the company it keeps.” 看一个词平时和谁待在一起，你就知道它是个什么词。",
+      "html": "<p>1957 年，英国语言学家 J. R. Firth 写过一句后来被引用了无数次的话：“You shall know a word by the company it keeps.” 看一个词平时和谁待在一起，你就知道它是个什么词。</p>\n",
+      "id": "upper-04a-d4d78c7d05fb"
+    },
+    {
+      "type": "prose",
+      "text": "我们来做个小实验。给每个词记一张清单：它的左边出现过哪些词，右边出现过哪些词，各几次。这张清单就是一串数。两个词的清单越像，我们就说这两个词越接近。",
+      "html": "<p>我们来做个小实验。给每个词记一张清单：它的左边出现过哪些词，右边出现过哪些词，各几次。这张清单就是一串数。两个词的清单越像，我们就说这两个词越接近。</p>\n",
+      "id": "upper-04a-afabb2321437"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])",
+      "text": "# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])",
+      "runnable": true,
+      "filename": "vectors.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-04a-c587b120b3fc"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "账号 最像： ['账户 1.00', '锁定 0.45', '尽快 0.45']\n安装 最像： ['部署 1.00', '了 0.38', '申请 0.31']",
+      "text": "账号 最像： ['账户 1.00', '锁定 0.45', '尽快 0.45']\n安装 最像： ['部署 1.00', '了 0.38', '申请 0.31']",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04a-b263fa100291"
+    },
+    {
+      "type": "prose",
+      "text": "“账号”最像“账户”，“安装”最像“部署”，相似度都是 1.00。它不知道账号是什么意思，但它知道账号和账户常出现在同样的左邻右舍里。",
+      "html": "<p>“账号”最像“账户”，“安装”最像“部署”，相似度都是 1.00。它不知道账号是什么意思，但它知道账号和账户常出现在同样的左邻右舍里。</p>\n",
+      "id": "upper-04a-8dcc9a3395b0"
+    },
+    {
+      "type": "prose",
+      "text": "现在我们手里有了一样新东西：把一个词变成一串数，让意思相近的词，数也相近。这串数叫词向量（也叫 embedding）。2013 年，Google 的 Tomas Mikolov 和同事把这件事做到了几十亿个词的规模，工具叫 word2vec，拿“国王”减去“男人”加上“女人”，离得最近的词就是“女王”。",
+      "html": "<p>现在我们手里有了一样新东西：把一个词变成一串数，让意思相近的词，数也相近。这串数叫<strong>词向量</strong>（也叫 embedding）。2013 年，Google 的 Tomas Mikolov 和同事把这件事做到了几十亿个词的规模，工具叫 word2vec，拿“国王”减去“男人”加上“女人”，离得最近的词就是“女王”。</p>\n",
+      "id": "upper-04a-578a299f1183"
+    },
+    {
+      "type": "image",
+      "alt": "看它的邻居，就知道它是谁。",
+      "caption": "看它的邻居，就知道它是谁。",
+      "available": true,
+      "src": "/media/7d4f014e2b29d887.png",
+      "id": "upper-04a-5b98193f65f4",
+      "previewWidth": 960,
+      "previewSrc": "/media/a6ef415c3a764bc413af78df.webp",
+      "height": 855,
+      "previewHeight": 456,
+      "srcSet": "/media/a6ef415c3a764bc413af78df.webp 960w, /media/7d4f014e2b29d887.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "先泼一点冷水，免得你太兴奋：住得近，不等于是一回事。 “开通”和“注销”的邻居也很像，它俩可是反义词。这个提醒，到第 07 章讲检索的时候会变得很要紧。",
+      "html": "<p>先泼一点冷水，免得你太兴奋：<strong>住得近，不等于是一回事。</strong> “开通”和“注销”的邻居也很像，它俩可是反义词。这个提醒，到第 07 章讲检索的时候会变得很要紧。</p>\n",
+      "id": "upper-04a-5b7e0d25d165"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "一句话太长，装不下",
+      "id": "upper-04a-099035ceaba8"
+    },
+    {
+      "type": "prose",
+      "text": "词有了向量，下一步是句子。当时最热门的考题是机器翻译。",
+      "html": "<p>词有了向量，下一步是句子。当时最热门的考题是机器翻译。</p>\n",
+      "id": "upper-04a-be4bf934526f"
+    },
+    {
+      "type": "prose",
+      "text": "2014 年，Google 的 Ilya Sutskever 和同事拿出了一个方案：用一个网络把原文从头读到尾（这种一个词一个词往下读的网络，叫循环神经网络，简称 RNN），把整句话的意思压成一个固定长短的向量；再用另一个网络，从这个向量出发，一个词一个词地写出译文。",
+      "html": "<p>2014 年，Google 的 Ilya Sutskever 和同事拿出了一个方案：用一个网络把原文从头读到尾（这种一个词一个词往下读的网络，叫循环神经网络，简称 RNN），把整句话的意思压成一个固定长短的向量；再用另一个网络，从这个向量出发，一个词一个词地写出译文。</p>\n",
+      "id": "upper-04a-23df43209655"
+    },
+    {
+      "type": "prose",
+      "text": "短句子，它翻得相当好。句子一长，就开始丢三落四——不管原文是五个词还是五十个词，都得硬塞进同样长短的一串数里。",
+      "html": "<p>短句子，它翻得相当好。句子一长，就开始丢三落四——不管原文是五个词还是五十个词，都得硬塞进同样长短的一串数里。</p>\n",
+      "id": "upper-04a-0d18392ba607"
+    },
+    {
+      "type": "image",
+      "alt": "整句话，塞进一个向量。",
+      "caption": "整句话，塞进一个向量。",
+      "available": true,
+      "src": "/media/c963b04630f354352fbc592a.webp",
+      "id": "upper-04a-fa7c5dbd5bc4",
+      "previewWidth": 960,
+      "previewSrc": "/media/4d005c204649367096c464e1.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/4d005c204649367096c464e1.webp 960w, /media/c963b04630f354352fbc592a.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "人是怎么翻译长句子的？你不会把整句话死背下来再合上书默写。你会翻一点，回头看一眼原文；再翻一点，再看一眼。",
+      "html": "<p>人是怎么翻译长句子的？你不会把整句话死背下来再合上书默写。你会翻一点，回头看一眼原文；再翻一点，再看一眼。</p>\n",
+      "id": "upper-04a-a5b999d5cea4"
+    },
+    {
+      "type": "prose",
+      "text": "同一年，Dzmitry Bahdanau、Kyunghyun Cho 和 Yoshua Bengio 让机器也这么干：每写一个词之前，先回头把原文扫一遍，算一算这一步最该看哪几个词，然后主要从那几个词里取信息。他们给这个办法起的名字很朴素，叫注意力。",
+      "html": "<p>同一年，Dzmitry Bahdanau、Kyunghyun Cho 和 Yoshua Bengio 让机器也这么干：每写一个词之前，先回头把原文扫一遍，算一算这一步最该看哪几个词，然后主要从那几个词里取信息。他们给这个办法起的名字很朴素，叫<strong>注意力</strong>。</p>\n",
+      "id": "upper-04a-d65e08d90314"
+    },
+    {
+      "type": "image",
+      "alt": "翻译一句话的两种办法。",
+      "caption": "翻译一句话的两种办法。",
+      "available": true,
+      "src": "/media/15071c1a63b913f0.png",
+      "id": "upper-04a-42dc477d12e2",
+      "previewWidth": 960,
+      "previewSrc": "/media/4cf901b184dd80326010408a.webp",
+      "height": 1020,
+      "previewHeight": 544,
+      "srcSet": "/media/4cf901b184dd80326010408a.webp 960w, /media/15071c1a63b913f0.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "“算一算该看哪几个词”，具体怎么算？就像一次相亲或者图书检索：当前正在读的词举着一张需求单（Query），问“谁跟我最相关？”；前面每个词各自举着一块招牌（Key），写着“我是干嘛的”；两下一对，对得上的就多取一点它的真实内容（Value）。",
+      "html": "<p>“算一算该看哪几个词”，具体怎么算？就像一次相亲或者图书检索：当前正在读的词举着一张<strong>需求单（Query）</strong>，问“谁跟我最相关？”；前面每个词各自举着一块<strong>招牌（Key）</strong>，写着“我是干嘛的”；两下一对，对得上的就多取一点它的<strong>真实内容（Value）</strong>。</p>\n",
+      "id": "upper-04a-4abc13157d15"
+    },
+    {
+      "type": "prose",
+      "text": "我们手算一次，就不神秘了。假设前面写着“实习生同事使用独立入口”，后面问“这位同事该怎么申请”。为了看清过程，我们给每个词手写三个数的招牌：第一维表示“和人有关”，第二维表示“和入口有关”，第三维表示“和动作有关”。",
+      "html": "<p>我们手算一次，就不神秘了。假设前面写着“实习生同事使用独立入口”，后面问“这位同事该怎么申请”。为了看清过程，我们给每个词手写三个数的招牌：第一维表示“和人有关”，第二维表示“和入口有关”，第三维表示“和动作有关”。</p>\n",
+      "id": "upper-04a-4f0b85cf435b"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))",
+      "text": "# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))",
+      "runnable": true,
+      "filename": "attention.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-04a-65196bbcdb73"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "实习生：0.25 ██████████\n入口：0.25 ██████████\n同事：0.11 ████\n独立：0.11 ████\n同事：0.11 ████\n权重合计： 1.0",
+      "text": "实习生：0.25 ██████████\n入口：0.25 ██████████\n同事：0.11 ████\n独立：0.11 ████\n同事：0.11 ████\n权重合计： 1.0",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04a-eb5af6ba0fdc"
+    },
+    {
+      "type": "prose",
+      "text": "“申请”把四分之一的注意力给了“实习生”，四分之一给了“入口”。隔着大半句话，它一步就够着了。",
+      "html": "<p>“申请”把四分之一的注意力给了“实习生”，四分之一给了“入口”。隔着大半句话，它一步就够着了。</p>\n",
+      "id": "upper-04a-839913f162da"
+    },
+    {
+      "type": "image",
+      "alt": "注意力是怎么分的。",
+      "caption": "注意力是怎么分的。",
+      "available": true,
+      "src": "/media/3b2f9c027e1c45c8.svg",
+      "id": "upper-04a-436c16f4f5c7",
+      "height": 540,
+      "width": 1200
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "只用注意力",
+      "id": "upper-04a-6dd68e920938"
+    },
+    {
+      "type": "prose",
+      "text": "2017 年，Google 的八位研究者发了一篇论文，标题相当不客气，叫《Attention Is All You Need》（你只需要注意力）。他们把那个一个词一个词往下读的老网络整个扔了，每个词直接向所有别的词提问、取回信息，叠上很多层。这个结构叫 Transformer。",
+      "html": "<p>2017 年，Google 的八位研究者发了一篇论文，标题相当不客气，叫《Attention Is All You Need》（你只需要注意力）。他们把那个一个词一个词往下读的老网络整个扔了，每个词直接向所有别的词提问、取回信息，叠上很多层。这个结构叫 <strong>Transformer</strong>。</p>\n",
+      "id": "upper-04a-fb0c683f51a7"
+    },
+    {
+      "type": "prose",
+      "text": "Transformer 有个工程上的巨大好处：老网络必须等前一个词算完才能算下一个词；Transformer 里所有词可以同时算，成百上千块显卡能一起上阵。",
+      "html": "<p>Transformer 有个工程上的巨大好处：老网络必须等前一个词算完才能算下一个词；Transformer 里所有词可以<strong>同时算</strong>，成百上千块显卡能一起上阵。</p>\n",
+      "id": "upper-04a-d16f9c227173"
+    },
+    {
+      "type": "prose",
+      "text": "不过，把老网络扔掉以后会立刻碰到一个新问题：如果我们把上面注意力卡片里的前两个词对调一下，算出来的加权结果一模一样——因为求和不在乎顺序。可人话在乎顺序啊，“今天用新稿，昨天用旧稿”跟“昨天用新稿，今天用旧稿”完全是两回事。所以 Transformer 必须给每个词再叠上一串位置编号（位置向量），下面的 mini_gpt.py 里你马上就会看到 wpe 这张表。",
+      "html": "<p>不过，把老网络扔掉以后会立刻碰到一个新问题：如果我们把上面注意力卡片里的前两个词对调一下，算出来的加权结果<strong>一模一样</strong>——因为求和不在乎顺序。可人话在乎顺序啊，“今天用新稿，昨天用旧稿”跟“昨天用新稿，今天用旧稿”完全是两回事。所以 Transformer 必须给每个词再叠上一串<strong>位置编号（位置向量）</strong>，下面的 <code>mini_gpt.py</code> 里你马上就会看到 <code>wpe</code> 这张表。</p>\n",
+      "id": "upper-04a-9d58a369264b"
+    },
+    {
+      "type": "prose",
+      "text": "顺便解决一个直觉上的疑问：既然整句话都在面前，练“猜下一个词”的时候，它直接偷看后面的标准答案不就行了？所以有一条死规矩叫因果遮罩：每个词只许往前看，不许往后看。猜第五个词的时候，它能看到的只有前四个（哪怕你把第六个词的数值改得再大，只要遮罩还在，第五个词的计算结果纹丝不动）。",
+      "html": "<p>顺便解决一个直觉上的疑问：既然整句话都在面前，练“猜下一个词”的时候，它直接偷看后面的标准答案不就行了？所以有一条死规矩叫<strong>因果遮罩</strong>：每个词只许往前看，不许往后看。猜第五个词的时候，它能看到的只有前四个（哪怕你把第六个词的数值改得再大，只要遮罩还在，第五个词的计算结果纹丝不动）。</p>\n",
+      "id": "upper-04a-81a22fd7acc5"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "零件合体：用纯 Python 拼出资料助手的迷你大脑",
+      "id": "upper-04a-92a899a9e64e"
+    },
+    {
+      "type": "prose",
+      "text": "好了，到这一步，我们在第一篇攒下的零件已经全齐了：",
+      "html": "<p>好了，到这一步，我们在第一篇攒下的零件已经全齐了：</p>\n",
+      "id": "upper-04a-ce5d8a6b31f2"
+    },
+    {
+      "type": "prose",
+      "text": "第 01 章 cut.py 的思路：把句子切成编号。这一节改用四句话里全部出现过的汉字重建词表，不沿用原来的八词词表，也不导入那个文件；\n第 02 章 value.py 的思路：会自己记账、能倒着算梯度的数字。为了把本节代码放在一起看，下面重写了 Value：改用局部导数记账，并补上指数、对数、除法、幂和 ReLU 等运算。它不是给原文件添两行就能直接替换的同一个接口；\n刚刚手算过的词向量 + 注意力。",
+      "html": "<ul>\n<li>第 01 章 <strong><code>cut.py</code> 的思路</strong>：把句子切成编号。这一节改用四句话里全部出现过的汉字重建词表，不沿用原来的八词词表，也不导入那个文件；</li>\n<li>第 02 章 <strong><code>value.py</code> 的思路</strong>：会自己记账、能倒着算梯度的数字。为了把本节代码放在一起看，下面重写了 <code>Value</code>：改用局部导数记账，并补上指数、对数、除法、幂和 ReLU 等运算。它不是给原文件添两行就能直接替换的同一个接口；</li>\n<li>刚刚手算过的<strong>词向量 + 注意力</strong>。</li>\n</ul>\n",
+      "id": "upper-04a-35f5f11f1c76"
+    },
+    {
+      "type": "prose",
+      "text": "现在不用任何第三方库，把这些思路放在一起，做出资料助手的第一个会自己学着接下一句的迷你大脑 mini_gpt.py。",
+      "html": "<p>现在不用任何第三方库，把这些思路放在一起，做出资料助手的第一个<strong>会自己学着接下一句的迷你大脑</strong> <code>mini_gpt.py</code>。</p>\n",
+      "id": "upper-04a-290d8325f7cc"
+    },
+    {
+      "type": "prose",
+      "text": "为了让初学者一眼看清骨架，我们只做最迷你的配置：词表只有这 4 句话里出现的 19 个字（加起止符），每个字用 8 个数表示，1 层单头注意力，一共 592 个参数（全部随机初始化）。让它自己从这 4 句话里练 80 轮，猜猜它会变成什么样？",
+      "html": "<p>为了让初学者一眼看清骨架，我们只做最迷你的配置：词表只有这 4 句话里出现的 19 个字（加起止符），每个字用 8 个数表示，1 层单头注意力，一共 <strong>592 个参数</strong>（全部随机初始化）。让它自己从这 4 句话里练 80 轮，猜猜它会变成什么样？</p>\n",
+      "id": "upper-04a-cd288fe3019c"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))",
+      "text": "# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))",
+      "runnable": true,
+      "filename": "mini_gpt.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-04a-850afa370760"
+    },
+    {
+      "type": "prose",
+      "text": "看看实跑结果：",
+      "html": "<p>看看实跑结果：</p>\n",
+      "id": "upper-04a-110f5e9d3c65"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "词表大小 19 个，参数一共 592 个\n第  1 轮，平均猜错代价（loss）：2.93\n第 20 轮，平均猜错代价（loss）：2.48\n第 80 轮，平均猜错代价（loss）：0.89\n它接出来的话： 新同事安装先^限\n它接出来的话： 新同事先申请账件\n它接出来的话： 新同事先开同请号",
+      "text": "词表大小 19 个，参数一共 592 个\n第  1 轮，平均猜错代价（loss）：2.93\n第 20 轮，平均猜错代价（loss）：2.48\n第 80 轮，平均猜错代价（loss）：0.89\n它接出来的话： 新同事安装先^限\n它接出来的话： 新同事先申请账件\n它接出来的话： 新同事先开同请号",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04a-3adb4af14470"
+    },
+    {
+      "type": "prose",
+      "text": "猜错的代价从 2.93 一路降到了 0.89。你亲手从零拼出来的 592 个数字，已经开始学着拼出“新同事先申请……”这样的人话了——虽然还是有点结巴（“账件”“同请号”），像个刚学说话的小娃娃。",
+      "html": "<p>猜错的代价从 <code>2.93</code> 一路降到了 <code>0.89</code>。你亲手从零拼出来的 592 个数字，已经开始学着拼出“新同事先申请……”这样的人话了——虽然还是有点结巴（“账件”“同请号”），像个刚学说话的小娃娃。</p>\n",
+      "id": "upper-04a-f2cf62be99ad"
+    },
+    {
+      "type": "prose",
+      "text": "只有 592 个参数、4 句话、每个数字都拿 Value 盒子一个个手算，它能学到这个份上，已经证明一件事：大模型里面没有魔法，就是这一百行代码的放大版。",
+      "html": "<p>只有 592 个参数、4 句话、每个数字都拿 <code>Value</code> 盒子一个个手算，它能学到这个份上，已经证明一件事：<strong>大模型里面没有魔法，就是这一百行代码的放大版。</strong></p>\n",
+      "id": "upper-04a-6c4e8b50d177"
+    },
+    {
+      "type": "prose",
+      "text": "🎬 配套视频｜Ep 4.1：安第斯山的独角兽与 592 参数迷你大脑\n",
+      "html": "<p>🎬 <strong>配套视频｜Ep 4.1：安第斯山的独角兽与 592 参数迷你大脑</strong>\n</p>\n",
+      "id": "upper-04a-e0f7188e73cb"
+    },
+    {
+      "type": "video",
+      "alt": "04-1_安第斯山的独角兽与592参数迷你大脑_v1",
+      "caption": "安第斯山的独角兽与 592 个参数的迷你大脑",
+      "available": true,
+      "src": "/media/5c5cafb95c83cc7f7c2c071c.mp4",
+      "id": "upper-04a-93498a17e92f",
+      "poster": "/media/25ac9d84d0c8d74fcd0494d6.webp",
+      "duration": 179.808,
+      "height": 1080,
+      "width": 1920,
+      "subtitleSrc": "/course/captions/04-1.vtt"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "下一篇",
+      "id": "upper-04a-11eba296e73e"
+    },
+    {
+      "type": "prose",
+      "text": "592 个参数的迷你大脑已经转起来了。可真要让它学会像模像样地说话、甚至接住 ask.py 里的任务，我们得解决两件事：",
+      "html": "<p>592 个参数的迷你大脑已经转起来了。可真要让它学会像模像样地说话、甚至接住 <code>ask.py</code> 里的任务，我们得解决两件事：</p>\n",
+      "id": "upper-04a-dd78b9250114"
+    },
+    {
+      "type": "prose",
+      "text": "对照“一个一个手拨算盘珠子”式的 Value 盒子与整张表同时乘加的工具（PyTorch），看 MiniMind 预训练骨架怎样对应这些步骤；完整训练与保存重载留待补齐，不能把看懂骨架当作已经跑通；\n看看把“猜下一个词”练到互联网规模之后，为什么连不用重新训练、把要求写在前文里就能让它干活。",
+      "html": "<ol>\n<li>对照“一个一个手拨算盘珠子”式的 <code>Value</code> 盒子与整张表同时乘加的工具（PyTorch），看 <strong>MiniMind 预训练骨架</strong>怎样对应这些步骤；完整训练与保存重载留待补齐，不能把看懂骨架当作已经跑通；</li>\n<li>看看把“猜下一个词”练到互联网规模之后，为什么连<strong>不用重新训练、把要求写在前文里</strong>就能让它干活。</li>\n</ol>\n",
+      "id": "upper-04a-f89e0b773239"
+    },
+    {
+      "type": "prose",
+      "text": "我们到第 04 章（下） 接着走。",
+      "html": "<p>我们到<strong>第 04 章（下）</strong> 接着走。</p>\n",
+      "id": "upper-04a-e2105945ab59"
+    }
+  ],
+  "files": {
+    "exam.py": "# exam.py：拿一份没见过的考卷，考一考任何一版 reply\nexam = [\n    (\"账号怎么申请？\", \"账号申请\"),\n    (\"软件怎么安装？\", \"软件安装\"),\n    (\"登录用的身份怎么办理？\", \"账号申请\"),\n    (\"开发环境部署失败了\", \"软件安装\"),\n    (\"账号已有了，软件怎么安装？\", \"软件安装\"),\n    (\"软件已经安装好了，账号怎么申请？\", \"账号申请\"),\n]\n\ndef run(reply, questions=exam):\n    right = 0\n    for text, want in questions:\n        got = reply(text)\n        right += got == want\n        print(\"✓\" if got == want else \"✗\", text, \"->\", got)\n    print(f\"{right}/{len(questions)}\")\n\nif __name__ == \"__main__\":\n    from router import reply\n    run(reply)\n",
+    "check.py": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n",
+    "vectors.py": "# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])\n",
+    "xor_mlp.py": "# xor_mlp.py：这一次不拧旋钮，让它自己学会楼梯灯\nimport math, random\n\ndata = [((0, 0), 0), ((0, 1), 1), ((1, 0), 1), ((1, 1), 0)]\nsig = lambda z: 1 / (1 + math.exp(-z))\nH = 2  # 隐藏单元的个数\n\ndef train(seed, epochs=20000, lr=0.5):\n    rng = random.Random(seed)\n    W = [[rng.uniform(-1, 1) for _ in range(2)] for _ in range(H)]  # 输入→隐藏\n    bh = [rng.uniform(-1, 1) for _ in range(H)]\n    V = [rng.uniform(-1, 1) for _ in range(H)]                      # 隐藏→输出\n    bo = rng.uniform(-1, 1)\n    for _ in range(epochs):\n        for (x1, x2), y in data:\n            # 前向：先算隐藏层，再算输出\n            h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n            o = sig(sum(V[j] * h[j] for j in range(H)) + bo)\n            # 反向：把输出的误差，按链式法则一层层算回去\n            do = (o - y) * o * (1 - o)\n            dh = [do * V[j] * h[j] * (1 - h[j]) for j in range(H)]\n            for j in range(H):\n                V[j] -= lr * do * h[j]\n                W[j][0] -= lr * dh[j] * x1\n                W[j][1] -= lr * dh[j] * x2\n                bh[j] -= lr * dh[j]\n            bo -= lr * do\n    outs = []\n    for (x1, x2), y in data:\n        h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n        outs.append(sig(sum(V[j] * h[j] for j in range(H)) + bo))\n    return outs\n\nouts = train(seed=1)\nfor ((x1, x2), y), o in zip(data, outs):\n    print(f\"开关 ({x1},{x2})  该亮吗 {y}  它的回答 {o:.3f}\")\n\nok = sum(all((o > 0.5) == y for o, ((_, _), y) in zip(train(s), data)) for s in range(20))\nprint(f\"换 20 个不同的起点各练一遍：{ok} 次学会，{20 - ok} 次卡住\")\n",
+    "mini_gpt.py": "# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))\n",
+    "by_hand.py": "# by_hand.py：亲手拧旋钮，用三张评分表搭出楼梯灯\ndef unit(w1, w2, b, x1, x2):\n    return 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n\nfor x1, x2 in [(0, 0), (0, 1), (1, 0), (1, 1)]:\n    h1 = unit(1, 1, -1, x1, x2)       # 至少按下一个\n    h2 = unit(-1, -1, 1, x1, x2)      # 不是两个都按下\n    out = unit(1, 1, -2, h1, h2)      # 上面两条同时成立\n    print(f\"开关 ({x1},{x2})  至少一个={h1}  不是两个={h2}  灯={out}\")\n",
+    "babble.py": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")\n",
+    "value.py": "# value.py：资料助手的第二块零件。会自己记账、能顺着字条往回算账的数字\nimport math, random\n\nclass Value:\n    def __init__(self, data, prev=()):\n        self.data, self.grad, self.prev = data, 0.0, prev\n        self.backward_step = lambda: None\n    def __add__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data + other.data, (self, other))\n        def step():\n            self.grad += out.grad\n            other.grad += out.grad\n        out.backward_step = step\n        return out\n    def __mul__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data * other.data, (self, other))\n        def step():\n            self.grad += other.data * out.grad\n            other.grad += self.data * out.grad\n        out.backward_step = step\n        return out\n    def __sub__(self, other):\n        return self + (other * -1.0)\n    def sig(self):\n        s = 1.0 / (1.0 + math.exp(-self.data))\n        out = Value(s, (self,))\n        def step():\n            self.grad += s * (1.0 - s) * out.grad\n        out.backward_step = step\n        return out\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for child in v.prev:\n                    build(child)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            v.backward_step()\n\nif __name__ == \"__main__\":\n    w = Value(0.0)\n    for _ in range(30):\n        loss = (w - 3.0) * (w - 3.0)     # 目标：让 w 自己挪到 3\n        w.grad = 0.0\n        loss.backward()\n        w.data -= 0.1 * w.grad\n    print(f\"单个数自己往 3 挪了 30 步：w = {w.data:.3f}\")\n\n    data = [((0, 0), 0.0), ((0, 1), 1.0), ((1, 0), 1.0), ((1, 1), 0.0)]\n    rng = random.Random(1)\n    W = [[Value(rng.uniform(-1, 1)) for _ in range(2)] for _ in range(2)]\n    bh = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    V = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    bo = Value(rng.uniform(-1, 1))\n    params = [p for row in W for p in row] + bh + V + [bo]\n\n    for _ in range(2000):\n        for (x1, x2), y in data:\n            h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n            o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n            loss = (o - y) * (o - y)\n            for p in params:\n                p.grad = 0.0\n            loss.backward()              # 一句顶刚才那七八行手推的算式\n            for p in params:\n                p.data -= 1.0 * p.grad\n\n    for (x1, x2), y in data:\n        h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n        o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n        print(f\"开关 ({x1},{x2})  该亮吗 {int(y)}  资料助手的回答 {o.data:.3f}\")\n",
+    "patch2.py": "# patch2.py：第二个补丁，已经办完的事不算数\nimport re\nfrom exam import run\n\ndef reply(text):\n    need_account = \"账号\" in text and not re.search(\"已经?有账号|账号已\", text)\n    need_install = \"安装\" in text and not re.search(\"已经?安装|安装好\", text)\n    if need_account and need_install:\n        return \"软件安装\"\n    if need_account:\n        return \"账号申请\"\n    if need_install:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n\nprint(\"—— 隔壁同事探头进来，随口问了两句 ——\")\nrun(reply, [\n    (\"账号还没开通，安装也做不了\", \"账号申请\"),\n    (\"账号已过期，怎么重新申请？\", \"账号申请\"),\n])\n",
+    "peek.py": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")\n",
+    "perceptron.py": "# perceptron.py：一张会自己改的评分表\ndata = [(0, 0), (0, 1), (1, 0), (1, 1)]\n\ndef train(labels, rounds=20, show=False):\n    w1 = w2 = b = 0                       # 一开始，它什么都不知道\n    for r in range(1, rounds + 1):\n        wrong = 0\n        for (x1, x2), want in zip(data, labels):\n            got = 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n            miss = want - got             # 答对是 0；该说 1 却说 0 是 +1；反过来是 -1\n            if miss:\n                wrong += 1\n                w1 += miss * x1           # 朝着纠正这次错误的方向，各挪一点\n                w2 += miss * x2\n                b += miss\n        if show:\n            print(f\"第 {r} 轮：错 {wrong} 题，现在 w1={w1} w2={w2} b={b}\")\n        if wrong == 0:\n            break\n    return w1, w2, b, wrong\n\nif __name__ == \"__main__\":\n    print(\"教它：两样都办完，才能开通（AND）\")\n    train([0, 0, 0, 1], show=True)\n",
+    "router.py": "# router.py：资料助手 v0.1\ndef reply(text):\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nif __name__ == \"__main__\":\n    print(reply(\"账号怎么申请？\"))\n    print(reply(\"软件怎么安装？\"))\n",
+    "lunch.py": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")\n",
+    "reinforce.py": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])\n",
+    "classifier.py": "# classifier.py：资料助手 v0.2，不写规则，只给例子\nimport math, random\nfrom exam import run          # 第 01 章那张考卷，原封不动\n\ntrain_set = [\n    (\"怎么开通账号\", \"账号申请\"), (\"账号申请入口在哪\", \"账号申请\"),\n    (\"我还没有登录账号\", \"账号申请\"), (\"登录名怎么获取\", \"账号申请\"),\n    (\"工号和账户什么时候发\", \"账号申请\"), (\"邮箱账户怎么开\", \"账号申请\"),\n    (\"没有权限登录系统\", \"账号申请\"), (\"登录不了，提示没有账户\", \"账号申请\"),\n    (\"新员工的账户在哪里办\", \"账号申请\"), (\"统一身份认证怎么申请\", \"账号申请\"),\n    (\"开发工具怎么装\", \"软件安装\"), (\"IDE 安装失败\", \"软件安装\"),\n    (\"环境配置报错\", \"软件安装\"), (\"本地环境怎么部署\", \"软件安装\"),\n    (\"依赖包装不上\", \"软件安装\"), (\"安装包在哪下载\", \"软件安装\"),\n    (\"开发环境怎么搭\", \"软件安装\"), (\"编译时缺少组件\", \"软件安装\"),\n    (\"部署脚本跑不通\", \"软件安装\"), (\"插件装不上\", \"软件安装\"),\n]\n\ndef features(text):\n    \"\"\"把一句话拆成单字和相邻两字，例如“装不上”→ 装、不、上、装不、不上\"\"\"\n    chars = [c for c in text if c.strip() and c not in \"，。？！\"]\n    return chars + [a + b for a, b in zip(chars, chars[1:])]\n\n# 逻辑回归：每个特征一个权重，加权求和后过 sigmoid，得到“是软件安装”的概率\nw, b = {}, 0.0\nrng = random.Random(0)\ndata = train_set[:]\nfor epoch in range(200):\n    rng.shuffle(data)\n    for text, label in data:\n        y = 1 if label == \"软件安装\" else 0\n        fs = features(text)\n        p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in fs))))\n        for f in fs:                              # 沿着降低误差的方向，微调每个权重\n            w[f] = w.get(f, 0.0) - 0.1 * (p - y)\n        b -= 0.1 * (p - y)\n\ndef predict(text):\n    p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in features(text)))))\n    return (\"软件安装\" if p >= 0.5 else \"账号申请\"), p\n\nprint(\"练习题：\", sum(predict(t)[0] == y for t, y in train_set), \"/\", len(train_set))\nprint(\"考卷：\")\nrun(lambda text: predict(text)[0])\n\nranked = sorted(w, key=w.get)\nprint(\"它眼里最像“账号申请”的线索：\", ranked[:5])\nprint(\"它眼里最像“软件安装”的线索：\", ranked[-5:][::-1])\nprint(\"“账号已有了，软件怎么安装？”是安装的把握：\", round(predict(\"账号已有了，软件怎么安装？\")[1], 2))\n",
+    "patch1.py": "# patch1.py：第一个补丁，两个词都出现时，回答安装\nfrom exam import run\n\ndef reply(text):\n    if \"账号\" in text and \"安装\" in text:\n        return \"软件安装\"\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n",
+    "llm.py": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()\n",
+    "cut.py": "# cut.py：资料助手的第一块“识字”零件。拿一本小词典，把一句话切成块、换成编号\nfrom exam import exam\n\nvocab = {\n    \"<unk>\": 0, \"账号\": 1, \"软件\": 2, \"怎么\": 3,\n    \"申请\": 4, \"安装\": 5, \"已经\": 6, \"有了\": 7, \"好了\": 8,\n}\n\ndef cut(text):\n    out, i = [], 0\n    while i < len(text):\n        if text[i] in \"？，。\":\n            i += 1\n        elif text[i:i+2] in vocab:\n            out.append(vocab[text[i:i+2]])\n            i += 2\n        else:\n            out.append(0)\n            i += 1\n    return out\n\nif __name__ == \"__main__\":\n    for text, _ in exam:\n        print(f\"{text} -> {cut(text)}\")\n",
+    "hello.py": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n",
+    "reward.py": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")\n",
+    "bigram.py": "# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))\n",
+    "oops.py": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n",
+    "eliza.py": "# eliza.py：分解 → 换人称 → 重组\nimport re\n\nSWAP = str.maketrans({\"我\": \"你\", \"你\": \"我\"})\n\nscript = [\n    (r\"我担心(.+)\", \"你为什么担心{0}？\"),\n    (r\"我觉得(.+)\", \"是什么让你觉得{0}？\"),\n    (r\".*(妈妈|爸爸|家里).*\", \"多说说你的家人吧。\"),\n]\n\ndef eliza(text):\n    text = text.rstrip(\"。！？\")\n    for pattern, template in script:\n        m = re.fullmatch(pattern, text)\n        if m:\n            parts = [g.translate(SWAP) for g in m.groups()]\n            return template.format(*parts)\n    return \"请继续说。\"\n\nfor line in [\n    \"我担心入职后跟不上。\",\n    \"我担心你不理解我。\",\n    \"我觉得流程太复杂了。\",\n    \"我妈妈也这么说。\",\n    \"让我不踏实的是入职后跟不上。\",\n    \"我担心的不是入职，是房租。\",\n]:\n    print(line, \"->\", eliza(line))\n",
+    "attention.py": "# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))\n",
+    "maze.py": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)\n",
+    "bill.py": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n",
+    "three_tasks.py": "# three_tasks.py：同一张评分表，三门功课\nfrom perceptron import train\n\ntasks = {\n    \"两样都办完才开通\": [0, 0, 0, 1],\n    \"有一张证就放行\":   [0, 1, 1, 1],\n    \"楼梯灯\":           [0, 1, 1, 0],\n}\nfor name, labels in tasks.items():\n    for rounds in (20, 1000):\n        w1, w2, b, wrong = train(labels, rounds)\n        print(f\"{name}｜练 {rounds} 轮：最后一轮错 {wrong} 题\")\n",
+    "expert.py": "# expert.py：事实 + 规则 → 推理出结论\nrules = [\n    ({\"新同事\"}, \"需要账号\"),\n    ({\"需要账号\", \"经理已批准\"}, \"走标准入口开通\"),\n    ({\"实习生\"}, \"走独立入口开通\"),\n]\n\ndef infer(facts):\n    facts = set(facts)\n    changed = True\n    while changed:              # 一直推，直到推不出新东西\n        changed = False\n        for need, then in rules:\n            if need <= facts and then not in facts:\n                facts.add(then)\n                changed = True\n    return sorted(f for f in facts if f.endswith(\"开通\"))\n\nprint(infer({\"新同事\", \"经理已批准\"}))\nprint(infer({\"新同事\", \"实习生\", \"经理已批准\"}))\n",
+    "docs.py": "# docs.py：测试组的新人资料包（全部是为练习编的）\nDOCS = [\n    {\"id\": \"D01\", \"title\": \"账号申请流程\", \"date\": \"2026-03-01\", \"status\": \"现行\",\n     \"text\": \"新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\"},\n    {\"id\": \"D02\", \"title\": \"账号审批时限规定\", \"date\": \"2025-01-10\", \"status\": \"已废止\",\n     \"text\": \"账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\"},\n    {\"id\": \"D03\", \"title\": \"关于调整账号审批时限的通知\", \"date\": \"2026-11-05\", \"status\": \"现行\",\n     \"text\": \"自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职员工。实习生除外，其账号审批时限为 2 个工作日。\"},\n    {\"id\": \"D04\", \"title\": \"开发工具安装指南\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"账号开通以后，才能安装开发工具。工具包下载约需 20 分钟，安装约需 15 分钟。安装完成后请做环境自检。\"},\n    {\"id\": \"D05\", \"title\": \"实习生入职须知\", \"date\": \"2026-06-02\", \"status\": \"现行\",\n     \"text\": \"实习生不使用入职系统，统一从独立入口提交申请。申请须附项目经理签字的用工单。\"},\n    {\"id\": \"D06\", \"title\": \"环境自检清单\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"自检共三项：能登录代码仓库，能拉取主干代码，能在本地跑通冒烟测试。全部通过约需 10 分钟。\"},\n    {\"id\": \"D07\", \"title\": \"账号注销流程\", \"date\": \"2026-02-20\", \"status\": \"现行\",\n     \"text\": \"员工离职当日，由管理员注销其账号。注销后 30 天内数据可以恢复，逾期永久删除。\"},\n    {\"id\": \"D08\", \"title\": \"办公设备领用\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"新同事入职当天到前台领取笔记本电脑和工牌。显示器需另行申请，三个工作日内配发。\"},\n    {\"id\": \"D09\", \"title\": \"请假与考勤\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"请假须提前一天在考勤系统提交。病假可事后补交证明。迟到三次记一次缺勤。\"},\n    {\"id\": \"D10\", \"title\": \"会议室预订\", \"date\": \"2025-09-01\", \"status\": \"现行\",\n     \"text\": \"会议室在三楼，通过日历系统预订。单次预订不超过两小时，超时须续订。\"},\n    {\"id\": \"D11\", \"title\": \"代码提交规范\", \"date\": \"2026-05-09\", \"status\": \"现行\",\n     \"text\": \"提交前必须跑通本地测试。每次提交须关联需求编号。主干分支禁止直接推送。\"},\n    {\"id\": \"D12\", \"title\": \"报销流程\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"差旅报销须在返回后十个工作日内提交。单笔超过两千元的，须部门负责人审批。\"},\n    {\"id\": \"D13\", \"title\": \"新人第一周日程\", \"date\": \"2026-07-01\", \"status\": \"现行\",\n     \"text\": \"第一天办理账号和设备，第二天参加安全培训，第三天起跟随导师熟悉项目。周五有新人答疑。\"},\n    {\"id\": \"D14\", \"title\": \"入职流程（2024 版）\", \"date\": \"2024-03-01\", \"status\": \"已废止\",\n     \"text\": \"新同事可以先安装开发工具，再提交账号申请。两项可以同时进行，以节省时间。\"},\n]\n\ndef show(doc):\n    return f\"【{doc['id']}】{doc['title']}（{doc['date']}，{doc['status']}）\\n{doc['text']}\"\n"
+  },
+  "sourceFile": "上册/第 04 章（上）｜学着接下一句：从字模到迷你大脑.md"
+}

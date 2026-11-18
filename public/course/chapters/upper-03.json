@@ -1,0 +1,1161 @@
+{
+  "id": "upper-03",
+  "title": "第 03 章｜没有标准答案，怎样越练越强？",
+  "shortTitle": "没有标准答案，怎样越练越强？",
+  "volume": "upper",
+  "group": "第一篇 · 学会学习",
+  "order": 5,
+  "kind": "chapter",
+  "minutes": 28,
+  "summary": "2016 年 3 月 10 日，首尔，四季酒店。大厅里架满了摄像机，你坐在解说席旁边，给两位职业棋手打下手。",
+  "text": "# 第 03 章｜没有标准答案，怎样越练越强？\n\n配套课件在这里：[[零基础学AI/attachments/mygpt-companion-20261117-r4-8c90a8fb.zip|下载上册配套代码与实验材料（r4）]]。解压后先读 README，按对应章节说明使用。\n## 第 37 手\n\n2016 年 3 月 10 日，首尔，四季酒店。大厅里架满了摄像机，你坐在解说席旁边，给两位职业棋手打下手。\n\n棋盘两边，一边是李世石，过去十年里最强的围棋手之一。另一边是个替人落子的工程师，他只负责把屏幕上显示的位置摆到棋盘上。真正下棋的，是一个叫 AlphaGo 的程序。\n\n围棋，一直被当作机器最啃不动的一块骨头。\n\n1997 年，IBM 的深蓝就在国际象棋上赢了世界冠军。它靠的是蛮力：每秒钟推算几亿个局面，再用人写好的规则给每个局面打分。可这一套搬到围棋上就不灵了。围棋的合法局面数，大约是 2 后面跟着 170 个零；整个宇宙里的原子，也不过是 1 后面 80 个零。算是算不完的。\n\n那就写规则来判断哪个局面好？还记得第 01 章的那句话吗：我们知道的，比我们说得出来的多。围棋高手管自己的判断叫“棋感”。你问他这步为什么好，他多半会说：“感觉。”\n\n所以，直到这次比赛之前，不少行内人还估计，机器要赢顶尖棋手，大概还得再等十年。\n\n昨天，第一局，李世石输了。大厅里安静了好一阵。\n\n今天是第二局。下到第 37 手，AlphaGo 把一颗黑子放在了棋盘右边的第五线上。\n\n解说席上起了一阵骚动。按人类几百年攒下来的经验，这个位置太高了，像个初学者下的棋。有职业棋手的第一反应是：它下错了。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/Sk1EbBxifoBKb0xPswcci5tBnpb.png|2016 年 3 月，首尔。第 37 手落下。]]\n\n这一手到底是失误还是妙手，我们过一会儿揭晓。\n\n眼下有个更要紧的问题，请你先想一想：**这步棋，是谁教它的？**\n\n上一章的办法，是给机器看带标准答案的例子。给围棋程序当例子的，当然是人类高手的棋谱：这个局面，高手下在了这儿。可是，没有哪位高手会在那个位置下那样一步棋。它不在任何一张棋谱里。\n\n一个只会照着例子学的东西，是怎么走出一步例子里没有的棋的？\n\n要弄明白这件事，我们得先回答一个朴素得多的问题：中午吃什么。\n\n## 中午吃什么\n\n公司楼下新开了三家小店。实话告诉你，这三家店里，一家十顿只有三顿好吃，一家五顿，一家七顿。可你不知道哪家是哪家，三家看起来都差不多。\n\n接下来的一年，你打算怎么吃？\n\n我猜你的做法和大多数人一样：头几天每家试一次，然后认准印象最好的那家，一直吃下去。稳妥，省心。\n\n还有一种吃法：大部分日子去心里分数最高的那家，但每十天里留出一天，闭着眼随便挑一家。\n\n哪种吃法，一年下来吃得更好？第一种吃法的人，最后有多少真的认准了最好的那家？\n\n先在心里给两个数字，再看程序。我们让 500 个人各吃 1000 顿：\n\n```python\n# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")\n```\n\n```\n认准一家吃到底：1000 顿里好吃 596 顿；最后常去的是最好那家的人占 63%\n十天里有一天换口味：1000 顿里好吃 669 顿；最后常去的是最好那家的人占 98%\n```\n\n每十天“浪费”一天去瞎试的人，反而多吃了七十多顿好的。\n\n更值得看的是第一种吃法的后一个数字：63%。也就是说，认准一家的人里，三个就有一个，吃了一辈子不是最好的那家。\n\n为什么？设想一下那位倒霉的同事：他第一次去最好的那家店，恰好赶上师傅发挥失常。于是在他心里，这家店的分数是零。他再也没回去过，也就永远没有机会发现自己错了。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/GS4rb92d2o90PGxI1xacJ66ynKc.png|一条踩出来的小路，只通向第一家。]]\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/Ay28b7njhoTdVFxlnaNccBy8nYd.png|偶尔“浪费”一顿，反而吃得更好。]]\n\n这两种做法各有个名字。去已经知道不错的地方，叫**利用**。去试试不知道的，叫**探索**。只利用不探索，你就会被最初的一点运气困住一辈子。\n\n现在回头想想围棋。照着人类棋谱学，相当于什么？相当于认准了人类去过的那几家店。人类的棋谱再多，也只是所有可能的下法里极小的一块。\n\n不过，在回到首尔之前，请先注意午饭这个例子里一件容易滑过去的事：从头到尾，**没有人告诉你正确答案是哪家店。** 你得到的只是每顿饭之后的一个感受：好吃，或者不好吃。\n\n这和上一章很不一样。上一章，每个例子都附着答案。这里只有打分。做了一个动作，世界回你一个分数，你自己琢磨下回怎么做。这种学法叫**强化学习**。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/DEFqb8uIboVjOIx4xGTcbsr5nlb.png|做一步，看一步：强化学习的基本回路。]]\n\n## 给资料助手造第三块零件：食堂打饭调旋钮\n\n刚才去哪家店吃饭，我们记的是一个账本：每家店吃过几次、平均几分，再留出十分之一的日子换口味。\n\n可我们的资料助手将来要干的事是开口挑词。词典里有几千个词，每个词前面还有千变万化的句子，没法给每种情况单独记一本账。上一章的 `Value` 让我们看清了参数怎样往上调、往下调。这一回先把旋钮当成普通小数，用手写梯度看清更新方向；下面的 `reinforce.py` 不调用 `value.py`，继承的是“按反馈调参数”的思路。\n\n如果没有标准答案，只有一个饭后的打分（好吃是 `1`，不好吃是 `0`），怎么调这些旋钮？\n\n这就好比你在学校食堂打饭，心里有个“平时平均水平”。**今天这盘菜如果比平时好吃，明天就多盛一勺、把另外两道菜少盛一点；如果比平时难吃，明天就绕着这道菜走。**\n\n![[零基础学AI/上册/attachments/Pasted image 20261117122121.png]]\n\n1992 年，Ronald Williams——就是上一章那篇四页反向传播论文的第三位作者——把这句大白话写成了一个通用的算法，起名叫 **REINFORCE**。我们来给资料助手打第三块零件 `reinforce.py`：\n\n```python\n# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])\n```\n\n这里连“十分之一的日子换口味”都不用单独写了：只要把握还没涨到 100%，抓阄的时候它自然会偶尔去别的店转转；等哪家店真的全面胜出，把握涨高了，它自己就会收心。跑一下：\n\n```\n1000 顿后去三家店的把握： [0.01, 0.01, 0.97]\n```\n\n它把 97% 的把握都押在了第三家店上。\n\n请记住 `adv = reward - avg` 那一行：**重要的不是拿了几分，而是比平时多拿了几分。** 到第 05 章教大模型“照人的喜好说话”、第 06 章教模型“自己多想几步”的时候，用的还是这同一把锤子。\n\n## 分数来得太晚怎么办\n\n午饭还有个让人省心的地方：吃完马上就知道好不好吃。\n\n下棋可没这么痛快。一盘棋几百手，中间没有任何人给你打分，只有到最后才有一个结果：赢了，或者输了。\n\n上一章我们是在**空间**（计算图）上倒着做 DP，把误差算回去。现在同一个问题搬到了**时间**上：最后输了，前面两百多步，哪一步该负责？\n\n我们造一个最小的例子来对付它。一个 5×5 的迷宫，`#` 是墙，从左上角的 S 走到右下角的 G：\n\n```\nS....\n.###.\n..C..\n.###.\n....G\n```\n\n规矩很苛刻：只有踩上终点的那一步给 10 分。别的每一步都倒扣 0.1 分，免得它磨蹭。中间那个 C，暂时当它是块普通的空地。\n\n没有地图，没有人指路。它一开始只会乱撞。\n\n动手之前，先想一个问题。假如蒙着眼在里面乱撞的是你，撞上了几百次终点以后，你是怎么慢慢摸出门道的？\n\n你大概会先记住：**终点旁边那一格是个好地方**，因为从那儿再走一步就到了。然后你会发现，能走到那一格的格子，也不错。再然后，能走到“能走到那一格的格子”的格子……\n\n好地方的名声，就这样从终点开始，在时间轴上一格一格地倒着往回传——和上一章的 DP 是同一个路数，只不过现在是边走边用下一步的估计更新这一步。\n\n程序给每个“位置加动作”记一个数，意思是“从这儿这么走，往后一共大概还能拿多少分”。每走一步，就用下面这句话修正一次：\n\n> 我对这一步的估计 ＝ 这一步当场拿到的分 ＋ 我对下一格的估计\n\n它不等终局。它用下一步的估计，来修正这一步的估计。\n\n```python\n# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)\n```\n\n`train` 里带 `0.95` 的那一行，就是上面那句话（`0.95` 的意思是：晚拿到的分，稍微打点折）。其余的你都见过：`0.1` 的机会乱走一步，是在“换口味”。\n\n让它练三千局，然后看它怎么走。走几步能到？\n\n```\n金币：没有\n它的走法：↓ ↓ → → → → ↓ ↓\n结果：到了终点，一共 9.3 分\n它心里的地图（站在每一格，估计往后还能拿多少分）：\n 6.4  6.8  7.3  7.8  8.3 \n 6.8  墙   墙   墙   8.8 \n 7.3  7.8  8.3  8.8  9.4 \n 6.8  墙   墙   墙  10.0 \n 5.2  7.5  9.1 10.0 终点 \n```\n\n八步，一步冤枉路都没有。\n\n下面那张数字表更值得看，那是它心里的地图。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/Ov3RbToqtoeFpSxVFqjcofHLnhc.png|它心里的地图：分数从终点开始，一格一格往回渗。]]\n\n我们只在终点给过分。可是现在，每一格上都有了一个数，而且离终点越近数越大。站在起点，它不需要“看见”终点，只需要往数大的那边迈一步。\n\n这个“我现在的处境有多好”的估计，有个正式的名字，叫**价值**。它就是“账该算在谁头上”的答案：不用等到终局再回头分功劳，每一步都当场记一笔。\n\n这个主意不新。早在 1959 年，IBM 的 Arthur Samuel 就让一个程序用类似的办法学下跳棋，“机器学习”这个词就是他那篇论文带火的。上一章结尾提到的那件事，是这个主意第一次真正惊到人。\n\n1992 年，IBM 的研究员 Gerald Tesauro 让一个神经网络自己和自己下西洋双陆棋。它每走一步，就估计一次“我现在有几成胜算”，再用下一步的估计来修正。没有棋谱，没有老师。它和自己下了一百多万盘。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/Y2lAbbaHhox0LpxXnjbcvw7tnNd.png|没有棋谱，没有老师。对手是它自己。]]\n\n这个叫 TD-Gammon 的程序，最后的水平逼近了当时世界上最好的人类棋手。更有意思的是后面的事：有几种开局，它的走法和高手们沿用了多年的走法不一样。高手们拿它的走法去比赛里试，发现它是对的。没过几年，老走法在比赛里几乎绝迹了。\n\n人开始跟机器学下棋了。不过那是西洋双陆棋。轮到围棋，还要再等二十四年。\n\n## 回到首尔\n\n现在可以回大厅了。你手里已经有了看懂 AlphaGo 的全部零件。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/UxUZbVwXUo30JHxEYAJc1PvxnAg.png|AlphaGo 的三样本事：直觉和判断是学出来的，推演是算出来的。]]\n\n**直觉**：面对一个局面，哪几个落点有戏。这是一个很深的神经网络，它先看了大量人类高手的棋谱，这是上一章的办法。然后它开始和自己下棋，赢了的下法多用，输了的少用，这是这一章的办法。\n\n**判断**：这个局面，我有几成胜算。这就是迷宫里那张数字地图，只不过格子换成了围棋的局面，查表换成了另一个神经网络。\n\n**推演**：顺着直觉推荐的那几手往后算，算到一定深度，用判断来打分。深蓝也推演，可它是每条路都算；AlphaGo 只算有戏的那几条。\n\n规则写不出来的“棋感”，它用学的办法补上了。从第 01 章走到这儿，这是一次完整的示范：**写不出规则的地方，让它自己学。**\n\n那么，第 37 手呢？\n\nAlphaGo 赢了第二局。复盘的时候，越来越多的棋手说，第 37 手是这盘棋的胜负手，而且，很美。\n\n赛后 DeepMind 公布了一个数字。按 AlphaGo 自己从人类棋谱里学来的直觉估算，一位人类棋手在那个局面下出这一手的可能性，大约是万分之一。\n\n它知道人不会这么下。它还是下了。\n\n因为在它和自己对弈的那几百万盘棋里，它偶尔“换过口味”，试过人类没走过的地方，然后它心里那张地图告诉它：这么下，赢得多。\n\n五局棋的最终比分是 4 比 1。李世石赢的是第四局。那一局他的第 78 手，同样出乎所有人的意料，也同样被估计为万分之一的一手，后来被棋迷称作“神之一手”。\n\n一年多以后的事情更干脆。2017 年 5 月，乌镇，新版 AlphaGo 三比零赢了当时世界排名第一的柯洁。同年 10 月，DeepMind 发表了 AlphaGo Zero：它**一张人类棋谱都不看**，只知道规则，从乱下开始，自己和自己练。三天以后，它和打败李世石的那个版本下了一百盘。\n\n一百比零。\n\n人类几千年攒下的棋谱，在这里成了可有可无的东西。读到这里你也许有点兴奋，也许有点不安。两种感觉都对。\n\n但请记住它成立的三个条件，后面的章节会一再用到：**规则是清楚的，输赢是明确的，可以不花本钱地练上几百万盘。** 围棋三样都有。“给新同事写一份上手指南”，三样都没有。\n\n> 🎬 **配套视频｜Ep 3.1：第 37 手、中午吃什么与时间上的算账**\n![[零基础学AI/上册/videos/03-1_第37手中午吃什么与时间算账_v1.mp4]]\n\n## 趁热打铁，给迷宫加点甜头\n\n回到我们的小迷宫，做一个你一定会想做的改进。\n\n只有终点给分，它一开始撞来撞去，很久才能碰巧撞上一次终点，学得很慢。那我们帮帮它：在必经之路的正中间放一枚金币，踩到就加 1 分。半路给点甜头，引着它往终点走。\n\n很合理吧？做老师的都这么干。\n\n把 `maze.py` 第四行的 `COIN = \"没有\"` 改成 `COIN = \"踩到就给\"`，再练一次。你猜它会怎么走？\n\n```\n金币：踩到就给\n它的走法：↓ ↓ → → ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ……\n结果：50 步用完，没到终点，一共 42.0 分\n```\n\n42 分。比老老实实走到终点的 9.3 分高出一大截。\n\n可它没到终点。看它的走法：下，下，右，右，然后一直“上，上，上，上……”\n\n金币上面那一格是墙。它站在金币上往墙上撞，撞墙等于原地不动，原地不动等于又“踩”了一次金币。每撞一下，净赚 0.9 分。它一口气撞了 46 下。\n\n我得坦白：写这段代码的时候，我想的只是“路过金币，顺手加一分”。撞墙也算踩到，是我没想到的。真实世界里的漏洞多半就是这样来的：不是谁故意留的，只是没想到。\n\n没关系，补上就好。把那一行再改成 `COIN = \"走进来才给\"`：必须从别的格子走进金币格，才算数。撞墙不算了。\n\n这回它该去终点了吧？\n\n```\n金币：走进来才给\n它的走法：↓ ↓ → → ← → ← → ← → ← → ← → ……\n结果：50 步用完，没到终点，一共 19.0 分\n```\n\n右，左，右，左，右，左。\n\n它在金币格和旁边那一格之间来回踱步，每进一次门，领一次赏。19 分，还是比去终点划算。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/Bz1ybqbvmoTi0xx3HefcJklnnfc.png|分数怎么给，它就怎么学。]]\n\n打了一个补丁，冒出一个新漏洞。这个滋味，你在第 01 章尝过。\n\n当然可以再补：金币每局只许领一次行不行？\n\n行，不过动手前还得改一个小地方。上一次来金币格，还没领过，应该有奖；下一次回到同一个格子，已经领过了，就没有奖。如果程序只记坐标，这两种处境在它眼里一模一样。**位置一样，事情已经变了。** 所以状态里必须多记一件事：`本局是否已经领过金币`。\n\n把四种模式各自用 10 个随机种子跑一遍，结果是这样的：\n\n| 奖励方式 | 50 步内到终点的次数 | 种子 0 的情况 |\n|-|-|-|\n| 不给金币 | 10 / 10 | 8 步到达，9.3 分 |\n| 只要还在金币格就给 | 0 / 10 | 撞墙领钱，42.0 分 |\n| 每次从别处走进来才给 | 2 / 10 | 来回领钱，19.0 分 |\n| 每局只给一次，并记录是否领过 | 10 / 10 | 8 步到达，10.3 分 |\n\n每局只给一次、且把“领没领过”写进状态以后，它终于又老老实实 8 步走到了终点。可别忘了：原来不发金币的版本本来就能 10/10 到达终点，不能因为 `10.3` 比 `9.3` 高，就以为中途加金币变强了——计分规则变了，总分不能横着比。\n\n更重要的是，请想想我们刚才在做什么：我们本来只想说一句“请走到终点”，结果却在和一个 25 格的迷宫斗智斗勇。\n\n这不是玩具才有的毛病。2016 年底，OpenAI 的研究者发了一篇博客，讲他们训练程序玩一个赛艇游戏。人人都知道这游戏该干什么：把船开到终点。他们给程序的分数，用的是游戏里现成的得分。\n\n程序在赛道边上发现了一小片水湾。水湾里有三个得分的靶子，撞掉以后过一会儿会重新冒出来。于是它就不走了。它在水湾里一圈一圈地转，掐着时间把刚冒出来的靶子再撞掉。船撞了墙，着了火，逆行了，都不要紧。它一次也没跑完过比赛，得分却比人类玩家平均高出 20%。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/WKMqbUnAeo7JfIxQqJIcH3V2nhh.png|它一次也没跑完过比赛。得分比人类玩家高 20%。]]\n\n它作弊了吗？\n\n没有。它做的，正是我们写下来的那件事：拿高分。只不过，“拿高分”和我们心里想的“赢比赛”，中间有一条缝。\n\n**分数只是目标的替身。** 一个足够卖力的学习者，会把替身和目标之间的每一条缝都找出来。\n\n## 给资料助手的回答打分\n\n这件事和我们的资料助手有什么关系？关系很大。\n\n将来我们想让它不只会给问题分类，还要会回答问题，并且越答越好。越答越好，就得先说清楚什么叫“好”。也就是说，我们得写一个打分的办法。\n\n试试看。一个直觉上很合理的想法：回答里和问题重合的字越多，说明越切题；回答越长，说明越详细。\n\n准备四个候选回答：一个认真的，一个简短的，一个“不知道”，还有一个我故意写的。你先读一读代码里的四个回答，猜猜哪个得分最高：\n\n```python\n# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")\n```\n\n```\n== 第一版打分\n 49.6  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  7.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。\n== 第二版打分\n  9.0  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  6.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。\n```\n\n第一版打分，那段翻来覆去念叨“账号申请”的废话得了 49.6 分，认真回答的那一句只有 7.3 分。\n\n我们打个补丁（是的，又是补丁）：重合的字只算一次，长度封顶 30 个字。结果在下半段：废话 9.0 分，认真的回答 6.3 分。还是废话赢。\n\n别光靠猜。我们手里已经有 `reinforce.py` 里的那套“比平时好就多盛一勺”的调旋钮规则，干脆让资料助手**真的追着 `score_v2` 练上 500 轮**，看看它会说出什么话来：\n\n```python\n# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")\n```\n\n来看看它这 500 轮的“进步”：\n\n```\n第   1 轮（5.7 分）：安装申请系统账号请在安装账号请在。\n第  50 轮（5.7 分）：账号系统怎么怎么账号账号账号账号。\n第 500 轮（5.7 分）：账号账号账号怎么账号账号安装即可。\n```\n\n第 1 轮，它还在说“请在”“系统”。练到第 500 轮，它发现只要把“账号”“怎么”凑齐就能稳稳拿满基础分，干脆把“审批”“开通”全扔了，满嘴念叨“账号账号账号怎么账号”。\n\n赛艇在水湾里转圈，是别人的故事。这三行输出，是你亲手写出来的程序，在你自己的电脑上转出来的圈。\n\n![[零基础学AI/attachments/第 03 章｜没有标准答案，怎样越练越强？/TZhrbhx7bo9yHPxqov3cJz5Entg.png|你想要的，你写下的，它学会的。]]\n\n那怎么办？规则写的分数总有漏洞，那就别用规则打分了，让人来打。找两个回答，请人看看哪个更好；这样比上几万次，再训练一个模型去模仿人的口味。\n\n这个主意，后来真的成了让大模型“听懂人话”的关键一步，第 05 章会讲。\n\n不过，你现在读到这个主意，心里应该已经亮起了一盏小灯：人的口味，就不是替身了吗？人喜欢什么样的回答？喜欢口气笃定的。喜欢夸自己的。喜欢顺着自己说的。\n\n一个足够卖力的学习者，会把这些也都找出来。\n\n这盏灯先亮着。到第 05 章，它会派上用场。\n\n> 🎬 **配套视频｜Ep 3.2：迷宫撞墙、赛艇转圈与 v0.3 的教训**\n![[零基础学AI/上册/videos/03-2_迷宫撞墙赛艇转圈与v03教训_v1.mp4]]\n\n## 这一章你留下了什么\n\n这一章，资料助手得到了两样东西：\n\n`reinforce.py`，资料助手的第三块零件——没有标准答案时，怎么按“比平时好多少”来调旋钮。\n\n`reward.py` 与 `babble.py`，算作 **v0.3**，一条用血肉实验换来的告诫：**每当你写下一个分数让机器去追，先花五分钟想一想：它最省力的拿分办法是什么？** 多半不是你想要的那个。\n\n## 下一站\n\n下棋有棋盘，有规则，有输赢，可以和自己下几百万盘。\n\n说话呢？没有棋盘，没有终局，一句话说出口，也没有人举牌子告诉你赢了还是输了。机器要怎样才能学会说话？\n\n下一章，把字变成编号、沿计算图调参数的两样本事，要一起派上用场了。我们会用纯 Python 拼出资料助手的迷你大脑，让它第一次自己开口接下一句。第 03 章按奖励调旋钮的办法，留到后面理解偏好与推理训练时再用，不参加下一词预测这一步。随后再对照 PyTorch 与 MiniMind 的训练骨架；完整的 MiniMind 训练、存盘和重载流程，这一版还没有补齐。\n\n---\n\n## 合上书之前，想一想\n\n1. 你的生活里，有没有哪件事是“认准一家吃到底”的？上一次“换口味”是什么时候？\n2. 迷宫里的那张数字地图，是怎么回答“前面两百步，哪一步该负责”这个问题的？它和上一章反向传播的“倒着 DP”有什么相像之处？\n3. AlphaGo Zero 不看棋谱就能变强，靠的是三个条件。你手头的工作里，有没有哪一件是三个条件都满足的？\n4. 赛艇程序在水湾里转圈，该怪程序，还是该怪写分数的人？如果你是写分数的人，你会怎么改？改完以后，它最省力的拿分办法又是什么？\n5. 你们团队或社团有没有哪个考核指标，已经被人“在水湾里转圈”了？\n\n## 来源\n\n1. D. Silver et al., Mastering the game of Go with deep neural networks and tree search, *Nature* 529, 2016。\n2. DeepMind, What we learned in Seoul with AlphaGo, 2016。第 37 手与第 78 手“约万分之一”的估计出自此文。\n3. J. Tromp, G. Farnebäck, Combinatorics of Go, 2016。合法局面数。\n4. A. L. Samuel, Some Studies in Machine Learning Using the Game of Checkers, *IBM Journal of Research and Development* 3(3), 1959。\n5. G. Tesauro, Temporal Difference Learning and TD-Gammon, *Communications of the ACM* 38(3), 1995。\n6. C. J. C. H. Watkins, *Learning from Delayed Rewards*, 剑桥大学博士论文, 1989。\n7. R. J. Williams, Simple statistical gradient-following algorithms for connectionist reinforcement learning, *Machine Learning* 8, 1992（REINFORCE 算法出处）。\n8. D. Silver et al., Mastering the game of Go without human knowledge, *Nature* 550, 2017。\n9. J. Clark, D. Amodei, Faulty Reward Functions in the Wild, OpenAI Blog, 2016-12-21。\n10. R. S. Sutton, A. G. Barto, *Reinforcement Learning: An Introduction*, 第 2 版, MIT Press, 2018。\n11. 本章代码与运行输出均为实际运行结果。\n",
+  "codeCount": 13,
+  "videoCount": 2,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "第 03 章｜没有标准答案，怎样越练越强？",
+      "id": "upper-03-f02b4f548147"
+    },
+    {
+      "type": "prose",
+      "text": "配套课件在这里：下载上册配套代码与实验材料（r4）。解压后先读 README，按对应章节说明使用。",
+      "html": "<p>配套课件在这里：下载上册配套代码与实验材料（r4） <span>（原始资料包不公开；本章代码见实验区文件）</span>。解压后先读 README，按对应章节说明使用。</p>\n",
+      "id": "upper-03-dd773ddd04b4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "第 37 手",
+      "id": "upper-03-b08da4d6067e"
+    },
+    {
+      "type": "prose",
+      "text": "2016 年 3 月 10 日，首尔，四季酒店。大厅里架满了摄像机，你坐在解说席旁边，给两位职业棋手打下手。",
+      "html": "<p>2016 年 3 月 10 日，首尔，四季酒店。大厅里架满了摄像机，你坐在解说席旁边，给两位职业棋手打下手。</p>\n",
+      "id": "upper-03-506d77eb0ce8"
+    },
+    {
+      "type": "prose",
+      "text": "棋盘两边，一边是李世石，过去十年里最强的围棋手之一。另一边是个替人落子的工程师，他只负责把屏幕上显示的位置摆到棋盘上。真正下棋的，是一个叫 AlphaGo 的程序。",
+      "html": "<p>棋盘两边，一边是李世石，过去十年里最强的围棋手之一。另一边是个替人落子的工程师，他只负责把屏幕上显示的位置摆到棋盘上。真正下棋的，是一个叫 AlphaGo 的程序。</p>\n",
+      "id": "upper-03-5a5a1f3ea3a9"
+    },
+    {
+      "type": "prose",
+      "text": "围棋，一直被当作机器最啃不动的一块骨头。",
+      "html": "<p>围棋，一直被当作机器最啃不动的一块骨头。</p>\n",
+      "id": "upper-03-e4d110609a35"
+    },
+    {
+      "type": "prose",
+      "text": "1997 年，IBM 的深蓝就在国际象棋上赢了世界冠军。它靠的是蛮力：每秒钟推算几亿个局面，再用人写好的规则给每个局面打分。可这一套搬到围棋上就不灵了。围棋的合法局面数，大约是 2 后面跟着 170 个零；整个宇宙里的原子，也不过是 1 后面 80 个零。算是算不完的。",
+      "html": "<p>1997 年，IBM 的深蓝就在国际象棋上赢了世界冠军。它靠的是蛮力：每秒钟推算几亿个局面，再用人写好的规则给每个局面打分。可这一套搬到围棋上就不灵了。围棋的合法局面数，大约是 2 后面跟着 170 个零；整个宇宙里的原子，也不过是 1 后面 80 个零。算是算不完的。</p>\n",
+      "id": "upper-03-8848c79e043b"
+    },
+    {
+      "type": "prose",
+      "text": "那就写规则来判断哪个局面好？还记得第 01 章的那句话吗：我们知道的，比我们说得出来的多。围棋高手管自己的判断叫“棋感”。你问他这步为什么好，他多半会说：“感觉。”",
+      "html": "<p>那就写规则来判断哪个局面好？还记得第 01 章的那句话吗：我们知道的，比我们说得出来的多。围棋高手管自己的判断叫“棋感”。你问他这步为什么好，他多半会说：“感觉。”</p>\n",
+      "id": "upper-03-67e15f15b44e"
+    },
+    {
+      "type": "prose",
+      "text": "所以，直到这次比赛之前，不少行内人还估计，机器要赢顶尖棋手，大概还得再等十年。",
+      "html": "<p>所以，直到这次比赛之前，不少行内人还估计，机器要赢顶尖棋手，大概还得再等十年。</p>\n",
+      "id": "upper-03-f3d2c42e70c9"
+    },
+    {
+      "type": "prose",
+      "text": "昨天，第一局，李世石输了。大厅里安静了好一阵。",
+      "html": "<p>昨天，第一局，李世石输了。大厅里安静了好一阵。</p>\n",
+      "id": "upper-03-d39861d2badf"
+    },
+    {
+      "type": "prose",
+      "text": "今天是第二局。下到第 37 手，AlphaGo 把一颗黑子放在了棋盘右边的第五线上。",
+      "html": "<p>今天是第二局。下到第 37 手，AlphaGo 把一颗黑子放在了棋盘右边的第五线上。</p>\n",
+      "id": "upper-03-5dc2995f24d7"
+    },
+    {
+      "type": "prose",
+      "text": "解说席上起了一阵骚动。按人类几百年攒下来的经验，这个位置太高了，像个初学者下的棋。有职业棋手的第一反应是：它下错了。",
+      "html": "<p>解说席上起了一阵骚动。按人类几百年攒下来的经验，这个位置太高了，像个初学者下的棋。有职业棋手的第一反应是：它下错了。</p>\n",
+      "id": "upper-03-d943c623d6e3"
+    },
+    {
+      "type": "image",
+      "alt": "2016 年 3 月，首尔。第 37 手落下。",
+      "caption": "2016 年 3 月，首尔。第 37 手落下。",
+      "available": true,
+      "src": "/media/49e2a21812146e286111b38f.webp",
+      "id": "upper-03-2f9bb1d3661e",
+      "previewWidth": 960,
+      "previewSrc": "/media/f21e6397e19647df7d833389.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/f21e6397e19647df7d833389.webp 960w, /media/49e2a21812146e286111b38f.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "这一手到底是失误还是妙手，我们过一会儿揭晓。",
+      "html": "<p>这一手到底是失误还是妙手，我们过一会儿揭晓。</p>\n",
+      "id": "upper-03-0f1409338028"
+    },
+    {
+      "type": "prose",
+      "text": "眼下有个更要紧的问题，请你先想一想：这步棋，是谁教它的？",
+      "html": "<p>眼下有个更要紧的问题，请你先想一想：<strong>这步棋，是谁教它的？</strong></p>\n",
+      "id": "upper-03-361bb051f6d1"
+    },
+    {
+      "type": "prose",
+      "text": "上一章的办法，是给机器看带标准答案的例子。给围棋程序当例子的，当然是人类高手的棋谱：这个局面，高手下在了这儿。可是，没有哪位高手会在那个位置下那样一步棋。它不在任何一张棋谱里。",
+      "html": "<p>上一章的办法，是给机器看带标准答案的例子。给围棋程序当例子的，当然是人类高手的棋谱：这个局面，高手下在了这儿。可是，没有哪位高手会在那个位置下那样一步棋。它不在任何一张棋谱里。</p>\n",
+      "id": "upper-03-2ec82640ff46"
+    },
+    {
+      "type": "prose",
+      "text": "一个只会照着例子学的东西，是怎么走出一步例子里没有的棋的？",
+      "html": "<p>一个只会照着例子学的东西，是怎么走出一步例子里没有的棋的？</p>\n",
+      "id": "upper-03-51bdeff69209"
+    },
+    {
+      "type": "prose",
+      "text": "要弄明白这件事，我们得先回答一个朴素得多的问题：中午吃什么。",
+      "html": "<p>要弄明白这件事，我们得先回答一个朴素得多的问题：中午吃什么。</p>\n",
+      "id": "upper-03-380856ab7e07"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "中午吃什么",
+      "id": "upper-03-8998768cfefd"
+    },
+    {
+      "type": "prose",
+      "text": "公司楼下新开了三家小店。实话告诉你，这三家店里，一家十顿只有三顿好吃，一家五顿，一家七顿。可你不知道哪家是哪家，三家看起来都差不多。",
+      "html": "<p>公司楼下新开了三家小店。实话告诉你，这三家店里，一家十顿只有三顿好吃，一家五顿，一家七顿。可你不知道哪家是哪家，三家看起来都差不多。</p>\n",
+      "id": "upper-03-446cd14c0ed4"
+    },
+    {
+      "type": "prose",
+      "text": "接下来的一年，你打算怎么吃？",
+      "html": "<p>接下来的一年，你打算怎么吃？</p>\n",
+      "id": "upper-03-de896c6f55ab"
+    },
+    {
+      "type": "prose",
+      "text": "我猜你的做法和大多数人一样：头几天每家试一次，然后认准印象最好的那家，一直吃下去。稳妥，省心。",
+      "html": "<p>我猜你的做法和大多数人一样：头几天每家试一次，然后认准印象最好的那家，一直吃下去。稳妥，省心。</p>\n",
+      "id": "upper-03-15c0f0cdcf0a"
+    },
+    {
+      "type": "prose",
+      "text": "还有一种吃法：大部分日子去心里分数最高的那家，但每十天里留出一天，闭着眼随便挑一家。",
+      "html": "<p>还有一种吃法：大部分日子去心里分数最高的那家，但每十天里留出一天，闭着眼随便挑一家。</p>\n",
+      "id": "upper-03-5ffd362d4b64"
+    },
+    {
+      "type": "prose",
+      "text": "哪种吃法，一年下来吃得更好？第一种吃法的人，最后有多少真的认准了最好的那家？",
+      "html": "<p>哪种吃法，一年下来吃得更好？第一种吃法的人，最后有多少真的认准了最好的那家？</p>\n",
+      "id": "upper-03-3eccfaac93f8"
+    },
+    {
+      "type": "prose",
+      "text": "先在心里给两个数字，再看程序。我们让 500 个人各吃 1000 顿：",
+      "html": "<p>先在心里给两个数字，再看程序。我们让 500 个人各吃 1000 顿：</p>\n",
+      "id": "upper-03-16738d16010d"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")",
+      "text": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")",
+      "runnable": true,
+      "filename": "lunch.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-03-8a9f3b4bc986"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "认准一家吃到底：1000 顿里好吃 596 顿；最后常去的是最好那家的人占 63%\n十天里有一天换口味：1000 顿里好吃 669 顿；最后常去的是最好那家的人占 98%",
+      "text": "认准一家吃到底：1000 顿里好吃 596 顿；最后常去的是最好那家的人占 63%\n十天里有一天换口味：1000 顿里好吃 669 顿；最后常去的是最好那家的人占 98%",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-37dad5d9abd5"
+    },
+    {
+      "type": "prose",
+      "text": "每十天“浪费”一天去瞎试的人，反而多吃了七十多顿好的。",
+      "html": "<p>每十天“浪费”一天去瞎试的人，反而多吃了七十多顿好的。</p>\n",
+      "id": "upper-03-a06780d2608a"
+    },
+    {
+      "type": "prose",
+      "text": "更值得看的是第一种吃法的后一个数字：63%。也就是说，认准一家的人里，三个就有一个，吃了一辈子不是最好的那家。",
+      "html": "<p>更值得看的是第一种吃法的后一个数字：63%。也就是说，认准一家的人里，三个就有一个，吃了一辈子不是最好的那家。</p>\n",
+      "id": "upper-03-47b8f02141cf"
+    },
+    {
+      "type": "prose",
+      "text": "为什么？设想一下那位倒霉的同事：他第一次去最好的那家店，恰好赶上师傅发挥失常。于是在他心里，这家店的分数是零。他再也没回去过，也就永远没有机会发现自己错了。",
+      "html": "<p>为什么？设想一下那位倒霉的同事：他第一次去最好的那家店，恰好赶上师傅发挥失常。于是在他心里，这家店的分数是零。他再也没回去过，也就永远没有机会发现自己错了。</p>\n",
+      "id": "upper-03-a40cb7c253f4"
+    },
+    {
+      "type": "image",
+      "alt": "一条踩出来的小路，只通向第一家。",
+      "caption": "一条踩出来的小路，只通向第一家。",
+      "available": true,
+      "src": "/media/890a030452395727b117b066.webp",
+      "id": "upper-03-34149df90489",
+      "previewWidth": 960,
+      "previewSrc": "/media/e9aced9361f9ab54ceb6858a.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/e9aced9361f9ab54ceb6858a.webp 960w, /media/890a030452395727b117b066.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "image",
+      "alt": "偶尔“浪费”一顿，反而吃得更好。",
+      "caption": "偶尔“浪费”一顿，反而吃得更好。",
+      "available": true,
+      "src": "/media/d013d095e1157d71.png",
+      "id": "upper-03-77ff2181b093",
+      "previewWidth": 960,
+      "previewSrc": "/media/4d982541cbe0aa1d4c734d53.webp",
+      "height": 825,
+      "previewHeight": 440,
+      "srcSet": "/media/4d982541cbe0aa1d4c734d53.webp 960w, /media/d013d095e1157d71.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "这两种做法各有个名字。去已经知道不错的地方，叫利用。去试试不知道的，叫探索。只利用不探索，你就会被最初的一点运气困住一辈子。",
+      "html": "<p>这两种做法各有个名字。去已经知道不错的地方，叫<strong>利用</strong>。去试试不知道的，叫<strong>探索</strong>。只利用不探索，你就会被最初的一点运气困住一辈子。</p>\n",
+      "id": "upper-03-4eb18be12321"
+    },
+    {
+      "type": "prose",
+      "text": "现在回头想想围棋。照着人类棋谱学，相当于什么？相当于认准了人类去过的那几家店。人类的棋谱再多，也只是所有可能的下法里极小的一块。",
+      "html": "<p>现在回头想想围棋。照着人类棋谱学，相当于什么？相当于认准了人类去过的那几家店。人类的棋谱再多，也只是所有可能的下法里极小的一块。</p>\n",
+      "id": "upper-03-586dc7d803d9"
+    },
+    {
+      "type": "prose",
+      "text": "不过，在回到首尔之前，请先注意午饭这个例子里一件容易滑过去的事：从头到尾，没有人告诉你正确答案是哪家店。 你得到的只是每顿饭之后的一个感受：好吃，或者不好吃。",
+      "html": "<p>不过，在回到首尔之前，请先注意午饭这个例子里一件容易滑过去的事：从头到尾，<strong>没有人告诉你正确答案是哪家店。</strong> 你得到的只是每顿饭之后的一个感受：好吃，或者不好吃。</p>\n",
+      "id": "upper-03-dc60aa90a463"
+    },
+    {
+      "type": "prose",
+      "text": "这和上一章很不一样。上一章，每个例子都附着答案。这里只有打分。做了一个动作，世界回你一个分数，你自己琢磨下回怎么做。这种学法叫强化学习。",
+      "html": "<p>这和上一章很不一样。上一章，每个例子都附着答案。这里只有打分。做了一个动作，世界回你一个分数，你自己琢磨下回怎么做。这种学法叫<strong>强化学习</strong>。</p>\n",
+      "id": "upper-03-96c7d6840b60"
+    },
+    {
+      "type": "image",
+      "alt": "做一步，看一步：强化学习的基本回路。",
+      "caption": "做一步，看一步：强化学习的基本回路。",
+      "available": true,
+      "src": "/media/387542d13f6679fe.png",
+      "id": "upper-03-07696db41560",
+      "previewWidth": 960,
+      "previewSrc": "/media/e21484320d23e0becf72bc37.webp",
+      "height": 840,
+      "previewHeight": 448,
+      "srcSet": "/media/e21484320d23e0becf72bc37.webp 960w, /media/387542d13f6679fe.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "给资料助手造第三块零件：食堂打饭调旋钮",
+      "id": "upper-03-3ef48fe03ec8"
+    },
+    {
+      "type": "prose",
+      "text": "刚才去哪家店吃饭，我们记的是一个账本：每家店吃过几次、平均几分，再留出十分之一的日子换口味。",
+      "html": "<p>刚才去哪家店吃饭，我们记的是一个账本：每家店吃过几次、平均几分，再留出十分之一的日子换口味。</p>\n",
+      "id": "upper-03-d5781e938cb5"
+    },
+    {
+      "type": "prose",
+      "text": "可我们的资料助手将来要干的事是开口挑词。词典里有几千个词，每个词前面还有千变万化的句子，没法给每种情况单独记一本账。上一章的 Value 让我们看清了参数怎样往上调、往下调。这一回先把旋钮当成普通小数，用手写梯度看清更新方向；下面的 reinforce.py 不调用 value.py，继承的是“按反馈调参数”的思路。",
+      "html": "<p>可我们的资料助手将来要干的事是开口挑词。词典里有几千个词，每个词前面还有千变万化的句子，没法给每种情况单独记一本账。上一章的 <code>Value</code> 让我们看清了参数怎样往上调、往下调。这一回先把旋钮当成普通小数，用手写梯度看清更新方向；下面的 <code>reinforce.py</code> 不调用 <code>value.py</code>，继承的是“按反馈调参数”的思路。</p>\n",
+      "id": "upper-03-81c34a0c3b62"
+    },
+    {
+      "type": "prose",
+      "text": "如果没有标准答案，只有一个饭后的打分（好吃是 1，不好吃是 0），怎么调这些旋钮？",
+      "html": "<p>如果没有标准答案，只有一个饭后的打分（好吃是 <code>1</code>，不好吃是 <code>0</code>），怎么调这些旋钮？</p>\n",
+      "id": "upper-03-46d961681f13"
+    },
+    {
+      "type": "prose",
+      "text": "这就好比你在学校食堂打饭，心里有个“平时平均水平”。今天这盘菜如果比平时好吃，明天就多盛一勺、把另外两道菜少盛一点；如果比平时难吃，明天就绕着这道菜走。",
+      "html": "<p>这就好比你在学校食堂打饭，心里有个“平时平均水平”。<strong>今天这盘菜如果比平时好吃，明天就多盛一勺、把另外两道菜少盛一点；如果比平时难吃，明天就绕着这道菜走。</strong></p>\n",
+      "id": "upper-03-57e258d81309"
+    },
+    {
+      "type": "image",
+      "alt": "三家小店并排开着，门前脚印疏密不同，食客正朝右侧店铺走去。",
+      "caption": "午饭选哪家？每顿饭的评价都会影响下一次选择。",
+      "available": true,
+      "src": "/media/3d8d3773bd6c08b914d05c48.webp",
+      "id": "upper-03-90a9af93db72",
+      "previewWidth": 960,
+      "previewSrc": "/media/7d11910adb9859136335c3f3.webp",
+      "height": 720,
+      "previewHeight": 540,
+      "srcSet": "/media/7d11910adb9859136335c3f3.webp 960w, /media/3d8d3773bd6c08b914d05c48.webp 1280w",
+      "width": 1280
+    },
+    {
+      "type": "prose",
+      "text": "1992 年，Ronald Williams——就是上一章那篇四页反向传播论文的第三位作者——把这句大白话写成了一个通用的算法，起名叫 REINFORCE。我们来给资料助手打第三块零件 reinforce.py：",
+      "html": "<p>1992 年，Ronald Williams——就是上一章那篇四页反向传播论文的第三位作者——把这句大白话写成了一个通用的算法，起名叫 <strong>REINFORCE</strong>。我们来给资料助手打第三块零件 <code>reinforce.py</code>：</p>\n",
+      "id": "upper-03-2128ed88ec8b"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])",
+      "text": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])",
+      "runnable": true,
+      "filename": "reinforce.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-03-73948cd6d02a"
+    },
+    {
+      "type": "prose",
+      "text": "这里连“十分之一的日子换口味”都不用单独写了：只要把握还没涨到 100%，抓阄的时候它自然会偶尔去别的店转转；等哪家店真的全面胜出，把握涨高了，它自己就会收心。跑一下：",
+      "html": "<p>这里连“十分之一的日子换口味”都不用单独写了：只要把握还没涨到 100%，抓阄的时候它自然会偶尔去别的店转转；等哪家店真的全面胜出，把握涨高了，它自己就会收心。跑一下：</p>\n",
+      "id": "upper-03-ec08dcc169ff"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "1000 顿后去三家店的把握： [0.01, 0.01, 0.97]",
+      "text": "1000 顿后去三家店的把握： [0.01, 0.01, 0.97]",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-966651bd5330"
+    },
+    {
+      "type": "prose",
+      "text": "它把 97% 的把握都押在了第三家店上。",
+      "html": "<p>它把 97% 的把握都押在了第三家店上。</p>\n",
+      "id": "upper-03-68dfc37a7ad3"
+    },
+    {
+      "type": "prose",
+      "text": "请记住 adv = reward - avg 那一行：重要的不是拿了几分，而是比平时多拿了几分。 到第 05 章教大模型“照人的喜好说话”、第 06 章教模型“自己多想几步”的时候，用的还是这同一把锤子。",
+      "html": "<p>请记住 <code>adv = reward - avg</code> 那一行：<strong>重要的不是拿了几分，而是比平时多拿了几分。</strong> 到第 05 章教大模型“照人的喜好说话”、第 06 章教模型“自己多想几步”的时候，用的还是这同一把锤子。</p>\n",
+      "id": "upper-03-3b33dd2e54fa"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "分数来得太晚怎么办",
+      "id": "upper-03-0db217a74176"
+    },
+    {
+      "type": "prose",
+      "text": "午饭还有个让人省心的地方：吃完马上就知道好不好吃。",
+      "html": "<p>午饭还有个让人省心的地方：吃完马上就知道好不好吃。</p>\n",
+      "id": "upper-03-a6260ec945f4"
+    },
+    {
+      "type": "prose",
+      "text": "下棋可没这么痛快。一盘棋几百手，中间没有任何人给你打分，只有到最后才有一个结果：赢了，或者输了。",
+      "html": "<p>下棋可没这么痛快。一盘棋几百手，中间没有任何人给你打分，只有到最后才有一个结果：赢了，或者输了。</p>\n",
+      "id": "upper-03-e87b5100a073"
+    },
+    {
+      "type": "prose",
+      "text": "上一章我们是在空间（计算图）上倒着做 DP，把误差算回去。现在同一个问题搬到了时间上：最后输了，前面两百多步，哪一步该负责？",
+      "html": "<p>上一章我们是在<strong>空间</strong>（计算图）上倒着做 DP，把误差算回去。现在同一个问题搬到了<strong>时间</strong>上：最后输了，前面两百多步，哪一步该负责？</p>\n",
+      "id": "upper-03-57ac52be7e24"
+    },
+    {
+      "type": "prose",
+      "text": "我们造一个最小的例子来对付它。一个 5×5 的迷宫，# 是墙，从左上角的 S 走到右下角的 G：",
+      "html": "<p>我们造一个最小的例子来对付它。一个 5×5 的迷宫，<code>#</code> 是墙，从左上角的 S 走到右下角的 G：</p>\n",
+      "id": "upper-03-3bb91f19e234"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "S....\n.###.\n..C..\n.###.\n....G",
+      "text": "S....\n.###.\n..C..\n.###.\n....G",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-76885c39c53a"
+    },
+    {
+      "type": "prose",
+      "text": "规矩很苛刻：只有踩上终点的那一步给 10 分。别的每一步都倒扣 0.1 分，免得它磨蹭。中间那个 C，暂时当它是块普通的空地。",
+      "html": "<p>规矩很苛刻：只有踩上终点的那一步给 10 分。别的每一步都倒扣 0.1 分，免得它磨蹭。中间那个 C，暂时当它是块普通的空地。</p>\n",
+      "id": "upper-03-01ec358761bf"
+    },
+    {
+      "type": "prose",
+      "text": "没有地图，没有人指路。它一开始只会乱撞。",
+      "html": "<p>没有地图，没有人指路。它一开始只会乱撞。</p>\n",
+      "id": "upper-03-b7831d881e41"
+    },
+    {
+      "type": "prose",
+      "text": "动手之前，先想一个问题。假如蒙着眼在里面乱撞的是你，撞上了几百次终点以后，你是怎么慢慢摸出门道的？",
+      "html": "<p>动手之前，先想一个问题。假如蒙着眼在里面乱撞的是你，撞上了几百次终点以后，你是怎么慢慢摸出门道的？</p>\n",
+      "id": "upper-03-fac9358cc54d"
+    },
+    {
+      "type": "prose",
+      "text": "你大概会先记住：终点旁边那一格是个好地方，因为从那儿再走一步就到了。然后你会发现，能走到那一格的格子，也不错。再然后，能走到“能走到那一格的格子”的格子……",
+      "html": "<p>你大概会先记住：<strong>终点旁边那一格是个好地方</strong>，因为从那儿再走一步就到了。然后你会发现，能走到那一格的格子，也不错。再然后，能走到“能走到那一格的格子”的格子……</p>\n",
+      "id": "upper-03-463783c062df"
+    },
+    {
+      "type": "prose",
+      "text": "好地方的名声，就这样从终点开始，在时间轴上一格一格地倒着往回传——和上一章的 DP 是同一个路数，只不过现在是边走边用下一步的估计更新这一步。",
+      "html": "<p>好地方的名声，就这样从终点开始，在时间轴上一格一格地倒着往回传——和上一章的 DP 是同一个路数，只不过现在是边走边用下一步的估计更新这一步。</p>\n",
+      "id": "upper-03-18969ad2a5c0"
+    },
+    {
+      "type": "prose",
+      "text": "程序给每个“位置加动作”记一个数，意思是“从这儿这么走，往后一共大概还能拿多少分”。每走一步，就用下面这句话修正一次：",
+      "html": "<p>程序给每个“位置加动作”记一个数，意思是“从这儿这么走，往后一共大概还能拿多少分”。每走一步，就用下面这句话修正一次：</p>\n",
+      "id": "upper-03-75ede3905fa1"
+    },
+    {
+      "type": "prose",
+      "text": "我对这一步的估计 ＝ 这一步当场拿到的分 ＋ 我对下一格的估计",
+      "html": "<blockquote>\n<p>我对这一步的估计 ＝ 这一步当场拿到的分 ＋ 我对下一格的估计</p>\n</blockquote>\n",
+      "id": "upper-03-6624385f4bad"
+    },
+    {
+      "type": "prose",
+      "text": "它不等终局。它用下一步的估计，来修正这一步的估计。",
+      "html": "<p>它不等终局。它用下一步的估计，来修正这一步的估计。</p>\n",
+      "id": "upper-03-bca2ef9e5409"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)",
+      "text": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)",
+      "runnable": true,
+      "filename": "maze.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-03-833d70184d44"
+    },
+    {
+      "type": "prose",
+      "text": "train 里带 0.95 的那一行，就是上面那句话（0.95 的意思是：晚拿到的分，稍微打点折）。其余的你都见过：0.1 的机会乱走一步，是在“换口味”。",
+      "html": "<p><code>train</code> 里带 <code>0.95</code> 的那一行，就是上面那句话（<code>0.95</code> 的意思是：晚拿到的分，稍微打点折）。其余的你都见过：<code>0.1</code> 的机会乱走一步，是在“换口味”。</p>\n",
+      "id": "upper-03-6ac4554e1506"
+    },
+    {
+      "type": "prose",
+      "text": "让它练三千局，然后看它怎么走。走几步能到？",
+      "html": "<p>让它练三千局，然后看它怎么走。走几步能到？</p>\n",
+      "id": "upper-03-71dd68dabf27"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "金币：没有\n它的走法：↓ ↓ → → → → ↓ ↓\n结果：到了终点，一共 9.3 分\n它心里的地图（站在每一格，估计往后还能拿多少分）：\n 6.4  6.8  7.3  7.8  8.3 \n 6.8  墙   墙   墙   8.8 \n 7.3  7.8  8.3  8.8  9.4 \n 6.8  墙   墙   墙  10.0 \n 5.2  7.5  9.1 10.0 终点 ",
+      "text": "金币：没有\n它的走法：↓ ↓ → → → → ↓ ↓\n结果：到了终点，一共 9.3 分\n它心里的地图（站在每一格，估计往后还能拿多少分）：\n 6.4  6.8  7.3  7.8  8.3 \n 6.8  墙   墙   墙   8.8 \n 7.3  7.8  8.3  8.8  9.4 \n 6.8  墙   墙   墙  10.0 \n 5.2  7.5  9.1 10.0 终点 ",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-c8ff22ef4a55"
+    },
+    {
+      "type": "prose",
+      "text": "八步，一步冤枉路都没有。",
+      "html": "<p>八步，一步冤枉路都没有。</p>\n",
+      "id": "upper-03-952a1fd5fdcc"
+    },
+    {
+      "type": "prose",
+      "text": "下面那张数字表更值得看，那是它心里的地图。",
+      "html": "<p>下面那张数字表更值得看，那是它心里的地图。</p>\n",
+      "id": "upper-03-1976f1d21605"
+    },
+    {
+      "type": "image",
+      "alt": "它心里的地图：分数从终点开始，一格一格往回渗。",
+      "caption": "它心里的地图：分数从终点开始，一格一格往回渗。",
+      "available": true,
+      "src": "/media/140fdac92a361f1c.png",
+      "id": "upper-03-c3f0a7bd699c",
+      "previewWidth": 960,
+      "previewSrc": "/media/2a2db91b8bd18e78a29edbc7.webp",
+      "height": 975,
+      "previewHeight": 520,
+      "srcSet": "/media/2a2db91b8bd18e78a29edbc7.webp 960w, /media/140fdac92a361f1c.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "我们只在终点给过分。可是现在，每一格上都有了一个数，而且离终点越近数越大。站在起点，它不需要“看见”终点，只需要往数大的那边迈一步。",
+      "html": "<p>我们只在终点给过分。可是现在，每一格上都有了一个数，而且离终点越近数越大。站在起点，它不需要“看见”终点，只需要往数大的那边迈一步。</p>\n",
+      "id": "upper-03-e2201be13ec6"
+    },
+    {
+      "type": "prose",
+      "text": "这个“我现在的处境有多好”的估计，有个正式的名字，叫价值。它就是“账该算在谁头上”的答案：不用等到终局再回头分功劳，每一步都当场记一笔。",
+      "html": "<p>这个“我现在的处境有多好”的估计，有个正式的名字，叫<strong>价值</strong>。它就是“账该算在谁头上”的答案：不用等到终局再回头分功劳，每一步都当场记一笔。</p>\n",
+      "id": "upper-03-7de9b5de5560"
+    },
+    {
+      "type": "prose",
+      "text": "这个主意不新。早在 1959 年，IBM 的 Arthur Samuel 就让一个程序用类似的办法学下跳棋，“机器学习”这个词就是他那篇论文带火的。上一章结尾提到的那件事，是这个主意第一次真正惊到人。",
+      "html": "<p>这个主意不新。早在 1959 年，IBM 的 Arthur Samuel 就让一个程序用类似的办法学下跳棋，“机器学习”这个词就是他那篇论文带火的。上一章结尾提到的那件事，是这个主意第一次真正惊到人。</p>\n",
+      "id": "upper-03-1b8251b6a50b"
+    },
+    {
+      "type": "prose",
+      "text": "1992 年，IBM 的研究员 Gerald Tesauro 让一个神经网络自己和自己下西洋双陆棋。它每走一步，就估计一次“我现在有几成胜算”，再用下一步的估计来修正。没有棋谱，没有老师。它和自己下了一百多万盘。",
+      "html": "<p>1992 年，IBM 的研究员 Gerald Tesauro 让一个神经网络自己和自己下西洋双陆棋。它每走一步，就估计一次“我现在有几成胜算”，再用下一步的估计来修正。没有棋谱，没有老师。它和自己下了一百多万盘。</p>\n",
+      "id": "upper-03-02e2efb1b2f1"
+    },
+    {
+      "type": "image",
+      "alt": "没有棋谱，没有老师。对手是它自己。",
+      "caption": "没有棋谱，没有老师。对手是它自己。",
+      "available": true,
+      "src": "/media/4a67455551c0ccc8da698e08.webp",
+      "id": "upper-03-fdbd58f518df",
+      "previewWidth": 960,
+      "previewSrc": "/media/f4bd419ddb982f6914e6e3c8.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/f4bd419ddb982f6914e6e3c8.webp 960w, /media/4a67455551c0ccc8da698e08.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "这个叫 TD-Gammon 的程序，最后的水平逼近了当时世界上最好的人类棋手。更有意思的是后面的事：有几种开局，它的走法和高手们沿用了多年的走法不一样。高手们拿它的走法去比赛里试，发现它是对的。没过几年，老走法在比赛里几乎绝迹了。",
+      "html": "<p>这个叫 TD-Gammon 的程序，最后的水平逼近了当时世界上最好的人类棋手。更有意思的是后面的事：有几种开局，它的走法和高手们沿用了多年的走法不一样。高手们拿它的走法去比赛里试，发现它是对的。没过几年，老走法在比赛里几乎绝迹了。</p>\n",
+      "id": "upper-03-196910761a0f"
+    },
+    {
+      "type": "prose",
+      "text": "人开始跟机器学下棋了。不过那是西洋双陆棋。轮到围棋，还要再等二十四年。",
+      "html": "<p>人开始跟机器学下棋了。不过那是西洋双陆棋。轮到围棋，还要再等二十四年。</p>\n",
+      "id": "upper-03-7afc15dbd7b8"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "回到首尔",
+      "id": "upper-03-860e1b81828a"
+    },
+    {
+      "type": "prose",
+      "text": "现在可以回大厅了。你手里已经有了看懂 AlphaGo 的全部零件。",
+      "html": "<p>现在可以回大厅了。你手里已经有了看懂 AlphaGo 的全部零件。</p>\n",
+      "id": "upper-03-a03674de8734"
+    },
+    {
+      "type": "image",
+      "alt": "AlphaGo 的三样本事：直觉和判断是学出来的，推演是算出来的。",
+      "caption": "AlphaGo 的三样本事：直觉和判断是学出来的，推演是算出来的。",
+      "available": true,
+      "src": "/media/8400b2125bde5fc0.png",
+      "id": "upper-03-f770246a94e0",
+      "previewWidth": 960,
+      "previewSrc": "/media/c538c9affa1af1d7a65fb2b4.webp",
+      "height": 900,
+      "previewHeight": 480,
+      "srcSet": "/media/c538c9affa1af1d7a65fb2b4.webp 960w, /media/8400b2125bde5fc0.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "直觉：面对一个局面，哪几个落点有戏。这是一个很深的神经网络，它先看了大量人类高手的棋谱，这是上一章的办法。然后它开始和自己下棋，赢了的下法多用，输了的少用，这是这一章的办法。",
+      "html": "<p><strong>直觉</strong>：面对一个局面，哪几个落点有戏。这是一个很深的神经网络，它先看了大量人类高手的棋谱，这是上一章的办法。然后它开始和自己下棋，赢了的下法多用，输了的少用，这是这一章的办法。</p>\n",
+      "id": "upper-03-4a77072c5663"
+    },
+    {
+      "type": "prose",
+      "text": "判断：这个局面，我有几成胜算。这就是迷宫里那张数字地图，只不过格子换成了围棋的局面，查表换成了另一个神经网络。",
+      "html": "<p><strong>判断</strong>：这个局面，我有几成胜算。这就是迷宫里那张数字地图，只不过格子换成了围棋的局面，查表换成了另一个神经网络。</p>\n",
+      "id": "upper-03-348cb2e1ff0d"
+    },
+    {
+      "type": "prose",
+      "text": "推演：顺着直觉推荐的那几手往后算，算到一定深度，用判断来打分。深蓝也推演，可它是每条路都算；AlphaGo 只算有戏的那几条。",
+      "html": "<p><strong>推演</strong>：顺着直觉推荐的那几手往后算，算到一定深度，用判断来打分。深蓝也推演，可它是每条路都算；AlphaGo 只算有戏的那几条。</p>\n",
+      "id": "upper-03-bf0d8f9f7c8c"
+    },
+    {
+      "type": "prose",
+      "text": "规则写不出来的“棋感”，它用学的办法补上了。从第 01 章走到这儿，这是一次完整的示范：写不出规则的地方，让它自己学。",
+      "html": "<p>规则写不出来的“棋感”，它用学的办法补上了。从第 01 章走到这儿，这是一次完整的示范：<strong>写不出规则的地方，让它自己学。</strong></p>\n",
+      "id": "upper-03-a8fe2b66db82"
+    },
+    {
+      "type": "prose",
+      "text": "那么，第 37 手呢？",
+      "html": "<p>那么，第 37 手呢？</p>\n",
+      "id": "upper-03-9dec83a738be"
+    },
+    {
+      "type": "prose",
+      "text": "AlphaGo 赢了第二局。复盘的时候，越来越多的棋手说，第 37 手是这盘棋的胜负手，而且，很美。",
+      "html": "<p>AlphaGo 赢了第二局。复盘的时候，越来越多的棋手说，第 37 手是这盘棋的胜负手，而且，很美。</p>\n",
+      "id": "upper-03-c8d9daba3fe4"
+    },
+    {
+      "type": "prose",
+      "text": "赛后 DeepMind 公布了一个数字。按 AlphaGo 自己从人类棋谱里学来的直觉估算，一位人类棋手在那个局面下出这一手的可能性，大约是万分之一。",
+      "html": "<p>赛后 DeepMind 公布了一个数字。按 AlphaGo 自己从人类棋谱里学来的直觉估算，一位人类棋手在那个局面下出这一手的可能性，大约是万分之一。</p>\n",
+      "id": "upper-03-44f0e4735704"
+    },
+    {
+      "type": "prose",
+      "text": "它知道人不会这么下。它还是下了。",
+      "html": "<p>它知道人不会这么下。它还是下了。</p>\n",
+      "id": "upper-03-62cd162cbf32"
+    },
+    {
+      "type": "prose",
+      "text": "因为在它和自己对弈的那几百万盘棋里，它偶尔“换过口味”，试过人类没走过的地方，然后它心里那张地图告诉它：这么下，赢得多。",
+      "html": "<p>因为在它和自己对弈的那几百万盘棋里，它偶尔“换过口味”，试过人类没走过的地方，然后它心里那张地图告诉它：这么下，赢得多。</p>\n",
+      "id": "upper-03-4e4829094043"
+    },
+    {
+      "type": "prose",
+      "text": "五局棋的最终比分是 4 比 1。李世石赢的是第四局。那一局他的第 78 手，同样出乎所有人的意料，也同样被估计为万分之一的一手，后来被棋迷称作“神之一手”。",
+      "html": "<p>五局棋的最终比分是 4 比 1。李世石赢的是第四局。那一局他的第 78 手，同样出乎所有人的意料，也同样被估计为万分之一的一手，后来被棋迷称作“神之一手”。</p>\n",
+      "id": "upper-03-2a23fee9c9df"
+    },
+    {
+      "type": "prose",
+      "text": "一年多以后的事情更干脆。2017 年 5 月，乌镇，新版 AlphaGo 三比零赢了当时世界排名第一的柯洁。同年 10 月，DeepMind 发表了 AlphaGo Zero：它一张人类棋谱都不看，只知道规则，从乱下开始，自己和自己练。三天以后，它和打败李世石的那个版本下了一百盘。",
+      "html": "<p>一年多以后的事情更干脆。2017 年 5 月，乌镇，新版 AlphaGo 三比零赢了当时世界排名第一的柯洁。同年 10 月，DeepMind 发表了 AlphaGo Zero：它<strong>一张人类棋谱都不看</strong>，只知道规则，从乱下开始，自己和自己练。三天以后，它和打败李世石的那个版本下了一百盘。</p>\n",
+      "id": "upper-03-999a535a4296"
+    },
+    {
+      "type": "prose",
+      "text": "一百比零。",
+      "html": "<p>一百比零。</p>\n",
+      "id": "upper-03-d2356a6d148c"
+    },
+    {
+      "type": "prose",
+      "text": "人类几千年攒下的棋谱，在这里成了可有可无的东西。读到这里你也许有点兴奋，也许有点不安。两种感觉都对。",
+      "html": "<p>人类几千年攒下的棋谱，在这里成了可有可无的东西。读到这里你也许有点兴奋，也许有点不安。两种感觉都对。</p>\n",
+      "id": "upper-03-d27846844bf6"
+    },
+    {
+      "type": "prose",
+      "text": "但请记住它成立的三个条件，后面的章节会一再用到：规则是清楚的，输赢是明确的，可以不花本钱地练上几百万盘。 围棋三样都有。“给新同事写一份上手指南”，三样都没有。",
+      "html": "<p>但请记住它成立的三个条件，后面的章节会一再用到：<strong>规则是清楚的，输赢是明确的，可以不花本钱地练上几百万盘。</strong> 围棋三样都有。“给新同事写一份上手指南”，三样都没有。</p>\n",
+      "id": "upper-03-794074211789"
+    },
+    {
+      "type": "prose",
+      "text": "🎬 配套视频｜Ep 3.1：第 37 手、中午吃什么与时间上的算账\n",
+      "html": "<p>🎬 <strong>配套视频｜Ep 3.1：第 37 手、中午吃什么与时间上的算账</strong>\n</p>\n",
+      "id": "upper-03-b9f057a4f544"
+    },
+    {
+      "type": "video",
+      "alt": "03-1_第37手中午吃什么与时间算账_v1",
+      "caption": "第 37 手、中午吃什么与时间上的算账",
+      "available": true,
+      "src": "/media/eecf1275f385006ea5b42845.mp4",
+      "id": "upper-03-c510141ab6a9",
+      "poster": "/media/a75a92892419beb697f20430.webp",
+      "duration": 144.102,
+      "height": 1080,
+      "width": 1920,
+      "subtitleSrc": "/course/captions/03-1.vtt"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "趁热打铁，给迷宫加点甜头",
+      "id": "upper-03-3cd1933dbbbd"
+    },
+    {
+      "type": "prose",
+      "text": "回到我们的小迷宫，做一个你一定会想做的改进。",
+      "html": "<p>回到我们的小迷宫，做一个你一定会想做的改进。</p>\n",
+      "id": "upper-03-56da0bb8b4a4"
+    },
+    {
+      "type": "prose",
+      "text": "只有终点给分，它一开始撞来撞去，很久才能碰巧撞上一次终点，学得很慢。那我们帮帮它：在必经之路的正中间放一枚金币，踩到就加 1 分。半路给点甜头，引着它往终点走。",
+      "html": "<p>只有终点给分，它一开始撞来撞去，很久才能碰巧撞上一次终点，学得很慢。那我们帮帮它：在必经之路的正中间放一枚金币，踩到就加 1 分。半路给点甜头，引着它往终点走。</p>\n",
+      "id": "upper-03-40c9de7dbf6d"
+    },
+    {
+      "type": "prose",
+      "text": "很合理吧？做老师的都这么干。",
+      "html": "<p>很合理吧？做老师的都这么干。</p>\n",
+      "id": "upper-03-fd8d64ca05ab"
+    },
+    {
+      "type": "prose",
+      "text": "把 maze.py 第四行的 COIN = \"没有\" 改成 COIN = \"踩到就给\"，再练一次。你猜它会怎么走？",
+      "html": "<p>把 <code>maze.py</code> 第四行的 <code>COIN = &quot;没有&quot;</code> 改成 <code>COIN = &quot;踩到就给&quot;</code>，再练一次。你猜它会怎么走？</p>\n",
+      "id": "upper-03-660b8307746c"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "金币：踩到就给\n它的走法：↓ ↓ → → ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ……\n结果：50 步用完，没到终点，一共 42.0 分",
+      "text": "金币：踩到就给\n它的走法：↓ ↓ → → ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑ ……\n结果：50 步用完，没到终点，一共 42.0 分",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-ffbddf32fa02"
+    },
+    {
+      "type": "prose",
+      "text": "42 分。比老老实实走到终点的 9.3 分高出一大截。",
+      "html": "<p>42 分。比老老实实走到终点的 9.3 分高出一大截。</p>\n",
+      "id": "upper-03-27b7850de026"
+    },
+    {
+      "type": "prose",
+      "text": "可它没到终点。看它的走法：下，下，右，右，然后一直“上，上，上，上……”",
+      "html": "<p>可它没到终点。看它的走法：下，下，右，右，然后一直“上，上，上，上……”</p>\n",
+      "id": "upper-03-57ef4c9585d9"
+    },
+    {
+      "type": "prose",
+      "text": "金币上面那一格是墙。它站在金币上往墙上撞，撞墙等于原地不动，原地不动等于又“踩”了一次金币。每撞一下，净赚 0.9 分。它一口气撞了 46 下。",
+      "html": "<p>金币上面那一格是墙。它站在金币上往墙上撞，撞墙等于原地不动，原地不动等于又“踩”了一次金币。每撞一下，净赚 0.9 分。它一口气撞了 46 下。</p>\n",
+      "id": "upper-03-41689f528fa9"
+    },
+    {
+      "type": "prose",
+      "text": "我得坦白：写这段代码的时候，我想的只是“路过金币，顺手加一分”。撞墙也算踩到，是我没想到的。真实世界里的漏洞多半就是这样来的：不是谁故意留的，只是没想到。",
+      "html": "<p>我得坦白：写这段代码的时候，我想的只是“路过金币，顺手加一分”。撞墙也算踩到，是我没想到的。真实世界里的漏洞多半就是这样来的：不是谁故意留的，只是没想到。</p>\n",
+      "id": "upper-03-4ed17c28e2d9"
+    },
+    {
+      "type": "prose",
+      "text": "没关系，补上就好。把那一行再改成 COIN = \"走进来才给\"：必须从别的格子走进金币格，才算数。撞墙不算了。",
+      "html": "<p>没关系，补上就好。把那一行再改成 <code>COIN = &quot;走进来才给&quot;</code>：必须从别的格子走进金币格，才算数。撞墙不算了。</p>\n",
+      "id": "upper-03-2d301ca9769a"
+    },
+    {
+      "type": "prose",
+      "text": "这回它该去终点了吧？",
+      "html": "<p>这回它该去终点了吧？</p>\n",
+      "id": "upper-03-8c79a4bc6cb6"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "金币：走进来才给\n它的走法：↓ ↓ → → ← → ← → ← → ← → ← → ……\n结果：50 步用完，没到终点，一共 19.0 分",
+      "text": "金币：走进来才给\n它的走法：↓ ↓ → → ← → ← → ← → ← → ← → ……\n结果：50 步用完，没到终点，一共 19.0 分",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-710b07909f5e"
+    },
+    {
+      "type": "prose",
+      "text": "右，左，右，左，右，左。",
+      "html": "<p>右，左，右，左，右，左。</p>\n",
+      "id": "upper-03-90cbf614a9cc"
+    },
+    {
+      "type": "prose",
+      "text": "它在金币格和旁边那一格之间来回踱步，每进一次门，领一次赏。19 分，还是比去终点划算。",
+      "html": "<p>它在金币格和旁边那一格之间来回踱步，每进一次门，领一次赏。19 分，还是比去终点划算。</p>\n",
+      "id": "upper-03-4a5a5cd0497a"
+    },
+    {
+      "type": "image",
+      "alt": "分数怎么给，它就怎么学。",
+      "caption": "分数怎么给，它就怎么学。",
+      "available": true,
+      "src": "/media/7831eca7b67ec57c.png",
+      "id": "upper-03-05a3697c27c0",
+      "previewWidth": 960,
+      "previewSrc": "/media/4362f630485851d7d11bea90.webp",
+      "height": 960,
+      "previewHeight": 512,
+      "srcSet": "/media/4362f630485851d7d11bea90.webp 960w, /media/7831eca7b67ec57c.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "打了一个补丁，冒出一个新漏洞。这个滋味，你在第 01 章尝过。",
+      "html": "<p>打了一个补丁，冒出一个新漏洞。这个滋味，你在第 01 章尝过。</p>\n",
+      "id": "upper-03-660c6a917ee0"
+    },
+    {
+      "type": "prose",
+      "text": "当然可以再补：金币每局只许领一次行不行？",
+      "html": "<p>当然可以再补：金币每局只许领一次行不行？</p>\n",
+      "id": "upper-03-b90e71154888"
+    },
+    {
+      "type": "prose",
+      "text": "行，不过动手前还得改一个小地方。上一次来金币格，还没领过，应该有奖；下一次回到同一个格子，已经领过了，就没有奖。如果程序只记坐标，这两种处境在它眼里一模一样。位置一样，事情已经变了。 所以状态里必须多记一件事：本局是否已经领过金币。",
+      "html": "<p>行，不过动手前还得改一个小地方。上一次来金币格，还没领过，应该有奖；下一次回到同一个格子，已经领过了，就没有奖。如果程序只记坐标，这两种处境在它眼里一模一样。<strong>位置一样，事情已经变了。</strong> 所以状态里必须多记一件事：<code>本局是否已经领过金币</code>。</p>\n",
+      "id": "upper-03-6f2cf05ce56b"
+    },
+    {
+      "type": "prose",
+      "text": "把四种模式各自用 10 个随机种子跑一遍，结果是这样的：",
+      "html": "<p>把四种模式各自用 10 个随机种子跑一遍，结果是这样的：</p>\n",
+      "id": "upper-03-6b76058af9ad"
+    },
+    {
+      "type": "prose",
+      "text": "奖励方式\n50 步内到终点的次数\n种子 0 的情况\n不给金币\n10 / 10\n8 步到达，9.3 分\n只要还在金币格就给\n0 / 10\n撞墙领钱，42.0 分\n每次从别处走进来才给\n2 / 10\n来回领钱，19.0 分\n每局只给一次，并记录是否领过\n10 / 10\n8 步到达，10.3 分",
+      "html": "<table>\n<thead>\n<tr>\n  <th>奖励方式</th>\n  <th>50 步内到终点的次数</th>\n  <th>种子 0 的情况</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td>不给金币</td>\n  <td>10 / 10</td>\n  <td>8 步到达，9.3 分</td>\n</tr>\n<tr>\n  <td>只要还在金币格就给</td>\n  <td>0 / 10</td>\n  <td>撞墙领钱，42.0 分</td>\n</tr>\n<tr>\n  <td>每次从别处走进来才给</td>\n  <td>2 / 10</td>\n  <td>来回领钱，19.0 分</td>\n</tr>\n<tr>\n  <td>每局只给一次，并记录是否领过</td>\n  <td>10 / 10</td>\n  <td>8 步到达，10.3 分</td>\n</tr>\n</tbody>\n</table>\n",
+      "id": "upper-03-b975b7f302ce"
+    },
+    {
+      "type": "prose",
+      "text": "每局只给一次、且把“领没领过”写进状态以后，它终于又老老实实 8 步走到了终点。可别忘了：原来不发金币的版本本来就能 10/10 到达终点，不能因为 10.3 比 9.3 高，就以为中途加金币变强了——计分规则变了，总分不能横着比。",
+      "html": "<p>每局只给一次、且把“领没领过”写进状态以后，它终于又老老实实 8 步走到了终点。可别忘了：原来不发金币的版本本来就能 10/10 到达终点，不能因为 <code>10.3</code> 比 <code>9.3</code> 高，就以为中途加金币变强了——计分规则变了，总分不能横着比。</p>\n",
+      "id": "upper-03-d8437450ee80"
+    },
+    {
+      "type": "prose",
+      "text": "更重要的是，请想想我们刚才在做什么：我们本来只想说一句“请走到终点”，结果却在和一个 25 格的迷宫斗智斗勇。",
+      "html": "<p>更重要的是，请想想我们刚才在做什么：我们本来只想说一句“请走到终点”，结果却在和一个 25 格的迷宫斗智斗勇。</p>\n",
+      "id": "upper-03-724deaa044e8"
+    },
+    {
+      "type": "prose",
+      "text": "这不是玩具才有的毛病。2016 年底，OpenAI 的研究者发了一篇博客，讲他们训练程序玩一个赛艇游戏。人人都知道这游戏该干什么：把船开到终点。他们给程序的分数，用的是游戏里现成的得分。",
+      "html": "<p>这不是玩具才有的毛病。2016 年底，OpenAI 的研究者发了一篇博客，讲他们训练程序玩一个赛艇游戏。人人都知道这游戏该干什么：把船开到终点。他们给程序的分数，用的是游戏里现成的得分。</p>\n",
+      "id": "upper-03-2b9aa8113d92"
+    },
+    {
+      "type": "prose",
+      "text": "程序在赛道边上发现了一小片水湾。水湾里有三个得分的靶子，撞掉以后过一会儿会重新冒出来。于是它就不走了。它在水湾里一圈一圈地转，掐着时间把刚冒出来的靶子再撞掉。船撞了墙，着了火，逆行了，都不要紧。它一次也没跑完过比赛，得分却比人类玩家平均高出 20%。",
+      "html": "<p>程序在赛道边上发现了一小片水湾。水湾里有三个得分的靶子，撞掉以后过一会儿会重新冒出来。于是它就不走了。它在水湾里一圈一圈地转，掐着时间把刚冒出来的靶子再撞掉。船撞了墙，着了火，逆行了，都不要紧。它一次也没跑完过比赛，得分却比人类玩家平均高出 20%。</p>\n",
+      "id": "upper-03-7e6359732732"
+    },
+    {
+      "type": "image",
+      "alt": "它一次也没跑完过比赛。得分比人类玩家高 20%。",
+      "caption": "它一次也没跑完过比赛。得分比人类玩家高 20%。",
+      "available": true,
+      "src": "/media/76f3ef57f88c7101929f24c3.webp",
+      "id": "upper-03-eb68eb726492",
+      "previewWidth": 960,
+      "previewSrc": "/media/bed8552a179068b259cf829b.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/bed8552a179068b259cf829b.webp 960w, /media/76f3ef57f88c7101929f24c3.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "它作弊了吗？",
+      "html": "<p>它作弊了吗？</p>\n",
+      "id": "upper-03-27b2b3e1e451"
+    },
+    {
+      "type": "prose",
+      "text": "没有。它做的，正是我们写下来的那件事：拿高分。只不过，“拿高分”和我们心里想的“赢比赛”，中间有一条缝。",
+      "html": "<p>没有。它做的，正是我们写下来的那件事：拿高分。只不过，“拿高分”和我们心里想的“赢比赛”，中间有一条缝。</p>\n",
+      "id": "upper-03-4345654d5518"
+    },
+    {
+      "type": "prose",
+      "text": "分数只是目标的替身。 一个足够卖力的学习者，会把替身和目标之间的每一条缝都找出来。",
+      "html": "<p><strong>分数只是目标的替身。</strong> 一个足够卖力的学习者，会把替身和目标之间的每一条缝都找出来。</p>\n",
+      "id": "upper-03-7113d524fb57"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "给资料助手的回答打分",
+      "id": "upper-03-bc734c2357af"
+    },
+    {
+      "type": "prose",
+      "text": "这件事和我们的资料助手有什么关系？关系很大。",
+      "html": "<p>这件事和我们的资料助手有什么关系？关系很大。</p>\n",
+      "id": "upper-03-95a0f1deabef"
+    },
+    {
+      "type": "prose",
+      "text": "将来我们想让它不只会给问题分类，还要会回答问题，并且越答越好。越答越好，就得先说清楚什么叫“好”。也就是说，我们得写一个打分的办法。",
+      "html": "<p>将来我们想让它不只会给问题分类，还要会回答问题，并且越答越好。越答越好，就得先说清楚什么叫“好”。也就是说，我们得写一个打分的办法。</p>\n",
+      "id": "upper-03-7164ceeb2f43"
+    },
+    {
+      "type": "prose",
+      "text": "试试看。一个直觉上很合理的想法：回答里和问题重合的字越多，说明越切题；回答越长，说明越详细。",
+      "html": "<p>试试看。一个直觉上很合理的想法：回答里和问题重合的字越多，说明越切题；回答越长，说明越详细。</p>\n",
+      "id": "upper-03-fe1218dfb64d"
+    },
+    {
+      "type": "prose",
+      "text": "准备四个候选回答：一个认真的，一个简短的，一个“不知道”，还有一个我故意写的。你先读一读代码里的四个回答，猜猜哪个得分最高：",
+      "html": "<p>准备四个候选回答：一个认真的，一个简短的，一个“不知道”，还有一个我故意写的。你先读一读代码里的四个回答，猜猜哪个得分最高：</p>\n",
+      "id": "upper-03-8952b985d3f4"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")",
+      "text": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")",
+      "runnable": true,
+      "filename": "reward.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-03-e656523bdc05"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "== 第一版打分\n 49.6  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  7.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。\n== 第二版打分\n  9.0  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  6.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。",
+      "text": "== 第一版打分\n 49.6  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  7.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。\n== 第二版打分\n  9.0  账号账号申请申请，账号怎么申请？申请账号很重要，……\n  6.3  请在入职系统提交账号申请，经理审批后即可开通。\n  5.3  账号申请见上手指南第一节。\n  0.4  不知道。",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-75e0dc030f7c"
+    },
+    {
+      "type": "prose",
+      "text": "第一版打分，那段翻来覆去念叨“账号申请”的废话得了 49.6 分，认真回答的那一句只有 7.3 分。",
+      "html": "<p>第一版打分，那段翻来覆去念叨“账号申请”的废话得了 49.6 分，认真回答的那一句只有 7.3 分。</p>\n",
+      "id": "upper-03-1979ed3c6034"
+    },
+    {
+      "type": "prose",
+      "text": "我们打个补丁（是的，又是补丁）：重合的字只算一次，长度封顶 30 个字。结果在下半段：废话 9.0 分，认真的回答 6.3 分。还是废话赢。",
+      "html": "<p>我们打个补丁（是的，又是补丁）：重合的字只算一次，长度封顶 30 个字。结果在下半段：废话 9.0 分，认真的回答 6.3 分。还是废话赢。</p>\n",
+      "id": "upper-03-7f5e1bd2fd01"
+    },
+    {
+      "type": "prose",
+      "text": "别光靠猜。我们手里已经有 reinforce.py 里的那套“比平时好就多盛一勺”的调旋钮规则，干脆让资料助手真的追着 score_v2 练上 500 轮，看看它会说出什么话来：",
+      "html": "<p>别光靠猜。我们手里已经有 <code>reinforce.py</code> 里的那套“比平时好就多盛一勺”的调旋钮规则，干脆让资料助手<strong>真的追着 <code>score_v2</code> 练上 500 轮</strong>，看看它会说出什么话来：</p>\n",
+      "id": "upper-03-f9d89a9c3a2d"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")",
+      "text": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")",
+      "runnable": true,
+      "filename": "babble.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-03-1c44d3774d9d"
+    },
+    {
+      "type": "prose",
+      "text": "来看看它这 500 轮的“进步”：",
+      "html": "<p>来看看它这 500 轮的“进步”：</p>\n",
+      "id": "upper-03-6c1d7d9e2b5e"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "第   1 轮（5.7 分）：安装申请系统账号请在安装账号请在。\n第  50 轮（5.7 分）：账号系统怎么怎么账号账号账号账号。\n第 500 轮（5.7 分）：账号账号账号怎么账号账号安装即可。",
+      "text": "第   1 轮（5.7 分）：安装申请系统账号请在安装账号请在。\n第  50 轮（5.7 分）：账号系统怎么怎么账号账号账号账号。\n第 500 轮（5.7 分）：账号账号账号怎么账号账号安装即可。",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-03-fc38580d4356"
+    },
+    {
+      "type": "prose",
+      "text": "第 1 轮，它还在说“请在”“系统”。练到第 500 轮，它发现只要把“账号”“怎么”凑齐就能稳稳拿满基础分，干脆把“审批”“开通”全扔了，满嘴念叨“账号账号账号怎么账号”。",
+      "html": "<p>第 1 轮，它还在说“请在”“系统”。练到第 500 轮，它发现只要把“账号”“怎么”凑齐就能稳稳拿满基础分，干脆把“审批”“开通”全扔了，满嘴念叨“账号账号账号怎么账号”。</p>\n",
+      "id": "upper-03-8d0cfd8b5252"
+    },
+    {
+      "type": "prose",
+      "text": "赛艇在水湾里转圈，是别人的故事。这三行输出，是你亲手写出来的程序，在你自己的电脑上转出来的圈。",
+      "html": "<p>赛艇在水湾里转圈，是别人的故事。这三行输出，是你亲手写出来的程序，在你自己的电脑上转出来的圈。</p>\n",
+      "id": "upper-03-1f3287453a68"
+    },
+    {
+      "type": "image",
+      "alt": "你想要的，你写下的，它学会的。",
+      "caption": "你想要的，你写下的，它学会的。",
+      "available": true,
+      "src": "/media/92ba9af652586435.png",
+      "id": "upper-03-5c402ac1b720",
+      "previewWidth": 960,
+      "previewSrc": "/media/7ac3bfd772f446fb2d3dba47.webp",
+      "height": 870,
+      "previewHeight": 464,
+      "srcSet": "/media/7ac3bfd772f446fb2d3dba47.webp 960w, /media/92ba9af652586435.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "那怎么办？规则写的分数总有漏洞，那就别用规则打分了，让人来打。找两个回答，请人看看哪个更好；这样比上几万次，再训练一个模型去模仿人的口味。",
+      "html": "<p>那怎么办？规则写的分数总有漏洞，那就别用规则打分了，让人来打。找两个回答，请人看看哪个更好；这样比上几万次，再训练一个模型去模仿人的口味。</p>\n",
+      "id": "upper-03-b696320bbef1"
+    },
+    {
+      "type": "prose",
+      "text": "这个主意，后来真的成了让大模型“听懂人话”的关键一步，第 05 章会讲。",
+      "html": "<p>这个主意，后来真的成了让大模型“听懂人话”的关键一步，第 05 章会讲。</p>\n",
+      "id": "upper-03-8da10ecd2aba"
+    },
+    {
+      "type": "prose",
+      "text": "不过，你现在读到这个主意，心里应该已经亮起了一盏小灯：人的口味，就不是替身了吗？人喜欢什么样的回答？喜欢口气笃定的。喜欢夸自己的。喜欢顺着自己说的。",
+      "html": "<p>不过，你现在读到这个主意，心里应该已经亮起了一盏小灯：人的口味，就不是替身了吗？人喜欢什么样的回答？喜欢口气笃定的。喜欢夸自己的。喜欢顺着自己说的。</p>\n",
+      "id": "upper-03-7126c0678e04"
+    },
+    {
+      "type": "prose",
+      "text": "一个足够卖力的学习者，会把这些也都找出来。",
+      "html": "<p>一个足够卖力的学习者，会把这些也都找出来。</p>\n",
+      "id": "upper-03-63339d524291"
+    },
+    {
+      "type": "prose",
+      "text": "这盏灯先亮着。到第 05 章，它会派上用场。",
+      "html": "<p>这盏灯先亮着。到第 05 章，它会派上用场。</p>\n",
+      "id": "upper-03-7e39541602a7"
+    },
+    {
+      "type": "prose",
+      "text": "🎬 配套视频｜Ep 3.2：迷宫撞墙、赛艇转圈与 v0.3 的教训\n",
+      "html": "<p>🎬 <strong>配套视频｜Ep 3.2：迷宫撞墙、赛艇转圈与 v0.3 的教训</strong>\n</p>\n",
+      "id": "upper-03-470f3565a1bd"
+    },
+    {
+      "type": "video",
+      "alt": "03-2_迷宫撞墙赛艇转圈与v03教训_v1",
+      "caption": "迷宫撞墙、赛艇转圈与 v0.3 的教训",
+      "available": true,
+      "src": "/media/ed55bcd5cd824e17b50f840b.mp4",
+      "id": "upper-03-f5356ae60189",
+      "poster": "/media/e5b3a9acc283053d6f2cd019.webp",
+      "duration": 131.204,
+      "height": 1080,
+      "width": 1920,
+      "subtitleSrc": "/course/captions/03-2.vtt"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "upper-03-17912e889c19"
+    },
+    {
+      "type": "prose",
+      "text": "这一章，资料助手得到了两样东西：",
+      "html": "<p>这一章，资料助手得到了两样东西：</p>\n",
+      "id": "upper-03-a7256f05446a"
+    },
+    {
+      "type": "prose",
+      "text": "reinforce.py，资料助手的第三块零件——没有标准答案时，怎么按“比平时好多少”来调旋钮。",
+      "html": "<p><code>reinforce.py</code>，资料助手的第三块零件——没有标准答案时，怎么按“比平时好多少”来调旋钮。</p>\n",
+      "id": "upper-03-80d12827203b"
+    },
+    {
+      "type": "prose",
+      "text": "reward.py 与 babble.py，算作 v0.3，一条用血肉实验换来的告诫：每当你写下一个分数让机器去追，先花五分钟想一想：它最省力的拿分办法是什么？ 多半不是你想要的那个。",
+      "html": "<p><code>reward.py</code> 与 <code>babble.py</code>，算作 <strong>v0.3</strong>，一条用血肉实验换来的告诫：<strong>每当你写下一个分数让机器去追，先花五分钟想一想：它最省力的拿分办法是什么？</strong> 多半不是你想要的那个。</p>\n",
+      "id": "upper-03-83df048901bd"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "下一站",
+      "id": "upper-03-fe3366739cd9"
+    },
+    {
+      "type": "prose",
+      "text": "下棋有棋盘，有规则，有输赢，可以和自己下几百万盘。",
+      "html": "<p>下棋有棋盘，有规则，有输赢，可以和自己下几百万盘。</p>\n",
+      "id": "upper-03-bc869cd07312"
+    },
+    {
+      "type": "prose",
+      "text": "说话呢？没有棋盘，没有终局，一句话说出口，也没有人举牌子告诉你赢了还是输了。机器要怎样才能学会说话？",
+      "html": "<p>说话呢？没有棋盘，没有终局，一句话说出口，也没有人举牌子告诉你赢了还是输了。机器要怎样才能学会说话？</p>\n",
+      "id": "upper-03-c22e87a1946b"
+    },
+    {
+      "type": "prose",
+      "text": "下一章，把字变成编号、沿计算图调参数的两样本事，要一起派上用场了。我们会用纯 Python 拼出资料助手的迷你大脑，让它第一次自己开口接下一句。第 03 章按奖励调旋钮的办法，留到后面理解偏好与推理训练时再用，不参加下一词预测这一步。随后再对照 PyTorch 与 MiniMind 的训练骨架；完整的 MiniMind 训练、存盘和重载流程，这一版还没有补齐。",
+      "html": "<p>下一章，把字变成编号、沿计算图调参数的两样本事，要一起派上用场了。我们会用纯 Python 拼出资料助手的迷你大脑，让它第一次自己开口接下一句。第 03 章按奖励调旋钮的办法，留到后面理解偏好与推理训练时再用，不参加下一词预测这一步。随后再对照 PyTorch 与 MiniMind 的训练骨架；完整的 MiniMind 训练、存盘和重载流程，这一版还没有补齐。</p>\n",
+      "id": "upper-03-7960c01f7763"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "upper-03-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "合上书之前，想一想",
+      "id": "upper-03-7e3b2dd0a2cb"
+    },
+    {
+      "type": "prose",
+      "text": "你的生活里，有没有哪件事是“认准一家吃到底”的？上一次“换口味”是什么时候？\n迷宫里的那张数字地图，是怎么回答“前面两百步，哪一步该负责”这个问题的？它和上一章反向传播的“倒着 DP”有什么相像之处？\nAlphaGo Zero 不看棋谱就能变强，靠的是三个条件。你手头的工作里，有没有哪一件是三个条件都满足的？\n赛艇程序在水湾里转圈，该怪程序，还是该怪写分数的人？如果你是写分数的人，你会怎么改？改完以后，它最省力的拿分办法又是什么？\n你们团队或社团有没有哪个考核指标，已经被人“在水湾里转圈”了？",
+      "html": "<ol>\n<li>你的生活里，有没有哪件事是“认准一家吃到底”的？上一次“换口味”是什么时候？</li>\n<li>迷宫里的那张数字地图，是怎么回答“前面两百步，哪一步该负责”这个问题的？它和上一章反向传播的“倒着 DP”有什么相像之处？</li>\n<li>AlphaGo Zero 不看棋谱就能变强，靠的是三个条件。你手头的工作里，有没有哪一件是三个条件都满足的？</li>\n<li>赛艇程序在水湾里转圈，该怪程序，还是该怪写分数的人？如果你是写分数的人，你会怎么改？改完以后，它最省力的拿分办法又是什么？</li>\n<li>你们团队或社团有没有哪个考核指标，已经被人“在水湾里转圈”了？</li>\n</ol>\n",
+      "id": "upper-03-e7f2935a71ab"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "来源",
+      "id": "upper-03-64a94487ea8a"
+    },
+    {
+      "type": "prose",
+      "text": "D. Silver et al., Mastering the game of Go with deep neural networks and tree search, Nature 529, 2016。\nDeepMind, What we learned in Seoul with AlphaGo, 2016。第 37 手与第 78 手“约万分之一”的估计出自此文。\nJ. Tromp, G. Farnebäck, Combinatorics of Go, 2016。合法局面数。\nA. L. Samuel, Some Studies in Machine Learning Using the Game of Checkers, IBM Journal of Research and Development 3(3), 1959。\nG. Tesauro, Temporal Difference Learning and TD-Gammon, Communications of the ACM 38(3), 1995。\nC. J. C. H. Watkins, Learning from Delayed Rewards, 剑桥大学博士论文, 1989。\nR. J. Williams, Simple statistical gradient-following algorithms for connectionist reinforcement learning, Machine Learning 8, 1992（REINFORCE 算法出处）。\nD. Silver et al., Mastering the game of Go without human knowledge, Nature 550, 2017。\nJ. Clark, D. Amodei, Faulty Reward Functions in the Wild, OpenAI Blog, 2016-12-21。\nR. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, 第 2 版, MIT Press, 2018。\n本章代码与运行输出均为实际运行结果。",
+      "html": "<ol>\n<li>D. Silver et al., Mastering the game of Go with deep neural networks and tree search, <em>Nature</em> 529, 2016。</li>\n<li>DeepMind, What we learned in Seoul with AlphaGo, 2016。第 37 手与第 78 手“约万分之一”的估计出自此文。</li>\n<li>J. Tromp, G. Farnebäck, Combinatorics of Go, 2016。合法局面数。</li>\n<li>A. L. Samuel, Some Studies in Machine Learning Using the Game of Checkers, <em>IBM Journal of Research and Development</em> 3(3), 1959。</li>\n<li>G. Tesauro, Temporal Difference Learning and TD-Gammon, <em>Communications of the ACM</em> 38(3), 1995。</li>\n<li>C. J. C. H. Watkins, <em>Learning from Delayed Rewards</em>, 剑桥大学博士论文, 1989。</li>\n<li>R. J. Williams, Simple statistical gradient-following algorithms for connectionist reinforcement learning, <em>Machine Learning</em> 8, 1992（REINFORCE 算法出处）。</li>\n<li>D. Silver et al., Mastering the game of Go without human knowledge, <em>Nature</em> 550, 2017。</li>\n<li>J. Clark, D. Amodei, Faulty Reward Functions in the Wild, OpenAI Blog, 2016-12-21。</li>\n<li>R. S. Sutton, A. G. Barto, <em>Reinforcement Learning: An Introduction</em>, 第 2 版, MIT Press, 2018。</li>\n<li>本章代码与运行输出均为实际运行结果。</li>\n</ol>\n",
+      "id": "upper-03-1d27955ba58a"
+    }
+  ],
+  "files": {
+    "exam.py": "# exam.py：拿一份没见过的考卷，考一考任何一版 reply\nexam = [\n    (\"账号怎么申请？\", \"账号申请\"),\n    (\"软件怎么安装？\", \"软件安装\"),\n    (\"登录用的身份怎么办理？\", \"账号申请\"),\n    (\"开发环境部署失败了\", \"软件安装\"),\n    (\"账号已有了，软件怎么安装？\", \"软件安装\"),\n    (\"软件已经安装好了，账号怎么申请？\", \"账号申请\"),\n]\n\ndef run(reply, questions=exam):\n    right = 0\n    for text, want in questions:\n        got = reply(text)\n        right += got == want\n        print(\"✓\" if got == want else \"✗\", text, \"->\", got)\n    print(f\"{right}/{len(questions)}\")\n\nif __name__ == \"__main__\":\n    from router import reply\n    run(reply)\n",
+    "check.py": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n",
+    "xor_mlp.py": "# xor_mlp.py：这一次不拧旋钮，让它自己学会楼梯灯\nimport math, random\n\ndata = [((0, 0), 0), ((0, 1), 1), ((1, 0), 1), ((1, 1), 0)]\nsig = lambda z: 1 / (1 + math.exp(-z))\nH = 2  # 隐藏单元的个数\n\ndef train(seed, epochs=20000, lr=0.5):\n    rng = random.Random(seed)\n    W = [[rng.uniform(-1, 1) for _ in range(2)] for _ in range(H)]  # 输入→隐藏\n    bh = [rng.uniform(-1, 1) for _ in range(H)]\n    V = [rng.uniform(-1, 1) for _ in range(H)]                      # 隐藏→输出\n    bo = rng.uniform(-1, 1)\n    for _ in range(epochs):\n        for (x1, x2), y in data:\n            # 前向：先算隐藏层，再算输出\n            h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n            o = sig(sum(V[j] * h[j] for j in range(H)) + bo)\n            # 反向：把输出的误差，按链式法则一层层算回去\n            do = (o - y) * o * (1 - o)\n            dh = [do * V[j] * h[j] * (1 - h[j]) for j in range(H)]\n            for j in range(H):\n                V[j] -= lr * do * h[j]\n                W[j][0] -= lr * dh[j] * x1\n                W[j][1] -= lr * dh[j] * x2\n                bh[j] -= lr * dh[j]\n            bo -= lr * do\n    outs = []\n    for (x1, x2), y in data:\n        h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n        outs.append(sig(sum(V[j] * h[j] for j in range(H)) + bo))\n    return outs\n\nouts = train(seed=1)\nfor ((x1, x2), y), o in zip(data, outs):\n    print(f\"开关 ({x1},{x2})  该亮吗 {y}  它的回答 {o:.3f}\")\n\nok = sum(all((o > 0.5) == y for o, ((_, _), y) in zip(train(s), data)) for s in range(20))\nprint(f\"换 20 个不同的起点各练一遍：{ok} 次学会，{20 - ok} 次卡住\")\n",
+    "by_hand.py": "# by_hand.py：亲手拧旋钮，用三张评分表搭出楼梯灯\ndef unit(w1, w2, b, x1, x2):\n    return 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n\nfor x1, x2 in [(0, 0), (0, 1), (1, 0), (1, 1)]:\n    h1 = unit(1, 1, -1, x1, x2)       # 至少按下一个\n    h2 = unit(-1, -1, 1, x1, x2)      # 不是两个都按下\n    out = unit(1, 1, -2, h1, h2)      # 上面两条同时成立\n    print(f\"开关 ({x1},{x2})  至少一个={h1}  不是两个={h2}  灯={out}\")\n",
+    "babble.py": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")\n",
+    "value.py": "# value.py：资料助手的第二块零件。会自己记账、能顺着字条往回算账的数字\nimport math, random\n\nclass Value:\n    def __init__(self, data, prev=()):\n        self.data, self.grad, self.prev = data, 0.0, prev\n        self.backward_step = lambda: None\n    def __add__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data + other.data, (self, other))\n        def step():\n            self.grad += out.grad\n            other.grad += out.grad\n        out.backward_step = step\n        return out\n    def __mul__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data * other.data, (self, other))\n        def step():\n            self.grad += other.data * out.grad\n            other.grad += self.data * out.grad\n        out.backward_step = step\n        return out\n    def __sub__(self, other):\n        return self + (other * -1.0)\n    def sig(self):\n        s = 1.0 / (1.0 + math.exp(-self.data))\n        out = Value(s, (self,))\n        def step():\n            self.grad += s * (1.0 - s) * out.grad\n        out.backward_step = step\n        return out\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for child in v.prev:\n                    build(child)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            v.backward_step()\n\nif __name__ == \"__main__\":\n    w = Value(0.0)\n    for _ in range(30):\n        loss = (w - 3.0) * (w - 3.0)     # 目标：让 w 自己挪到 3\n        w.grad = 0.0\n        loss.backward()\n        w.data -= 0.1 * w.grad\n    print(f\"单个数自己往 3 挪了 30 步：w = {w.data:.3f}\")\n\n    data = [((0, 0), 0.0), ((0, 1), 1.0), ((1, 0), 1.0), ((1, 1), 0.0)]\n    rng = random.Random(1)\n    W = [[Value(rng.uniform(-1, 1)) for _ in range(2)] for _ in range(2)]\n    bh = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    V = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    bo = Value(rng.uniform(-1, 1))\n    params = [p for row in W for p in row] + bh + V + [bo]\n\n    for _ in range(2000):\n        for (x1, x2), y in data:\n            h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n            o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n            loss = (o - y) * (o - y)\n            for p in params:\n                p.grad = 0.0\n            loss.backward()              # 一句顶刚才那七八行手推的算式\n            for p in params:\n                p.data -= 1.0 * p.grad\n\n    for (x1, x2), y in data:\n        h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n        o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n        print(f\"开关 ({x1},{x2})  该亮吗 {int(y)}  资料助手的回答 {o.data:.3f}\")\n",
+    "patch2.py": "# patch2.py：第二个补丁，已经办完的事不算数\nimport re\nfrom exam import run\n\ndef reply(text):\n    need_account = \"账号\" in text and not re.search(\"已经?有账号|账号已\", text)\n    need_install = \"安装\" in text and not re.search(\"已经?安装|安装好\", text)\n    if need_account and need_install:\n        return \"软件安装\"\n    if need_account:\n        return \"账号申请\"\n    if need_install:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n\nprint(\"—— 隔壁同事探头进来，随口问了两句 ——\")\nrun(reply, [\n    (\"账号还没开通，安装也做不了\", \"账号申请\"),\n    (\"账号已过期，怎么重新申请？\", \"账号申请\"),\n])\n",
+    "peek.py": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")\n",
+    "perceptron.py": "# perceptron.py：一张会自己改的评分表\ndata = [(0, 0), (0, 1), (1, 0), (1, 1)]\n\ndef train(labels, rounds=20, show=False):\n    w1 = w2 = b = 0                       # 一开始，它什么都不知道\n    for r in range(1, rounds + 1):\n        wrong = 0\n        for (x1, x2), want in zip(data, labels):\n            got = 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n            miss = want - got             # 答对是 0；该说 1 却说 0 是 +1；反过来是 -1\n            if miss:\n                wrong += 1\n                w1 += miss * x1           # 朝着纠正这次错误的方向，各挪一点\n                w2 += miss * x2\n                b += miss\n        if show:\n            print(f\"第 {r} 轮：错 {wrong} 题，现在 w1={w1} w2={w2} b={b}\")\n        if wrong == 0:\n            break\n    return w1, w2, b, wrong\n\nif __name__ == \"__main__\":\n    print(\"教它：两样都办完，才能开通（AND）\")\n    train([0, 0, 0, 1], show=True)\n",
+    "router.py": "# router.py：资料助手 v0.1\ndef reply(text):\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nif __name__ == \"__main__\":\n    print(reply(\"账号怎么申请？\"))\n    print(reply(\"软件怎么安装？\"))\n",
+    "lunch.py": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")\n",
+    "reinforce.py": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])\n",
+    "classifier.py": "# classifier.py：资料助手 v0.2，不写规则，只给例子\nimport math, random\nfrom exam import run          # 第 01 章那张考卷，原封不动\n\ntrain_set = [\n    (\"怎么开通账号\", \"账号申请\"), (\"账号申请入口在哪\", \"账号申请\"),\n    (\"我还没有登录账号\", \"账号申请\"), (\"登录名怎么获取\", \"账号申请\"),\n    (\"工号和账户什么时候发\", \"账号申请\"), (\"邮箱账户怎么开\", \"账号申请\"),\n    (\"没有权限登录系统\", \"账号申请\"), (\"登录不了，提示没有账户\", \"账号申请\"),\n    (\"新员工的账户在哪里办\", \"账号申请\"), (\"统一身份认证怎么申请\", \"账号申请\"),\n    (\"开发工具怎么装\", \"软件安装\"), (\"IDE 安装失败\", \"软件安装\"),\n    (\"环境配置报错\", \"软件安装\"), (\"本地环境怎么部署\", \"软件安装\"),\n    (\"依赖包装不上\", \"软件安装\"), (\"安装包在哪下载\", \"软件安装\"),\n    (\"开发环境怎么搭\", \"软件安装\"), (\"编译时缺少组件\", \"软件安装\"),\n    (\"部署脚本跑不通\", \"软件安装\"), (\"插件装不上\", \"软件安装\"),\n]\n\ndef features(text):\n    \"\"\"把一句话拆成单字和相邻两字，例如“装不上”→ 装、不、上、装不、不上\"\"\"\n    chars = [c for c in text if c.strip() and c not in \"，。？！\"]\n    return chars + [a + b for a, b in zip(chars, chars[1:])]\n\n# 逻辑回归：每个特征一个权重，加权求和后过 sigmoid，得到“是软件安装”的概率\nw, b = {}, 0.0\nrng = random.Random(0)\ndata = train_set[:]\nfor epoch in range(200):\n    rng.shuffle(data)\n    for text, label in data:\n        y = 1 if label == \"软件安装\" else 0\n        fs = features(text)\n        p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in fs))))\n        for f in fs:                              # 沿着降低误差的方向，微调每个权重\n            w[f] = w.get(f, 0.0) - 0.1 * (p - y)\n        b -= 0.1 * (p - y)\n\ndef predict(text):\n    p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in features(text)))))\n    return (\"软件安装\" if p >= 0.5 else \"账号申请\"), p\n\nprint(\"练习题：\", sum(predict(t)[0] == y for t, y in train_set), \"/\", len(train_set))\nprint(\"考卷：\")\nrun(lambda text: predict(text)[0])\n\nranked = sorted(w, key=w.get)\nprint(\"它眼里最像“账号申请”的线索：\", ranked[:5])\nprint(\"它眼里最像“软件安装”的线索：\", ranked[-5:][::-1])\nprint(\"“账号已有了，软件怎么安装？”是安装的把握：\", round(predict(\"账号已有了，软件怎么安装？\")[1], 2))\n",
+    "patch1.py": "# patch1.py：第一个补丁，两个词都出现时，回答安装\nfrom exam import run\n\ndef reply(text):\n    if \"账号\" in text and \"安装\" in text:\n        return \"软件安装\"\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n",
+    "llm.py": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()\n",
+    "cut.py": "# cut.py：资料助手的第一块“识字”零件。拿一本小词典，把一句话切成块、换成编号\nfrom exam import exam\n\nvocab = {\n    \"<unk>\": 0, \"账号\": 1, \"软件\": 2, \"怎么\": 3,\n    \"申请\": 4, \"安装\": 5, \"已经\": 6, \"有了\": 7, \"好了\": 8,\n}\n\ndef cut(text):\n    out, i = [], 0\n    while i < len(text):\n        if text[i] in \"？，。\":\n            i += 1\n        elif text[i:i+2] in vocab:\n            out.append(vocab[text[i:i+2]])\n            i += 2\n        else:\n            out.append(0)\n            i += 1\n    return out\n\nif __name__ == \"__main__\":\n    for text, _ in exam:\n        print(f\"{text} -> {cut(text)}\")\n",
+    "hello.py": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n",
+    "reward.py": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")\n",
+    "oops.py": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n",
+    "eliza.py": "# eliza.py：分解 → 换人称 → 重组\nimport re\n\nSWAP = str.maketrans({\"我\": \"你\", \"你\": \"我\"})\n\nscript = [\n    (r\"我担心(.+)\", \"你为什么担心{0}？\"),\n    (r\"我觉得(.+)\", \"是什么让你觉得{0}？\"),\n    (r\".*(妈妈|爸爸|家里).*\", \"多说说你的家人吧。\"),\n]\n\ndef eliza(text):\n    text = text.rstrip(\"。！？\")\n    for pattern, template in script:\n        m = re.fullmatch(pattern, text)\n        if m:\n            parts = [g.translate(SWAP) for g in m.groups()]\n            return template.format(*parts)\n    return \"请继续说。\"\n\nfor line in [\n    \"我担心入职后跟不上。\",\n    \"我担心你不理解我。\",\n    \"我觉得流程太复杂了。\",\n    \"我妈妈也这么说。\",\n    \"让我不踏实的是入职后跟不上。\",\n    \"我担心的不是入职，是房租。\",\n]:\n    print(line, \"->\", eliza(line))\n",
+    "maze.py": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)\n",
+    "bill.py": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n",
+    "three_tasks.py": "# three_tasks.py：同一张评分表，三门功课\nfrom perceptron import train\n\ntasks = {\n    \"两样都办完才开通\": [0, 0, 0, 1],\n    \"有一张证就放行\":   [0, 1, 1, 1],\n    \"楼梯灯\":           [0, 1, 1, 0],\n}\nfor name, labels in tasks.items():\n    for rounds in (20, 1000):\n        w1, w2, b, wrong = train(labels, rounds)\n        print(f\"{name}｜练 {rounds} 轮：最后一轮错 {wrong} 题\")\n",
+    "expert.py": "# expert.py：事实 + 规则 → 推理出结论\nrules = [\n    ({\"新同事\"}, \"需要账号\"),\n    ({\"需要账号\", \"经理已批准\"}, \"走标准入口开通\"),\n    ({\"实习生\"}, \"走独立入口开通\"),\n]\n\ndef infer(facts):\n    facts = set(facts)\n    changed = True\n    while changed:              # 一直推，直到推不出新东西\n        changed = False\n        for need, then in rules:\n            if need <= facts and then not in facts:\n                facts.add(then)\n                changed = True\n    return sorted(f for f in facts if f.endswith(\"开通\"))\n\nprint(infer({\"新同事\", \"经理已批准\"}))\nprint(infer({\"新同事\", \"实习生\", \"经理已批准\"}))\n",
+    "docs.py": "# docs.py：测试组的新人资料包（全部是为练习编的）\nDOCS = [\n    {\"id\": \"D01\", \"title\": \"账号申请流程\", \"date\": \"2026-03-01\", \"status\": \"现行\",\n     \"text\": \"新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\"},\n    {\"id\": \"D02\", \"title\": \"账号审批时限规定\", \"date\": \"2025-01-10\", \"status\": \"已废止\",\n     \"text\": \"账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\"},\n    {\"id\": \"D03\", \"title\": \"关于调整账号审批时限的通知\", \"date\": \"2026-11-05\", \"status\": \"现行\",\n     \"text\": \"自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职员工。实习生除外，其账号审批时限为 2 个工作日。\"},\n    {\"id\": \"D04\", \"title\": \"开发工具安装指南\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"账号开通以后，才能安装开发工具。工具包下载约需 20 分钟，安装约需 15 分钟。安装完成后请做环境自检。\"},\n    {\"id\": \"D05\", \"title\": \"实习生入职须知\", \"date\": \"2026-06-02\", \"status\": \"现行\",\n     \"text\": \"实习生不使用入职系统，统一从独立入口提交申请。申请须附项目经理签字的用工单。\"},\n    {\"id\": \"D06\", \"title\": \"环境自检清单\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"自检共三项：能登录代码仓库，能拉取主干代码，能在本地跑通冒烟测试。全部通过约需 10 分钟。\"},\n    {\"id\": \"D07\", \"title\": \"账号注销流程\", \"date\": \"2026-02-20\", \"status\": \"现行\",\n     \"text\": \"员工离职当日，由管理员注销其账号。注销后 30 天内数据可以恢复，逾期永久删除。\"},\n    {\"id\": \"D08\", \"title\": \"办公设备领用\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"新同事入职当天到前台领取笔记本电脑和工牌。显示器需另行申请，三个工作日内配发。\"},\n    {\"id\": \"D09\", \"title\": \"请假与考勤\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"请假须提前一天在考勤系统提交。病假可事后补交证明。迟到三次记一次缺勤。\"},\n    {\"id\": \"D10\", \"title\": \"会议室预订\", \"date\": \"2025-09-01\", \"status\": \"现行\",\n     \"text\": \"会议室在三楼，通过日历系统预订。单次预订不超过两小时，超时须续订。\"},\n    {\"id\": \"D11\", \"title\": \"代码提交规范\", \"date\": \"2026-05-09\", \"status\": \"现行\",\n     \"text\": \"提交前必须跑通本地测试。每次提交须关联需求编号。主干分支禁止直接推送。\"},\n    {\"id\": \"D12\", \"title\": \"报销流程\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"差旅报销须在返回后十个工作日内提交。单笔超过两千元的，须部门负责人审批。\"},\n    {\"id\": \"D13\", \"title\": \"新人第一周日程\", \"date\": \"2026-07-01\", \"status\": \"现行\",\n     \"text\": \"第一天办理账号和设备，第二天参加安全培训，第三天起跟随导师熟悉项目。周五有新人答疑。\"},\n    {\"id\": \"D14\", \"title\": \"入职流程（2024 版）\", \"date\": \"2024-03-01\", \"status\": \"已废止\",\n     \"text\": \"新同事可以先安装开发工具，再提交账号申请。两项可以同时进行，以节省时间。\"},\n]\n\ndef show(doc):\n    return f\"【{doc['id']}】{doc['title']}（{doc['date']}，{doc['status']}）\\n{doc['text']}\"\n"
+  },
+  "sourceFile": "上册/第 03 章｜没有标准答案，怎样越练越强？.md"
+}

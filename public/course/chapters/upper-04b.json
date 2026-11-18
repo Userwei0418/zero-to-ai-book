@@ -1,0 +1,479 @@
+{
+  "id": "upper-04b",
+  "title": "第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习",
+  "shortTitle": "读遍互联网之后：MiniMind 预训练与上下文学习",
+  "volume": "upper",
+  "group": "第一篇 · 学会学习",
+  "order": 7,
+  "kind": "chapter",
+  "minutes": 14,
+  "summary": "上一篇末尾，我们用 100 行纯 Python 拼出了一个 592 个参数的迷你大脑 mini_gpt.py。它已经能把猜错代价从 2.93 降到 0.89，开口结结巴巴地接出“新同事先申请账件”。",
+  "text": "# 第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习\n\n配套课件在这里：[[零基础学AI/attachments/mygpt-companion-20261117-r4-8c90a8fb.zip|下载上册配套代码与实验材料（r4）]]。解压后先读 README，按对应章节说明使用。\n## 从手拨算盘，到整张 Excel 表同时算：MiniMind 预训练\n\n上一篇末尾，我们用 100 行纯 Python 拼出了一个 592 个参数的迷你大脑 `mini_gpt.py`。它已经能把猜错代价从 `2.93` 降到 `0.89`，开口结结巴巴地接出“新同事先申请账件”。\n\n为什么它结巴，而且练 80 轮就花了好几秒？因为 `Value` 盒子是一个数一个数分开算的，好比拿着一把算盘一颗颗拨珠子。真要让资料助手的大脑长到几千万个参数、读进上百万句话，靠纯 Python 算盘珠子得算到猴年马月。\n\n这时候，就得请出专门干这行的工具 **PyTorch**。你可以把它想成一张支持自动记账的超级 Excel 表（行话叫**张量**）：原本需要写三层 `for` 循环的乘法加法，PyTorch 一句矩阵乘法就能让显卡里的几千个核心同时算完；至于第 02 章那套顺着字条倒着算梯度的逻辑，PyTorch 已经内置在了 `loss.backward()` 里，原理一模一样，只是快了成千上万倍。\n\n开源世界里有一个特别适合教学的极简大模型项目，叫 **MiniMind**（由开源作者 jingyaogong 维护）。它提供了 **26M–64M 参数**量级的小语言模型配置（对比动辄千亿参数的大模型，简直小如芝麻）。但训练多久、花多少钱，得连同代码版本、数据量和机器一起说。这一版没有给出可复现的 MiniMind 训练配置与日志，先不替你许下“两小时几块钱”或“CPU 几分钟”的保证；训练一个更小的模型或下载已有权重，也都要先补齐具体步骤。\n\n整个预训练的代码骨架，其实就干了三件你已经见过的事：\n\n1. **升级版字模箱（BPE 分词，6400 词表）**：第 01 章 `cut.py` 只认识 8 个词，遇到生僻字就变 `0`。MiniMind 用了更聪明的切法：把语料里最常一起出现的字两两合并（比如“账”+“号”→“账号”），攒出一本 **6400 个词** 的词表，既不会漏字，词表又小。\n2. **叠高几层的 Transformer**：把上一篇 `mini_gpt.py` 的单层单头注意力叠成 8 层、多头并行，用向量表示每个词；具体层数、头数和维度须按所选 MiniMind 版本的配置核对，这里不把它们当成已经锁定的实验配置。\n3. **自监督“完形填空”**：把海量文本切成长条，前几个字当输入，后一个字当标准答案——**文字自己就是考卷和答案，不需要任何人工标注**。\n\n```python\n# minimind_pretrain_sketch.py：MiniMind 预训练的核心循环（PyTorch 骨架）\n# 注：这是对应原理的示意骨架，不能单独运行；尚未定义数据加载器、模型和优化器，安装 torch 并不足够\nimport torch\nimport torch.nn.functional as F\n\n# 1. 模型结构：和 mini_gpt.py 一样，只是把 list[Value] 换成了 nn.Module 张量层\n#    每一步输入一串 token 编号 x: [batch_size, seq_len]\n#    模型输出每个位置对 6400 个词的打分 logits: [batch_size, seq_len, 6400]\nfor x, y in dataloader:                 # x 是前文，y 是往后错开一位的“下一个词”\n    logits = model(x)\n    loss = F.cross_entropy(             # 等价于 mini_gpt.py 里的 -log(probs[nxt])\n        logits.view(-1, logits.size(-1)),\n        y.view(-1),\n    )\n    optimizer.zero_grad()               # 等价于 for p in params: p.grad = 0.0\n    loss.backward()                     # 等价于 Value.backward()\n    optimizer.step()                    # 等价于 p.data -= lr * p.grad\n```\n\n对照着 `mini_gpt.py` 看这六行核心循环，你会发现**一行多余的概念都没有**。从 592 个参数到千万级模型，模型结构、数据与训练配置都还要补上，不能只换硬件。不过，训练循环仍能认出那三步：往前猜下一个词、算猜错代价、顺着计算图倒着挪参数。\n\n## 读遍互联网\n\n2018 年，有两个团队给出了同一个回答：**什么都读。** OpenAI 的 GPT 练的是猜下一个词；Google 的 BERT 练的是完形填空，把句子里的词挖掉几个，让它根据两边补回来。两者的思路是一样的：先在海量的文字上练出一身通用的本事，再拿去学具体的事。前一步叫**预训练**，这种自己给自己出题的练法叫**自监督学习**。\n\nGPT-2 是 GPT 的放大版：十五亿个参数，八百万个网页。然后，就有了安第斯山上的独角兽。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/Vts9bm6OooBqsoxXmCycXU7anCf.png|八百万个网页。每一页，都是一道“猜下一个词”的练习题。]]\n\n现在回到上一篇开头的第二个问题：没人教过它写摘要，它会吗？\n\nGPT-2 的论文里记着一个小把戏。它读过八百万个网页。你想让它写摘要，可你只能给它一段前文，让它往下接。你会在文章后面加一句什么，把它“骗”进写摘要的状态？\n\n答案是四个字母：**TL;DR**。这是英文网络上的老习惯，意思是“太长不看”，后面通常跟着一句话总结。在文章后面写上 `TL;DR:`，模型就接着写出了一段摘要——它只是在网上见过太多次“长文，TL;DR，一句话”这个套路。\n\n```python\n# tldr.py：没人教过它“摘要”这个任务。在文章后面加一个词试试\nfrom ask import chat\n\narticle = \"一项惊人的发现：科学家在安第斯山脉一个偏远的山谷里，发现了一群会说流利英语的独角兽。\"\nprint(chat(article + \"\\n\\nTL;DR:\"))\n```\n\n```\n安第斯山谷发现会说流利英语的独角兽。\n```\n\n这就是第二个问题的答案，也是这一章最重要的一句话：**任务本身，也可以写成字。**\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/YkFdbSMktoyQTFxI0Stc0plHneg.png|换一种写法，就换了一个任务。]]\n\n分类、翻译、摘要，都能摆成“前文，加上一个等着被接的开头”。它自始至终只做一件事：接下一句。可为了把各种各样的话都接好，它不得不学会语法、常识、文章的套路、两种语言怎么对应。\n\n至于第一个问题，该不该担心？2019 年 11 月 OpenAI 放出了完整版 GPT-2，没过几年，用大模型批量生成的垃圾文章和假消息就成了每个上网的人都躲不开的东西。担心的人和笑话的人各对了一半，只是担心的人对得早了一点。\n\n## 把任务写进前文\n\n2020 年 5 月，GPT-3 来了。一千七百五十亿个参数，是 GPT-2 的一百多倍。\n\n它的论文想说明的，其实就是 `TL;DR:` 那个把戏的升级版：你要它做什么事，不用重新训练它，**把要求和几个例子直接写在前文里就行。** 只写要求、一个例子都不给，叫 zero-shot；给几个例子，叫 few-shot。它照着前文里的例子调整这一次的回答，这个现象叫**上下文学习**。这里的“学习”要打个引号：它一个参数都没有改。\n\n我们的资料助手，第 02 章是拿 20 个例子训练出来的。这一次，我们一个参数都不碰，直接调用第 00 章配好的商汤 Token Plan 大模型接口来考考那张六句话的考卷（`exam.py`）：\n\n```python\n# ask.py：资料助手 v0.4，不训练，把四个例子写进前文\n# 需要第 00 章配好的环境变量：LLM_BASE_URL、LLM_API_KEY、LLM_MODEL\nimport json, os, urllib.request\nfrom exam import run\n\ndef chat(prompt):\n    req = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\n            \"model\": os.environ[\"LLM_MODEL\"],\n            \"messages\": [{\"role\": \"user\", \"content\": prompt}],\n            \"temperature\": 0,\n        }).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    with urllib.request.urlopen(req, timeout=60) as resp:\n        return json.load(resp)[\"choices\"][0][\"message\"][\"content\"].strip()\n\nFRONT = \"\"\"把新同事的问题分成两类：账号申请、软件安装。只输出类别名。\n\n问题：怎么开通账号\n类别：账号申请\n问题：插件装不上\n类别：软件安装\n问题：登录名怎么获取\n类别：账号申请\n问题：本地环境怎么部署\n类别：软件安装\n问题：{q}\n类别：\"\"\"\n\nif __name__ == \"__main__\":\n    print(\"模型：\", os.environ[\"LLM_MODEL\"])\n    run(lambda text: chat(FRONT.format(q=text)))\n```\n\n运行结果（以 `sensenova-6.8-flash` 为默认模型）：\n\n```\n模型： sensenova-6.8-flash\n✓ 账号怎么申请？ -> 账号申请\n✓ 软件怎么安装？ -> 软件安装\n✓ 登录用的身份怎么办理？ -> 账号申请\n✓ 开发环境部署失败了 -> 软件安装\n✓ 账号已有了，软件怎么安装？ -> 软件安装\n✓ 软件已经安装好了，账号怎么申请？ -> 账号申请\n6/6\n```\n\n六句全对。停在第五句“账号已有了，软件怎么安装？”上多看一眼：第 01 章的规则版在这儿错过，第 02 章的分类器也在这儿错过，因为它们一个认关键词，一个数单字。这是头一回，资料助手真正读懂了“已经有了”是什么意思——而我们为此做的全部工作，只是写了十来行字。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/M7GBbtKbeokwEfxIljlcnJgInAe.png|三个版本，一张考卷。]]\n\n先别急着庆祝。我们是见过世面的人了，知道一个满分后面要问什么：\n\n**第一问：只有六道题。** 往后我们会把考卷加厚。\n\n**第二问：它每次都这么听话吗？** 有时候你把模型换成更大、更贵的型号（例如换成同平台的 `glm-5.3` 或其他大模型），它可能会在某一句里客气地多输出几个字，比如回答成 `类别：账号申请`。意思完全对，程序一比对却判了错——**它是在“接话”，不是在“填表”**。另外，实际工程里还常碰到另一件事：网络请求明明返回了成功（HTTP 200），但输出预算设小了、回答写到一半被截断，这同样不算交付。第 05 章我们会专门对付这些问题。\n\n**第三问：代价呢。** 第 02 章的分类器在自己电脑上跑几乎零成本；v0.4 每问一句都要走网络、等回复、花额度。六句话无所谓，六百万句就得算算账了（这也是为什么第 12 章我们会把简单活儿交回给自己训的 MiniMind 小模型）。\n\n**第四问：它说的是真的吗。** 你要是问它“实习生审批入口的网址是什么”，它会接出一个看着很像样的网址。接得出来，不等于查过。这种一本正经的编造，叫**幻觉**。这是第 07 章的主题。\n\n最后，把下面这张图刻在脑子里，后面每一章都要回来看它：\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/TmdpbNqU5odlkcxjmw0c4KHrnth.png|什么时候改了它，什么时候没改。]]\n\n**改大脑参数（比如 `mini_gpt.py` 和 MiniMind 预训练）**，学到的东西留在了权重里，下次不用再说；**写进前文（比如 `ask.py` 里的四个例子）**，一个参数没动，换一段前文它就忘了。这是好事（改几个字就能换任务），也是麻烦（每一次都得从头交代）。\n\n## 做大，做到多大\n\n2020 年，OpenAI 的研究发现，模型猜词猜得有多准，和参数量、数据量、算力之间有很稳定的规律（Scaling Laws）。2022 年，DeepMind 又用 Chinchilla 对照实验证明：同样的算力预算下，**光长个子（堆参数）不读书（喂数据）是不行的**，小一点但多读几倍书的模型反而赢了。\n\n![[零基础学AI/attachments/第 04 章｜学着接下一句，为什么接住了许多任务？/Uks6bQnDYoqsGVxoRGxcaUmXnOc.png|从词到大模型：2013—2022。]]\n\n> 📎\n>\n> **选读：模型名字后面那些词。** **混合专家（MoE）**：模型内部分成很多小模块，每次只叫醒其中几个。**蒸馏**：让小模型学着模仿大模型的回答。**开放权重**：把模型的参数放出来谁都能下载，但不等于训练数据也公开。\n>\n> **选读：训好以后，还能动三处。** **微调**：拿训好的模型，用自己的一批例子接着训一小会儿。**LoRA**：原来几十亿个数一个不动，只在课本页边贴一张可撕的“便利贴”（添一小组新参数）来记部门规矩——第 07 章我们会亲手用它把部门规定“背”进 MiniMind，再和 RAG 翻书做一次硬核对比。**量化**：把每个数存得粗一点（比如 16 位压到 4 位），笔记本也跑得动。\n\n> 🎬 **配套视频｜Ep 4.2：读遍互联网之后与不改参数的 v0.4**\n![[零基础学AI/上册/videos/04-2_读遍互联网之后与不改参数的v04_v1.mp4]]\n\n## 这一章你留下了什么\n\n`mini_gpt.py`，零依赖拼出的 592 参数迷你大脑，证明了你亲手写的零件真的能开口接话。\n\n`ask.py`，资料助手 **v0.4**，头一回用上大模型并在老考卷上拿了满分。\n\n还有一个你会用一辈子的问题：每当有人说“我让 AI 学会了某某”，你就问他——**你改的是参数，还是前文？**\n\n## 下一站\n\n你现在有了一个极其擅长“接下一句”的模型。于是你敲下一句话：“帮我给新同事写一份上手指南。”\n\n假如坐在对面的是 2019 年的预训练基座模型，它多半会顺着往下写：“另外，请把部门介绍和常见问题也整理一份。周五之前给我。”——它把你的话当成了一篇文章的开头，而不是一件要办的活。\n\n怎么把一个“只会接文章”的基座模型，教成一个“听得懂人话、愿意接活”的助手？下一章，我们先用三个回答倾向的玩具实验，亲手看示范（SFT）和偏好（DPO）怎样推着参数变。它不是对 MiniMind 权重的完整微调；把这两课接到真正训好并存盘的模型上，仍是这条资料助手主线待补的一段。\n\n---\n\n## 合上书之前，想一想\n\n1. 语言模型预训练时的“标准答案”是哪儿来的？为什么不需要人一条条标注？\n2. 只看前一个词的小模型原地转圈时，把温度调低能治好它吗？为什么？\n3. 对比 `mini_gpt.py` 和 `ask.py`：前者改了参数，后者只改了前文。各自的代价和好处是什么？\n4. 如果你想把部门最新的《实习生审批规定》教给资料助手，应该用“改参数”还是“写进前文”？先押一注，第 07 章我们拿真实实验来验。\n\n## 来源\n\n1. OpenAI, *Better Language Models and Their Implications*, 2019-02-14；A. Radford et al., *Language Models are Unsupervised Multitask Learners*, 2019。\n2. J. R. Firth (1957)；T. Mikolov et al. (2013, word2vec)；D. Bahdanau et al. (2014, Attention)；A. Vaswani et al. (*Attention Is All You Need*, 2017)。\n3. T. Brown et al., *Language Models are Few-Shot Learners*, NeurIPS 2020；J. Kaplan et al. (2020)；J. Hoffmann et al. (*Chinchilla*, 2022)。\n4. MiniMind 开源项目（jingyaogong/minimind）：极简从零预训练与微调架构参考。\n5. 本章 `mini_gpt.py` 代码与输出为实际运行结果；`ask.py` 对接商汤 Token Plan `https://token.sensetime.com/api/v1`（模型 `sensenova-6.8-flash`）。\n",
+  "codeCount": 5,
+  "videoCount": 1,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习",
+      "id": "upper-04b-74579aa21f1d"
+    },
+    {
+      "type": "prose",
+      "text": "配套课件在这里：下载上册配套代码与实验材料（r4）。解压后先读 README，按对应章节说明使用。",
+      "html": "<p>配套课件在这里：下载上册配套代码与实验材料（r4） <span>（原始资料包不公开；本章代码见实验区文件）</span>。解压后先读 README，按对应章节说明使用。</p>\n",
+      "id": "upper-04b-dd773ddd04b4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "从手拨算盘，到整张 Excel 表同时算：MiniMind 预训练",
+      "id": "upper-04b-21e95c42a100"
+    },
+    {
+      "type": "prose",
+      "text": "上一篇末尾，我们用 100 行纯 Python 拼出了一个 592 个参数的迷你大脑 mini_gpt.py。它已经能把猜错代价从 2.93 降到 0.89，开口结结巴巴地接出“新同事先申请账件”。",
+      "html": "<p>上一篇末尾，我们用 100 行纯 Python 拼出了一个 592 个参数的迷你大脑 <code>mini_gpt.py</code>。它已经能把猜错代价从 <code>2.93</code> 降到 <code>0.89</code>，开口结结巴巴地接出“新同事先申请账件”。</p>\n",
+      "id": "upper-04b-6a4583aaf669"
+    },
+    {
+      "type": "prose",
+      "text": "为什么它结巴，而且练 80 轮就花了好几秒？因为 Value 盒子是一个数一个数分开算的，好比拿着一把算盘一颗颗拨珠子。真要让资料助手的大脑长到几千万个参数、读进上百万句话，靠纯 Python 算盘珠子得算到猴年马月。",
+      "html": "<p>为什么它结巴，而且练 80 轮就花了好几秒？因为 <code>Value</code> 盒子是一个数一个数分开算的，好比拿着一把算盘一颗颗拨珠子。真要让资料助手的大脑长到几千万个参数、读进上百万句话，靠纯 Python 算盘珠子得算到猴年马月。</p>\n",
+      "id": "upper-04b-d42a1126aa26"
+    },
+    {
+      "type": "prose",
+      "text": "这时候，就得请出专门干这行的工具 PyTorch。你可以把它想成一张支持自动记账的超级 Excel 表（行话叫张量）：原本需要写三层 for 循环的乘法加法，PyTorch 一句矩阵乘法就能让显卡里的几千个核心同时算完；至于第 02 章那套顺着字条倒着算梯度的逻辑，PyTorch 已经内置在了 loss.backward() 里，原理一模一样，只是快了成千上万倍。",
+      "html": "<p>这时候，就得请出专门干这行的工具 <strong>PyTorch</strong>。你可以把它想成一张支持自动记账的超级 Excel 表（行话叫<strong>张量</strong>）：原本需要写三层 <code>for</code> 循环的乘法加法，PyTorch 一句矩阵乘法就能让显卡里的几千个核心同时算完；至于第 02 章那套顺着字条倒着算梯度的逻辑，PyTorch 已经内置在了 <code>loss.backward()</code> 里，原理一模一样，只是快了成千上万倍。</p>\n",
+      "id": "upper-04b-b26ec0d8720e"
+    },
+    {
+      "type": "prose",
+      "text": "开源世界里有一个特别适合教学的极简大模型项目，叫 MiniMind（由开源作者 jingyaogong 维护）。它提供了 26M–64M 参数量级的小语言模型配置（对比动辄千亿参数的大模型，简直小如芝麻）。但训练多久、花多少钱，得连同代码版本、数据量和机器一起说。这一版没有给出可复现的 MiniMind 训练配置与日志，先不替你许下“两小时几块钱”或“CPU 几分钟”的保证；训练一个更小的模型或下载已有权重，也都要先补齐具体步骤。",
+      "html": "<p>开源世界里有一个特别适合教学的极简大模型项目，叫 <strong>MiniMind</strong>（由开源作者 jingyaogong 维护）。它提供了 <strong>26M–64M 参数</strong>量级的小语言模型配置（对比动辄千亿参数的大模型，简直小如芝麻）。但训练多久、花多少钱，得连同代码版本、数据量和机器一起说。这一版没有给出可复现的 MiniMind 训练配置与日志，先不替你许下“两小时几块钱”或“CPU 几分钟”的保证；训练一个更小的模型或下载已有权重，也都要先补齐具体步骤。</p>\n",
+      "id": "upper-04b-9b6af005c682"
+    },
+    {
+      "type": "prose",
+      "text": "整个预训练的代码骨架，其实就干了三件你已经见过的事：",
+      "html": "<p>整个预训练的代码骨架，其实就干了三件你已经见过的事：</p>\n",
+      "id": "upper-04b-a81940be0153"
+    },
+    {
+      "type": "prose",
+      "text": "升级版字模箱（BPE 分词，6400 词表）：第 01 章 cut.py 只认识 8 个词，遇到生僻字就变 0。MiniMind 用了更聪明的切法：把语料里最常一起出现的字两两合并（比如“账”+“号”→“账号”），攒出一本 6400 个词 的词表，既不会漏字，词表又小。\n叠高几层的 Transformer：把上一篇 mini_gpt.py 的单层单头注意力叠成 8 层、多头并行，用向量表示每个词；具体层数、头数和维度须按所选 MiniMind 版本的配置核对，这里不把它们当成已经锁定的实验配置。\n自监督“完形填空”：把海量文本切成长条，前几个字当输入，后一个字当标准答案——文字自己就是考卷和答案，不需要任何人工标注。",
+      "html": "<ol>\n<li><strong>升级版字模箱（BPE 分词，6400 词表）</strong>：第 01 章 <code>cut.py</code> 只认识 8 个词，遇到生僻字就变 <code>0</code>。MiniMind 用了更聪明的切法：把语料里最常一起出现的字两两合并（比如“账”+“号”→“账号”），攒出一本 <strong>6400 个词</strong> 的词表，既不会漏字，词表又小。</li>\n<li><strong>叠高几层的 Transformer</strong>：把上一篇 <code>mini_gpt.py</code> 的单层单头注意力叠成 8 层、多头并行，用向量表示每个词；具体层数、头数和维度须按所选 MiniMind 版本的配置核对，这里不把它们当成已经锁定的实验配置。</li>\n<li><strong>自监督“完形填空”</strong>：把海量文本切成长条，前几个字当输入，后一个字当标准答案——<strong>文字自己就是考卷和答案，不需要任何人工标注</strong>。</li>\n</ol>\n",
+      "id": "upper-04b-9039bd6d8b51"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# minimind_pretrain_sketch.py：MiniMind 预训练的核心循环（PyTorch 骨架）\n# 注：这是对应原理的示意骨架，不能单独运行；尚未定义数据加载器、模型和优化器，安装 torch 并不足够\nimport torch\nimport torch.nn.functional as F\n\n# 1. 模型结构：和 mini_gpt.py 一样，只是把 list[Value] 换成了 nn.Module 张量层\n#    每一步输入一串 token 编号 x: [batch_size, seq_len]\n#    模型输出每个位置对 6400 个词的打分 logits: [batch_size, seq_len, 6400]\nfor x, y in dataloader:                 # x 是前文，y 是往后错开一位的“下一个词”\n    logits = model(x)\n    loss = F.cross_entropy(             # 等价于 mini_gpt.py 里的 -log(probs[nxt])\n        logits.view(-1, logits.size(-1)),\n        y.view(-1),\n    )\n    optimizer.zero_grad()               # 等价于 for p in params: p.grad = 0.0\n    loss.backward()                     # 等价于 Value.backward()\n    optimizer.step()                    # 等价于 p.data -= lr * p.grad",
+      "text": "# minimind_pretrain_sketch.py：MiniMind 预训练的核心循环（PyTorch 骨架）\n# 注：这是对应原理的示意骨架，不能单独运行；尚未定义数据加载器、模型和优化器，安装 torch 并不足够\nimport torch\nimport torch.nn.functional as F\n\n# 1. 模型结构：和 mini_gpt.py 一样，只是把 list[Value] 换成了 nn.Module 张量层\n#    每一步输入一串 token 编号 x: [batch_size, seq_len]\n#    模型输出每个位置对 6400 个词的打分 logits: [batch_size, seq_len, 6400]\nfor x, y in dataloader:                 # x 是前文，y 是往后错开一位的“下一个词”\n    logits = model(x)\n    loss = F.cross_entropy(             # 等价于 mini_gpt.py 里的 -log(probs[nxt])\n        logits.view(-1, logits.size(-1)),\n        y.view(-1),\n    )\n    optimizer.zero_grad()               # 等价于 for p in params: p.grad = 0.0\n    loss.backward()                     # 等价于 Value.backward()\n    optimizer.step()                    # 等价于 p.data -= lr * p.grad",
+      "runnable": false,
+      "filename": "minimind_pretrain_sketch.py",
+      "runtime": "gpu",
+      "reason": "教学节选／增量片段：需结合前文定义或完整文件后运行。",
+      "id": "upper-04b-84d55408f519"
+    },
+    {
+      "type": "prose",
+      "text": "对照着 mini_gpt.py 看这六行核心循环，你会发现一行多余的概念都没有。从 592 个参数到千万级模型，模型结构、数据与训练配置都还要补上，不能只换硬件。不过，训练循环仍能认出那三步：往前猜下一个词、算猜错代价、顺着计算图倒着挪参数。",
+      "html": "<p>对照着 <code>mini_gpt.py</code> 看这六行核心循环，你会发现<strong>一行多余的概念都没有</strong>。从 592 个参数到千万级模型，模型结构、数据与训练配置都还要补上，不能只换硬件。不过，训练循环仍能认出那三步：往前猜下一个词、算猜错代价、顺着计算图倒着挪参数。</p>\n",
+      "id": "upper-04b-5cb5075d6f76"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "读遍互联网",
+      "id": "upper-04b-ef6a92daba90"
+    },
+    {
+      "type": "prose",
+      "text": "2018 年，有两个团队给出了同一个回答：什么都读。 OpenAI 的 GPT 练的是猜下一个词；Google 的 BERT 练的是完形填空，把句子里的词挖掉几个，让它根据两边补回来。两者的思路是一样的：先在海量的文字上练出一身通用的本事，再拿去学具体的事。前一步叫预训练，这种自己给自己出题的练法叫自监督学习。",
+      "html": "<p>2018 年，有两个团队给出了同一个回答：<strong>什么都读。</strong> OpenAI 的 GPT 练的是猜下一个词；Google 的 BERT 练的是完形填空，把句子里的词挖掉几个，让它根据两边补回来。两者的思路是一样的：先在海量的文字上练出一身通用的本事，再拿去学具体的事。前一步叫<strong>预训练</strong>，这种自己给自己出题的练法叫<strong>自监督学习</strong>。</p>\n",
+      "id": "upper-04b-40df2185bf65"
+    },
+    {
+      "type": "prose",
+      "text": "GPT-2 是 GPT 的放大版：十五亿个参数，八百万个网页。然后，就有了安第斯山上的独角兽。",
+      "html": "<p>GPT-2 是 GPT 的放大版：十五亿个参数，八百万个网页。然后，就有了安第斯山上的独角兽。</p>\n",
+      "id": "upper-04b-c34131512e5d"
+    },
+    {
+      "type": "image",
+      "alt": "八百万个网页。每一页，都是一道“猜下一个词”的练习题。",
+      "caption": "八百万个网页。每一页，都是一道“猜下一个词”的练习题。",
+      "available": true,
+      "src": "/media/b697a189961d9e3f5e373c88.webp",
+      "id": "upper-04b-f74e44e86e23",
+      "previewWidth": 960,
+      "previewSrc": "/media/61c1eb4692ba84f1bc833b81.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/61c1eb4692ba84f1bc833b81.webp 960w, /media/b697a189961d9e3f5e373c88.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "现在回到上一篇开头的第二个问题：没人教过它写摘要，它会吗？",
+      "html": "<p>现在回到上一篇开头的第二个问题：没人教过它写摘要，它会吗？</p>\n",
+      "id": "upper-04b-cf22f410d0a4"
+    },
+    {
+      "type": "prose",
+      "text": "GPT-2 的论文里记着一个小把戏。它读过八百万个网页。你想让它写摘要，可你只能给它一段前文，让它往下接。你会在文章后面加一句什么，把它“骗”进写摘要的状态？",
+      "html": "<p>GPT-2 的论文里记着一个小把戏。它读过八百万个网页。你想让它写摘要，可你只能给它一段前文，让它往下接。你会在文章后面加一句什么，把它“骗”进写摘要的状态？</p>\n",
+      "id": "upper-04b-2c861c3c46a5"
+    },
+    {
+      "type": "prose",
+      "text": "答案是四个字母：TL;DR。这是英文网络上的老习惯，意思是“太长不看”，后面通常跟着一句话总结。在文章后面写上 TL;DR:，模型就接着写出了一段摘要——它只是在网上见过太多次“长文，TL;DR，一句话”这个套路。",
+      "html": "<p>答案是四个字母：<strong>TL;DR</strong>。这是英文网络上的老习惯，意思是“太长不看”，后面通常跟着一句话总结。在文章后面写上 <code>TL;DR:</code>，模型就接着写出了一段摘要——它只是在网上见过太多次“长文，TL;DR，一句话”这个套路。</p>\n",
+      "id": "upper-04b-291b06ee1b9d"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# tldr.py：没人教过它“摘要”这个任务。在文章后面加一个词试试\nfrom ask import chat\n\narticle = \"一项惊人的发现：科学家在安第斯山脉一个偏远的山谷里，发现了一群会说流利英语的独角兽。\"\nprint(chat(article + \"\\n\\nTL;DR:\"))",
+      "text": "# tldr.py：没人教过它“摘要”这个任务。在文章后面加一个词试试\nfrom ask import chat\n\narticle = \"一项惊人的发现：科学家在安第斯山脉一个偏远的山谷里，发现了一群会说流利英语的独角兽。\"\nprint(chat(article + \"\\n\\nTL;DR:\"))",
+      "runnable": true,
+      "filename": "tldr.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-04b-e5d07af357a1"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "安第斯山谷发现会说流利英语的独角兽。",
+      "text": "安第斯山谷发现会说流利英语的独角兽。",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04b-d48ad9320065"
+    },
+    {
+      "type": "prose",
+      "text": "这就是第二个问题的答案，也是这一章最重要的一句话：任务本身，也可以写成字。",
+      "html": "<p>这就是第二个问题的答案，也是这一章最重要的一句话：<strong>任务本身，也可以写成字。</strong></p>\n",
+      "id": "upper-04b-e3006aeb0696"
+    },
+    {
+      "type": "image",
+      "alt": "换一种写法，就换了一个任务。",
+      "caption": "换一种写法，就换了一个任务。",
+      "available": true,
+      "src": "/media/c599b3a672f35e64.png",
+      "id": "upper-04b-4ea990bf7523",
+      "previewWidth": 960,
+      "previewSrc": "/media/24f7a216e960d360f955356e.webp",
+      "height": 810,
+      "previewHeight": 432,
+      "srcSet": "/media/24f7a216e960d360f955356e.webp 960w, /media/c599b3a672f35e64.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "分类、翻译、摘要，都能摆成“前文，加上一个等着被接的开头”。它自始至终只做一件事：接下一句。可为了把各种各样的话都接好，它不得不学会语法、常识、文章的套路、两种语言怎么对应。",
+      "html": "<p>分类、翻译、摘要，都能摆成“前文，加上一个等着被接的开头”。它自始至终只做一件事：接下一句。可为了把各种各样的话都接好，它不得不学会语法、常识、文章的套路、两种语言怎么对应。</p>\n",
+      "id": "upper-04b-ff3dc0a370f4"
+    },
+    {
+      "type": "prose",
+      "text": "至于第一个问题，该不该担心？2019 年 11 月 OpenAI 放出了完整版 GPT-2，没过几年，用大模型批量生成的垃圾文章和假消息就成了每个上网的人都躲不开的东西。担心的人和笑话的人各对了一半，只是担心的人对得早了一点。",
+      "html": "<p>至于第一个问题，该不该担心？2019 年 11 月 OpenAI 放出了完整版 GPT-2，没过几年，用大模型批量生成的垃圾文章和假消息就成了每个上网的人都躲不开的东西。担心的人和笑话的人各对了一半，只是担心的人对得早了一点。</p>\n",
+      "id": "upper-04b-1c7092881dfe"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "把任务写进前文",
+      "id": "upper-04b-ba2b71a5cb6e"
+    },
+    {
+      "type": "prose",
+      "text": "2020 年 5 月，GPT-3 来了。一千七百五十亿个参数，是 GPT-2 的一百多倍。",
+      "html": "<p>2020 年 5 月，GPT-3 来了。一千七百五十亿个参数，是 GPT-2 的一百多倍。</p>\n",
+      "id": "upper-04b-6d8f3ad83cad"
+    },
+    {
+      "type": "prose",
+      "text": "它的论文想说明的，其实就是 TL;DR: 那个把戏的升级版：你要它做什么事，不用重新训练它，把要求和几个例子直接写在前文里就行。 只写要求、一个例子都不给，叫 zero-shot；给几个例子，叫 few-shot。它照着前文里的例子调整这一次的回答，这个现象叫上下文学习。这里的“学习”要打个引号：它一个参数都没有改。",
+      "html": "<p>它的论文想说明的，其实就是 <code>TL;DR:</code> 那个把戏的升级版：你要它做什么事，不用重新训练它，<strong>把要求和几个例子直接写在前文里就行。</strong> 只写要求、一个例子都不给，叫 zero-shot；给几个例子，叫 few-shot。它照着前文里的例子调整这一次的回答，这个现象叫<strong>上下文学习</strong>。这里的“学习”要打个引号：它一个参数都没有改。</p>\n",
+      "id": "upper-04b-71b1ae58dd5a"
+    },
+    {
+      "type": "prose",
+      "text": "我们的资料助手，第 02 章是拿 20 个例子训练出来的。这一次，我们一个参数都不碰，直接调用第 00 章配好的商汤 Token Plan 大模型接口来考考那张六句话的考卷（exam.py）：",
+      "html": "<p>我们的资料助手，第 02 章是拿 20 个例子训练出来的。这一次，我们一个参数都不碰，直接调用第 00 章配好的商汤 Token Plan 大模型接口来考考那张六句话的考卷（<code>exam.py</code>）：</p>\n",
+      "id": "upper-04b-7c8d388ad953"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# ask.py：资料助手 v0.4，不训练，把四个例子写进前文\n# 需要第 00 章配好的环境变量：LLM_BASE_URL、LLM_API_KEY、LLM_MODEL\nimport json, os, urllib.request\nfrom exam import run\n\ndef chat(prompt):\n    req = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\n            \"model\": os.environ[\"LLM_MODEL\"],\n            \"messages\": [{\"role\": \"user\", \"content\": prompt}],\n            \"temperature\": 0,\n        }).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    with urllib.request.urlopen(req, timeout=60) as resp:\n        return json.load(resp)[\"choices\"][0][\"message\"][\"content\"].strip()\n\nFRONT = \"\"\"把新同事的问题分成两类：账号申请、软件安装。只输出类别名。\n\n问题：怎么开通账号\n类别：账号申请\n问题：插件装不上\n类别：软件安装\n问题：登录名怎么获取\n类别：账号申请\n问题：本地环境怎么部署\n类别：软件安装\n问题：{q}\n类别：\"\"\"\n\nif __name__ == \"__main__\":\n    print(\"模型：\", os.environ[\"LLM_MODEL\"])\n    run(lambda text: chat(FRONT.format(q=text)))",
+      "text": "# ask.py：资料助手 v0.4，不训练，把四个例子写进前文\n# 需要第 00 章配好的环境变量：LLM_BASE_URL、LLM_API_KEY、LLM_MODEL\nimport json, os, urllib.request\nfrom exam import run\n\ndef chat(prompt):\n    req = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\n            \"model\": os.environ[\"LLM_MODEL\"],\n            \"messages\": [{\"role\": \"user\", \"content\": prompt}],\n            \"temperature\": 0,\n        }).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    with urllib.request.urlopen(req, timeout=60) as resp:\n        return json.load(resp)[\"choices\"][0][\"message\"][\"content\"].strip()\n\nFRONT = \"\"\"把新同事的问题分成两类：账号申请、软件安装。只输出类别名。\n\n问题：怎么开通账号\n类别：账号申请\n问题：插件装不上\n类别：软件安装\n问题：登录名怎么获取\n类别：账号申请\n问题：本地环境怎么部署\n类别：软件安装\n问题：{q}\n类别：\"\"\"\n\nif __name__ == \"__main__\":\n    print(\"模型：\", os.environ[\"LLM_MODEL\"])\n    run(lambda text: chat(FRONT.format(q=text)))",
+      "runnable": true,
+      "filename": "ask.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-04b-14ba9fb0c938"
+    },
+    {
+      "type": "prose",
+      "text": "运行结果（以 sensenova-6.8-flash 为默认模型）：",
+      "html": "<p>运行结果（以 <code>sensenova-6.8-flash</code> 为默认模型）：</p>\n",
+      "id": "upper-04b-b3d4396baea8"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "模型： sensenova-6.8-flash\n✓ 账号怎么申请？ -> 账号申请\n✓ 软件怎么安装？ -> 软件安装\n✓ 登录用的身份怎么办理？ -> 账号申请\n✓ 开发环境部署失败了 -> 软件安装\n✓ 账号已有了，软件怎么安装？ -> 软件安装\n✓ 软件已经安装好了，账号怎么申请？ -> 账号申请\n6/6",
+      "text": "模型： sensenova-6.8-flash\n✓ 账号怎么申请？ -> 账号申请\n✓ 软件怎么安装？ -> 软件安装\n✓ 登录用的身份怎么办理？ -> 账号申请\n✓ 开发环境部署失败了 -> 软件安装\n✓ 账号已有了，软件怎么安装？ -> 软件安装\n✓ 软件已经安装好了，账号怎么申请？ -> 账号申请\n6/6",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-04b-6e7ecf70e885"
+    },
+    {
+      "type": "prose",
+      "text": "六句全对。停在第五句“账号已有了，软件怎么安装？”上多看一眼：第 01 章的规则版在这儿错过，第 02 章的分类器也在这儿错过，因为它们一个认关键词，一个数单字。这是头一回，资料助手真正读懂了“已经有了”是什么意思——而我们为此做的全部工作，只是写了十来行字。",
+      "html": "<p>六句全对。停在第五句“账号已有了，软件怎么安装？”上多看一眼：第 01 章的规则版在这儿错过，第 02 章的分类器也在这儿错过，因为它们一个认关键词，一个数单字。这是头一回，资料助手真正读懂了“已经有了”是什么意思——而我们为此做的全部工作，只是写了十来行字。</p>\n",
+      "id": "upper-04b-10966ecf035c"
+    },
+    {
+      "type": "image",
+      "alt": "三个版本，一张考卷。",
+      "caption": "三个版本，一张考卷。",
+      "available": true,
+      "src": "/media/91978fa3f9362271.png",
+      "id": "upper-04b-2c630b7dccdc",
+      "previewWidth": 960,
+      "previewSrc": "/media/0ab45a3a504f2597fbcd2a79.webp",
+      "height": 1080,
+      "previewHeight": 576,
+      "srcSet": "/media/0ab45a3a504f2597fbcd2a79.webp 960w, /media/91978fa3f9362271.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "先别急着庆祝。我们是见过世面的人了，知道一个满分后面要问什么：",
+      "html": "<p>先别急着庆祝。我们是见过世面的人了，知道一个满分后面要问什么：</p>\n",
+      "id": "upper-04b-5a1cd6752e58"
+    },
+    {
+      "type": "prose",
+      "text": "第一问：只有六道题。 往后我们会把考卷加厚。",
+      "html": "<p><strong>第一问：只有六道题。</strong> 往后我们会把考卷加厚。</p>\n",
+      "id": "upper-04b-45aa560690f3"
+    },
+    {
+      "type": "prose",
+      "text": "第二问：它每次都这么听话吗？ 有时候你把模型换成更大、更贵的型号（例如换成同平台的 glm-5.3 或其他大模型），它可能会在某一句里客气地多输出几个字，比如回答成 类别：账号申请。意思完全对，程序一比对却判了错——它是在“接话”，不是在“填表”。另外，实际工程里还常碰到另一件事：网络请求明明返回了成功（HTTP 200），但输出预算设小了、回答写到一半被截断，这同样不算交付。第 05 章我们会专门对付这些问题。",
+      "html": "<p><strong>第二问：它每次都这么听话吗？</strong> 有时候你把模型换成更大、更贵的型号（例如换成同平台的 <code>glm-5.3</code> 或其他大模型），它可能会在某一句里客气地多输出几个字，比如回答成 <code>类别：账号申请</code>。意思完全对，程序一比对却判了错——<strong>它是在“接话”，不是在“填表”</strong>。另外，实际工程里还常碰到另一件事：网络请求明明返回了成功（HTTP 200），但输出预算设小了、回答写到一半被截断，这同样不算交付。第 05 章我们会专门对付这些问题。</p>\n",
+      "id": "upper-04b-93cee9f544be"
+    },
+    {
+      "type": "prose",
+      "text": "第三问：代价呢。 第 02 章的分类器在自己电脑上跑几乎零成本；v0.4 每问一句都要走网络、等回复、花额度。六句话无所谓，六百万句就得算算账了（这也是为什么第 12 章我们会把简单活儿交回给自己训的 MiniMind 小模型）。",
+      "html": "<p><strong>第三问：代价呢。</strong> 第 02 章的分类器在自己电脑上跑几乎零成本；v0.4 每问一句都要走网络、等回复、花额度。六句话无所谓，六百万句就得算算账了（这也是为什么第 12 章我们会把简单活儿交回给自己训的 MiniMind 小模型）。</p>\n",
+      "id": "upper-04b-898d75d08fcc"
+    },
+    {
+      "type": "prose",
+      "text": "第四问：它说的是真的吗。 你要是问它“实习生审批入口的网址是什么”，它会接出一个看着很像样的网址。接得出来，不等于查过。这种一本正经的编造，叫幻觉。这是第 07 章的主题。",
+      "html": "<p><strong>第四问：它说的是真的吗。</strong> 你要是问它“实习生审批入口的网址是什么”，它会接出一个看着很像样的网址。接得出来，不等于查过。这种一本正经的编造，叫<strong>幻觉</strong>。这是第 07 章的主题。</p>\n",
+      "id": "upper-04b-46d8aa6c0e87"
+    },
+    {
+      "type": "prose",
+      "text": "最后，把下面这张图刻在脑子里，后面每一章都要回来看它：",
+      "html": "<p>最后，把下面这张图刻在脑子里，后面每一章都要回来看它：</p>\n",
+      "id": "upper-04b-547815f8aaa9"
+    },
+    {
+      "type": "image",
+      "alt": "什么时候改了它，什么时候没改。",
+      "caption": "什么时候改了它，什么时候没改。",
+      "available": true,
+      "src": "/media/a799169a21a2d9d1.png",
+      "id": "upper-04b-7b0ab838b1cc",
+      "previewWidth": 960,
+      "previewSrc": "/media/d8d752a5488b4490846c55aa.webp",
+      "height": 810,
+      "previewHeight": 432,
+      "srcSet": "/media/d8d752a5488b4490846c55aa.webp 960w, /media/a799169a21a2d9d1.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "改大脑参数（比如 mini_gpt.py 和 MiniMind 预训练），学到的东西留在了权重里，下次不用再说；写进前文（比如 ask.py 里的四个例子），一个参数没动，换一段前文它就忘了。这是好事（改几个字就能换任务），也是麻烦（每一次都得从头交代）。",
+      "html": "<p><strong>改大脑参数（比如 <code>mini_gpt.py</code> 和 MiniMind 预训练）</strong>，学到的东西留在了权重里，下次不用再说；<strong>写进前文（比如 <code>ask.py</code> 里的四个例子）</strong>，一个参数没动，换一段前文它就忘了。这是好事（改几个字就能换任务），也是麻烦（每一次都得从头交代）。</p>\n",
+      "id": "upper-04b-05431cd5a8f4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "做大，做到多大",
+      "id": "upper-04b-499de67910fc"
+    },
+    {
+      "type": "prose",
+      "text": "2020 年，OpenAI 的研究发现，模型猜词猜得有多准，和参数量、数据量、算力之间有很稳定的规律（Scaling Laws）。2022 年，DeepMind 又用 Chinchilla 对照实验证明：同样的算力预算下，光长个子（堆参数）不读书（喂数据）是不行的，小一点但多读几倍书的模型反而赢了。",
+      "html": "<p>2020 年，OpenAI 的研究发现，模型猜词猜得有多准，和参数量、数据量、算力之间有很稳定的规律（Scaling Laws）。2022 年，DeepMind 又用 Chinchilla 对照实验证明：同样的算力预算下，<strong>光长个子（堆参数）不读书（喂数据）是不行的</strong>，小一点但多读几倍书的模型反而赢了。</p>\n",
+      "id": "upper-04b-5ccefdd9a20b"
+    },
+    {
+      "type": "image",
+      "alt": "从词到大模型：2013—2022。",
+      "caption": "从词到大模型：2013—2022。",
+      "available": true,
+      "src": "/media/05660f2221ffdf8b.png",
+      "id": "upper-04b-c4827206340b",
+      "previewWidth": 960,
+      "previewSrc": "/media/04049cb38415b8ede3fa00c1.webp",
+      "height": 750,
+      "previewHeight": 400,
+      "srcSet": "/media/04049cb38415b8ede3fa00c1.webp 960w, /media/05660f2221ffdf8b.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "📎\n\n选读：模型名字后面那些词。 混合专家（MoE）：模型内部分成很多小模块，每次只叫醒其中几个。蒸馏：让小模型学着模仿大模型的回答。开放权重：把模型的参数放出来谁都能下载，但不等于训练数据也公开。\n\n选读：训好以后，还能动三处。 微调：拿训好的模型，用自己的一批例子接着训一小会儿。LoRA：原来几十亿个数一个不动，只在课本页边贴一张可撕的“便利贴”（添一小组新参数）来记部门规矩——第 07 章我们会亲手用它把部门规定“背”进 MiniMind，再和 RAG 翻书做一次硬核对比。量化：把每个数存得粗一点（比如 16 位压到 4 位），笔记本也跑得动。",
+      "html": "<blockquote>\n<p>📎</p>\n<p><strong>选读：模型名字后面那些词。</strong> <strong>混合专家（MoE）</strong>：模型内部分成很多小模块，每次只叫醒其中几个。<strong>蒸馏</strong>：让小模型学着模仿大模型的回答。<strong>开放权重</strong>：把模型的参数放出来谁都能下载，但不等于训练数据也公开。</p>\n<p><strong>选读：训好以后，还能动三处。</strong> <strong>微调</strong>：拿训好的模型，用自己的一批例子接着训一小会儿。<strong>LoRA</strong>：原来几十亿个数一个不动，只在课本页边贴一张可撕的“便利贴”（添一小组新参数）来记部门规矩——第 07 章我们会亲手用它把部门规定“背”进 MiniMind，再和 RAG 翻书做一次硬核对比。<strong>量化</strong>：把每个数存得粗一点（比如 16 位压到 4 位），笔记本也跑得动。</p>\n</blockquote>\n",
+      "id": "upper-04b-e43be51ceee2"
+    },
+    {
+      "type": "prose",
+      "text": "🎬 配套视频｜Ep 4.2：读遍互联网之后与不改参数的 v0.4\n",
+      "html": "<p>🎬 <strong>配套视频｜Ep 4.2：读遍互联网之后与不改参数的 v0.4</strong>\n</p>\n",
+      "id": "upper-04b-13cc93797038"
+    },
+    {
+      "type": "video",
+      "alt": "04-2_读遍互联网之后与不改参数的v04_v1",
+      "caption": "读遍互联网之后，怎样让模型接下新任务",
+      "available": true,
+      "src": "/media/7f6b9c41f1e70363282c43f9.mp4",
+      "id": "upper-04b-ebe5ceff67b8",
+      "poster": "/media/c1007e9e7daacdfa914f73a2.webp",
+      "duration": 140.278,
+      "height": 1080,
+      "width": 1920,
+      "subtitleSrc": "/course/captions/04-2.vtt"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "upper-04b-17912e889c19"
+    },
+    {
+      "type": "prose",
+      "text": "mini_gpt.py，零依赖拼出的 592 参数迷你大脑，证明了你亲手写的零件真的能开口接话。",
+      "html": "<p><code>mini_gpt.py</code>，零依赖拼出的 592 参数迷你大脑，证明了你亲手写的零件真的能开口接话。</p>\n",
+      "id": "upper-04b-306ae41eb4eb"
+    },
+    {
+      "type": "prose",
+      "text": "ask.py，资料助手 v0.4，头一回用上大模型并在老考卷上拿了满分。",
+      "html": "<p><code>ask.py</code>，资料助手 <strong>v0.4</strong>，头一回用上大模型并在老考卷上拿了满分。</p>\n",
+      "id": "upper-04b-418cb13a6f30"
+    },
+    {
+      "type": "prose",
+      "text": "还有一个你会用一辈子的问题：每当有人说“我让 AI 学会了某某”，你就问他——你改的是参数，还是前文？",
+      "html": "<p>还有一个你会用一辈子的问题：每当有人说“我让 AI 学会了某某”，你就问他——<strong>你改的是参数，还是前文？</strong></p>\n",
+      "id": "upper-04b-72ed7fee60d3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "下一站",
+      "id": "upper-04b-fe3366739cd9"
+    },
+    {
+      "type": "prose",
+      "text": "你现在有了一个极其擅长“接下一句”的模型。于是你敲下一句话：“帮我给新同事写一份上手指南。”",
+      "html": "<p>你现在有了一个极其擅长“接下一句”的模型。于是你敲下一句话：“帮我给新同事写一份上手指南。”</p>\n",
+      "id": "upper-04b-29f3eda1696f"
+    },
+    {
+      "type": "prose",
+      "text": "假如坐在对面的是 2019 年的预训练基座模型，它多半会顺着往下写：“另外，请把部门介绍和常见问题也整理一份。周五之前给我。”——它把你的话当成了一篇文章的开头，而不是一件要办的活。",
+      "html": "<p>假如坐在对面的是 2019 年的预训练基座模型，它多半会顺着往下写：“另外，请把部门介绍和常见问题也整理一份。周五之前给我。”——它把你的话当成了一篇文章的开头，而不是一件要办的活。</p>\n",
+      "id": "upper-04b-cdb31c75567e"
+    },
+    {
+      "type": "prose",
+      "text": "怎么把一个“只会接文章”的基座模型，教成一个“听得懂人话、愿意接活”的助手？下一章，我们先用三个回答倾向的玩具实验，亲手看示范（SFT）和偏好（DPO）怎样推着参数变。它不是对 MiniMind 权重的完整微调；把这两课接到真正训好并存盘的模型上，仍是这条资料助手主线待补的一段。",
+      "html": "<p>怎么把一个“只会接文章”的基座模型，教成一个“听得懂人话、愿意接活”的助手？下一章，我们先用三个回答倾向的玩具实验，亲手看示范（SFT）和偏好（DPO）怎样推着参数变。它不是对 MiniMind 权重的完整微调；把这两课接到真正训好并存盘的模型上，仍是这条资料助手主线待补的一段。</p>\n",
+      "id": "upper-04b-b232aeaa922d"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "upper-04b-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "合上书之前，想一想",
+      "id": "upper-04b-7e3b2dd0a2cb"
+    },
+    {
+      "type": "prose",
+      "text": "语言模型预训练时的“标准答案”是哪儿来的？为什么不需要人一条条标注？\n只看前一个词的小模型原地转圈时，把温度调低能治好它吗？为什么？\n对比 mini_gpt.py 和 ask.py：前者改了参数，后者只改了前文。各自的代价和好处是什么？\n如果你想把部门最新的《实习生审批规定》教给资料助手，应该用“改参数”还是“写进前文”？先押一注，第 07 章我们拿真实实验来验。",
+      "html": "<ol>\n<li>语言模型预训练时的“标准答案”是哪儿来的？为什么不需要人一条条标注？</li>\n<li>只看前一个词的小模型原地转圈时，把温度调低能治好它吗？为什么？</li>\n<li>对比 <code>mini_gpt.py</code> 和 <code>ask.py</code>：前者改了参数，后者只改了前文。各自的代价和好处是什么？</li>\n<li>如果你想把部门最新的《实习生审批规定》教给资料助手，应该用“改参数”还是“写进前文”？先押一注，第 07 章我们拿真实实验来验。</li>\n</ol>\n",
+      "id": "upper-04b-7768ba3cedd7"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "来源",
+      "id": "upper-04b-64a94487ea8a"
+    },
+    {
+      "type": "prose",
+      "text": "OpenAI, Better Language Models and Their Implications, 2019-02-14；A. Radford et al., Language Models are Unsupervised Multitask Learners, 2019。\nJ. R. Firth (1957)；T. Mikolov et al. (2013, word2vec)；D. Bahdanau et al. (2014, Attention)；A. Vaswani et al. (Attention Is All You Need, 2017)。\nT. Brown et al., Language Models are Few-Shot Learners, NeurIPS 2020；J. Kaplan et al. (2020)；J. Hoffmann et al. (Chinchilla, 2022)。\nMiniMind 开源项目（jingyaogong/minimind）：极简从零预训练与微调架构参考。\n本章 mini_gpt.py 代码与输出为实际运行结果；ask.py 对接商汤 Token Plan https://token.sensetime.com/api/v1（模型 sensenova-6.8-flash）。",
+      "html": "<ol>\n<li>OpenAI, <em>Better Language Models and Their Implications</em>, 2019-02-14；A. Radford et al., <em>Language Models are Unsupervised Multitask Learners</em>, 2019。</li>\n<li>J. R. Firth (1957)；T. Mikolov et al. (2013, word2vec)；D. Bahdanau et al. (2014, Attention)；A. Vaswani et al. (<em>Attention Is All You Need</em>, 2017)。</li>\n<li>T. Brown et al., <em>Language Models are Few-Shot Learners</em>, NeurIPS 2020；J. Kaplan et al. (2020)；J. Hoffmann et al. (<em>Chinchilla</em>, 2022)。</li>\n<li>MiniMind 开源项目（jingyaogong/minimind）：极简从零预训练与微调架构参考。</li>\n<li>本章 <code>mini_gpt.py</code> 代码与输出为实际运行结果；<code>ask.py</code> 对接商汤 Token Plan <code>https://token.sensetime.com/api/v1</code>（模型 <code>sensenova-6.8-flash</code>）。</li>\n</ol>\n",
+      "id": "upper-04b-c9a3180c36ec"
+    }
+  ],
+  "files": {
+    "exam.py": "# exam.py：拿一份没见过的考卷，考一考任何一版 reply\nexam = [\n    (\"账号怎么申请？\", \"账号申请\"),\n    (\"软件怎么安装？\", \"软件安装\"),\n    (\"登录用的身份怎么办理？\", \"账号申请\"),\n    (\"开发环境部署失败了\", \"软件安装\"),\n    (\"账号已有了，软件怎么安装？\", \"软件安装\"),\n    (\"软件已经安装好了，账号怎么申请？\", \"账号申请\"),\n]\n\ndef run(reply, questions=exam):\n    right = 0\n    for text, want in questions:\n        got = reply(text)\n        right += got == want\n        print(\"✓\" if got == want else \"✗\", text, \"->\", got)\n    print(f\"{right}/{len(questions)}\")\n\nif __name__ == \"__main__\":\n    from router import reply\n    run(reply)\n",
+    "check.py": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n",
+    "vectors.py": "# vectors.py：看一个词的邻居，就知道它是什么\nfrom collections import defaultdict, Counter\nimport math\n\ntexts = [\n    \"请 申请 账号\", \"请 申请 账户\", \"尽快 开通 账号\", \"尽快 开通 账户\",\n    \"账号 被 锁定\", \"账户 被 锁定\", \"忘记 账号 密码\", \"忘记 账户 密码\",\n    \"请 安装 工具\", \"请 部署 工具\", \"安装 失败 了\", \"部署 失败 了\",\n    \"本地 安装 环境\", \"本地 部署 环境\", \"重新 安装 插件\", \"重新 部署 插件\",\n]\n# 每个词的向量 = 它左右两边各出现过哪些词、各几次\nvec = defaultdict(Counter)\nfor text in texts:\n    ws = text.split()\n    for i, w in enumerate(ws):\n        for j in (i - 1, i + 1):\n            if 0 <= j < len(ws):\n                vec[w][ws[j]] += 1\n\ndef cosine(a, b):\n    dot = sum(a[k] * b[k] for k in a)\n    na = math.sqrt(sum(v * v for v in a.values()))\n    nb = math.sqrt(sum(v * v for v in b.values()))\n    return dot / (na * nb)\n\nfor word in (\"账号\", \"安装\"):\n    sims = sorted(((cosine(vec[word], vec[o]), o) for o in vec if o != word), reverse=True)\n    print(word, \"最像：\", [f\"{o} {s:.2f}\" for s, o in sims[:3]])\n",
+    "xor_mlp.py": "# xor_mlp.py：这一次不拧旋钮，让它自己学会楼梯灯\nimport math, random\n\ndata = [((0, 0), 0), ((0, 1), 1), ((1, 0), 1), ((1, 1), 0)]\nsig = lambda z: 1 / (1 + math.exp(-z))\nH = 2  # 隐藏单元的个数\n\ndef train(seed, epochs=20000, lr=0.5):\n    rng = random.Random(seed)\n    W = [[rng.uniform(-1, 1) for _ in range(2)] for _ in range(H)]  # 输入→隐藏\n    bh = [rng.uniform(-1, 1) for _ in range(H)]\n    V = [rng.uniform(-1, 1) for _ in range(H)]                      # 隐藏→输出\n    bo = rng.uniform(-1, 1)\n    for _ in range(epochs):\n        for (x1, x2), y in data:\n            # 前向：先算隐藏层，再算输出\n            h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n            o = sig(sum(V[j] * h[j] for j in range(H)) + bo)\n            # 反向：把输出的误差，按链式法则一层层算回去\n            do = (o - y) * o * (1 - o)\n            dh = [do * V[j] * h[j] * (1 - h[j]) for j in range(H)]\n            for j in range(H):\n                V[j] -= lr * do * h[j]\n                W[j][0] -= lr * dh[j] * x1\n                W[j][1] -= lr * dh[j] * x2\n                bh[j] -= lr * dh[j]\n            bo -= lr * do\n    outs = []\n    for (x1, x2), y in data:\n        h = [sig(W[j][0] * x1 + W[j][1] * x2 + bh[j]) for j in range(H)]\n        outs.append(sig(sum(V[j] * h[j] for j in range(H)) + bo))\n    return outs\n\nouts = train(seed=1)\nfor ((x1, x2), y), o in zip(data, outs):\n    print(f\"开关 ({x1},{x2})  该亮吗 {y}  它的回答 {o:.3f}\")\n\nok = sum(all((o > 0.5) == y for o, ((_, _), y) in zip(train(s), data)) for s in range(20))\nprint(f\"换 20 个不同的起点各练一遍：{ok} 次学会，{20 - ok} 次卡住\")\n",
+    "mini_gpt.py": "# mini_gpt.py：零第三方库，把字模、记账数字和注意力拼成迷你大脑\nimport math, random\n\ntexts = [\n    \"新同事先申请账号\",\n    \"新同事先申请权限\",\n    \"新同事先安装软件\",\n    \"账号开通再安装软件\",\n]\nchars = [\"^\", \"$\"] + sorted({c for t in texts for c in t})\nstoi = {c: i for i, c in enumerate(chars)}\nitos = {i: c for c, i in stoi.items()}\nV, D = len(chars), 8\n\nclass Value:\n    def __init__(self, data, prev=(), local_grads=()):\n        self.data, self.grad = data, 0.0\n        self._prev, self._lg = prev, local_grads\n    def __add__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data + o.data, (self, o), (1.0, 1.0))\n    def __radd__(self, o): return self + o\n    def __mul__(self, o):\n        o = o if isinstance(o, Value) else Value(o)\n        return Value(self.data * o.data, (self, o), (o.data, self.data))\n    def __rmul__(self, o): return self * o\n    def __sub__(self, o): return self + (o * -1.0)\n    def __truediv__(self, o): return self * (o ** -1.0)\n    def __pow__(self, p): return Value(self.data ** p, (self,), (p * (self.data ** (p - 1)),))\n    def exp(self):\n        e = math.exp(max(-20, min(20, self.data)))\n        return Value(e, (self,), (e,))\n    def log(self):\n        return Value(math.log(max(self.data, 1e-12)), (self,), (1.0 / max(self.data, 1e-12),))\n    def relu(self):\n        return Value(max(0.0, self.data), (self,), (1.0 if self.data > 0 else 0.0,))\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for c in v._prev: build(c)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            for c, g in zip(v._prev, v._lg):\n                c.grad += g * v.grad\n\nrng = random.Random(42)\nmat = lambda r, c: [[Value(rng.gauss(0, 0.2)) for _ in range(c)] for _ in range(r)]\nwte, wpe = mat(V, D), mat(12, D)                       # 字向量表 + 位置向量表\nwq, wk, wv, wo = mat(D, D), mat(D, D), mat(D, D), mat(D, V)\nparams = [p for m in (wte, wpe, wq, wk, wv, wo) for row in m for p in row]\n\ndef linear(x, w):\n    return [sum(x[i] * w[i][j] for i in range(len(x))) for j in range(len(w[0]))]\n\ndef softmax(logits):\n    m = max(l.data for l in logits)\n    exps = [(l - m).exp() for l in logits]\n    s = sum(exps)\n    return [e / s for e in exps]\n\ndef step_gpt(tok_id, pos_id, keys, vals):\n    x = [wte[tok_id][i] + wpe[pos_id][i] for i in range(D)]\n    q, k, v = linear(x, wq), linear(x, wk), linear(x, wv)\n    keys.append(k); vals.append(v)                     # 只留前面看过的字（因果遮罩）\n    scores = [sum(q[i] * kj[i] for i in range(D)) * (D ** -0.5) for kj in keys]\n    attn = softmax(scores)\n    ctx = [sum(attn[t] * vals[t][i] for t in range(len(vals))) for i in range(D)]\n    h = [x[i] + ctx[i].relu() for i in range(D)]\n    return linear(h, wo)\n\nprint(f\"词表大小 {V} 个，参数一共 {len(params)} 个\")\nfor epoch in range(1, 81):\n    total_loss = 0.0\n    for text in texts:\n        ids = [stoi[c] for c in (\"^\" + text + \"$\")]\n        keys, vals, losses = [], [], []\n        for pos, (cur, nxt) in enumerate(zip(ids, ids[1:])):\n            probs = softmax(step_gpt(cur, pos, keys, vals))\n            losses.append(probs[nxt].log() * -1.0)\n        loss = sum(losses) * (1.0 / len(losses))\n        for p in params: p.grad = 0.0\n        loss.backward()\n        for p in params: p.data -= 0.08 * p.grad\n        total_loss += loss.data\n    if epoch in (1, 20, 80):\n        print(f\"第 {epoch:2d} 轮，平均猜错代价（loss）：{total_loss / len(texts):.2f}\")\n\nfor _ in range(3):\n    cur, keys, vals, out = stoi[\"^\"], [], [], []\n    for pos in range(10):\n        probs = softmax(step_gpt(cur, pos, keys, vals))\n        cur = rng.choices(range(V), weights=[p.data for p in probs])[0]\n        if cur == stoi[\"$\"]: break\n        out.append(itos[cur])\n    print(\"它接出来的话：\", \"\".join(out))\n",
+    "by_hand.py": "# by_hand.py：亲手拧旋钮，用三张评分表搭出楼梯灯\ndef unit(w1, w2, b, x1, x2):\n    return 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n\nfor x1, x2 in [(0, 0), (0, 1), (1, 0), (1, 1)]:\n    h1 = unit(1, 1, -1, x1, x2)       # 至少按下一个\n    h2 = unit(-1, -1, 1, x1, x2)      # 不是两个都按下\n    out = unit(1, 1, -2, h1, h2)      # 上面两条同时成立\n    print(f\"开关 ({x1},{x2})  至少一个={h1}  不是两个={h2}  灯={out}\")\n",
+    "babble.py": "# babble.py：让资料助手追着 score_v2 练 500 轮，亲眼看它会练出什么话\nimport math, random\nfrom reward import score_v2\n\nwords = [\"账号\", \"申请\", \"软件\", \"安装\", \"怎么\", \"请在\", \"系统\", \"审批\", \"即可\", \"开通\"]\nlogits = [0.0] * len(words)\nrng = random.Random(7)\navg = 0.0\n\nfor step in range(1, 501):\n    exps = [math.exp(x) for x in logits]\n    probs = [e / sum(exps) for e in exps]\n    picks = rng.choices(range(len(words)), weights=probs, k=8)\n    sent = \"\".join(words[i] for i in picks) + \"。\"\n    r = score_v2(sent)\n    adv = r - avg\n    avg = 0.95 * avg + 0.05 * r\n    for idx in picks:\n        for i in range(len(words)):\n            logits[i] += 0.05 * adv * ((1.0 if i == idx else 0.0) - probs[i])\n    if step in (1, 50, 500):\n        print(f\"第 {step:3d} 轮（{r:.1f} 分）：{sent}\")\n",
+    "value.py": "# value.py：资料助手的第二块零件。会自己记账、能顺着字条往回算账的数字\nimport math, random\n\nclass Value:\n    def __init__(self, data, prev=()):\n        self.data, self.grad, self.prev = data, 0.0, prev\n        self.backward_step = lambda: None\n    def __add__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data + other.data, (self, other))\n        def step():\n            self.grad += out.grad\n            other.grad += out.grad\n        out.backward_step = step\n        return out\n    def __mul__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out = Value(self.data * other.data, (self, other))\n        def step():\n            self.grad += other.data * out.grad\n            other.grad += self.data * out.grad\n        out.backward_step = step\n        return out\n    def __sub__(self, other):\n        return self + (other * -1.0)\n    def sig(self):\n        s = 1.0 / (1.0 + math.exp(-self.data))\n        out = Value(s, (self,))\n        def step():\n            self.grad += s * (1.0 - s) * out.grad\n        out.backward_step = step\n        return out\n    def backward(self):\n        topo, seen = [], set()\n        def build(v):\n            if v not in seen:\n                seen.add(v)\n                for child in v.prev:\n                    build(child)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo):\n            v.backward_step()\n\nif __name__ == \"__main__\":\n    w = Value(0.0)\n    for _ in range(30):\n        loss = (w - 3.0) * (w - 3.0)     # 目标：让 w 自己挪到 3\n        w.grad = 0.0\n        loss.backward()\n        w.data -= 0.1 * w.grad\n    print(f\"单个数自己往 3 挪了 30 步：w = {w.data:.3f}\")\n\n    data = [((0, 0), 0.0), ((0, 1), 1.0), ((1, 0), 1.0), ((1, 1), 0.0)]\n    rng = random.Random(1)\n    W = [[Value(rng.uniform(-1, 1)) for _ in range(2)] for _ in range(2)]\n    bh = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    V = [Value(rng.uniform(-1, 1)) for _ in range(2)]\n    bo = Value(rng.uniform(-1, 1))\n    params = [p for row in W for p in row] + bh + V + [bo]\n\n    for _ in range(2000):\n        for (x1, x2), y in data:\n            h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n            o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n            loss = (o - y) * (o - y)\n            for p in params:\n                p.grad = 0.0\n            loss.backward()              # 一句顶刚才那七八行手推的算式\n            for p in params:\n                p.data -= 1.0 * p.grad\n\n    for (x1, x2), y in data:\n        h = [(W[j][0] * x1 + W[j][1] * x2 + bh[j]).sig() for j in range(2)]\n        o = (V[0] * h[0] + V[1] * h[1] + bo).sig()\n        print(f\"开关 ({x1},{x2})  该亮吗 {int(y)}  资料助手的回答 {o.data:.3f}\")\n",
+    "patch2.py": "# patch2.py：第二个补丁，已经办完的事不算数\nimport re\nfrom exam import run\n\ndef reply(text):\n    need_account = \"账号\" in text and not re.search(\"已经?有账号|账号已\", text)\n    need_install = \"安装\" in text and not re.search(\"已经?安装|安装好\", text)\n    if need_account and need_install:\n        return \"软件安装\"\n    if need_account:\n        return \"账号申请\"\n    if need_install:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n\nprint(\"—— 隔壁同事探头进来，随口问了两句 ——\")\nrun(reply, [\n    (\"账号还没开通，安装也做不了\", \"账号申请\"),\n    (\"账号已过期，怎么重新申请？\", \"账号申请\"),\n])\n",
+    "peek.py": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")\n",
+    "perceptron.py": "# perceptron.py：一张会自己改的评分表\ndata = [(0, 0), (0, 1), (1, 0), (1, 1)]\n\ndef train(labels, rounds=20, show=False):\n    w1 = w2 = b = 0                       # 一开始，它什么都不知道\n    for r in range(1, rounds + 1):\n        wrong = 0\n        for (x1, x2), want in zip(data, labels):\n            got = 1 if w1 * x1 + w2 * x2 + b >= 0 else 0\n            miss = want - got             # 答对是 0；该说 1 却说 0 是 +1；反过来是 -1\n            if miss:\n                wrong += 1\n                w1 += miss * x1           # 朝着纠正这次错误的方向，各挪一点\n                w2 += miss * x2\n                b += miss\n        if show:\n            print(f\"第 {r} 轮：错 {wrong} 题，现在 w1={w1} w2={w2} b={b}\")\n        if wrong == 0:\n            break\n    return w1, w2, b, wrong\n\nif __name__ == \"__main__\":\n    print(\"教它：两样都办完，才能开通（AND）\")\n    train([0, 0, 0, 1], show=True)\n",
+    "router.py": "# router.py：资料助手 v0.1\ndef reply(text):\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nif __name__ == \"__main__\":\n    print(reply(\"账号怎么申请？\"))\n    print(reply(\"软件怎么安装？\"))\n",
+    "lunch.py": "# lunch.py：楼下新开了三家店，只知道每顿好不好吃，该怎么选？\nimport random\n\nTASTY = [0.3, 0.5, 0.7]      # 三家店“这顿好吃”的真实概率。你并不知道\n\ndef one_year(curious, days, rng):\n    \"\"\"curious：有多大比例的日子，你愿意随便换一家试试\"\"\"\n    visits = [0, 0, 0]\n    score = [0.0, 0.0, 0.0]          # 你心里给三家店打的平均分\n    happy = 0\n    for day in range(days):\n        if day < 3:\n            shop = day                                   # 头三天，每家吃一次\n        elif rng.random() < curious:\n            shop = rng.randrange(3)                      # 今天换换口味\n        else:\n            shop = max(range(3), key=lambda s: score[s])  # 去心里分数最高的那家\n        tasty = 1 if rng.random() < TASTY[shop] else 0\n        visits[shop] += 1\n        score[shop] += (tasty - score[shop]) / visits[shop]\n        happy += tasty\n    return happy, visits.index(max(visits))\n\nrng = random.Random(42)\nfor curious in (0.0, 0.1):\n    results = [one_year(curious, 1000, rng) for _ in range(500)]\n    happy = sum(h for h, _ in results) / 500\n    found = sum(1 for _, fav in results if fav == 2) / 5\n    name = \"认准一家吃到底\" if curious == 0 else \"十天里有一天换口味\"\n    print(f\"{name}：1000 顿里好吃 {happy:.0f} 顿；最后常去的是最好那家的人占 {found:.0f}%\")\n",
+    "reinforce.py": "# reinforce.py：资料助手的第三块零件。没有标准答案，只靠打分调旋钮\nimport math, random\n\nTASTY = [0.3, 0.5, 0.7]\nlogits = [0.0, 0.0, 0.0]                        # 三家店的旋钮，一开始平起平坐\nrng = random.Random(42)\navg = 0.5                                       # 心里的“平时水平”\n\nfor _ in range(1000):\n    exps = [math.exp(l) for l in logits]\n    probs = [e / sum(exps) for e in exps]       # 把三个旋钮换算成去三家店的把握（加起来等于 1）\n    choice = rng.choices([0, 1, 2], weights=probs)[0]\n    reward = 1.0 if rng.random() < TASTY[choice] else 0.0\n    adv = reward - avg                          # 这一顿比平时好多少？\n    avg = 0.99 * avg + 0.01 * reward\n    for i in range(3):\n        step = (1.0 if i == choice else 0.0) - probs[i]\n        logits[i] += 0.1 * adv * step           # 比平时好就往选的这家挪，不如平时就往反方向挪\n\nexps = [math.exp(l) for l in logits]\nprint(\"1000 顿后去三家店的把握：\", [round(e / sum(exps), 2) for e in exps])\n",
+    "tldr.py": "# tldr.py：没人教过它“摘要”这个任务。在文章后面加一个词试试\nfrom ask import chat\n\narticle = \"一项惊人的发现：科学家在安第斯山脉一个偏远的山谷里，发现了一群会说流利英语的独角兽。\"\nprint(chat(article + \"\\n\\nTL;DR:\"))\n",
+    "classifier.py": "# classifier.py：资料助手 v0.2，不写规则，只给例子\nimport math, random\nfrom exam import run          # 第 01 章那张考卷，原封不动\n\ntrain_set = [\n    (\"怎么开通账号\", \"账号申请\"), (\"账号申请入口在哪\", \"账号申请\"),\n    (\"我还没有登录账号\", \"账号申请\"), (\"登录名怎么获取\", \"账号申请\"),\n    (\"工号和账户什么时候发\", \"账号申请\"), (\"邮箱账户怎么开\", \"账号申请\"),\n    (\"没有权限登录系统\", \"账号申请\"), (\"登录不了，提示没有账户\", \"账号申请\"),\n    (\"新员工的账户在哪里办\", \"账号申请\"), (\"统一身份认证怎么申请\", \"账号申请\"),\n    (\"开发工具怎么装\", \"软件安装\"), (\"IDE 安装失败\", \"软件安装\"),\n    (\"环境配置报错\", \"软件安装\"), (\"本地环境怎么部署\", \"软件安装\"),\n    (\"依赖包装不上\", \"软件安装\"), (\"安装包在哪下载\", \"软件安装\"),\n    (\"开发环境怎么搭\", \"软件安装\"), (\"编译时缺少组件\", \"软件安装\"),\n    (\"部署脚本跑不通\", \"软件安装\"), (\"插件装不上\", \"软件安装\"),\n]\n\ndef features(text):\n    \"\"\"把一句话拆成单字和相邻两字，例如“装不上”→ 装、不、上、装不、不上\"\"\"\n    chars = [c for c in text if c.strip() and c not in \"，。？！\"]\n    return chars + [a + b for a, b in zip(chars, chars[1:])]\n\n# 逻辑回归：每个特征一个权重，加权求和后过 sigmoid，得到“是软件安装”的概率\nw, b = {}, 0.0\nrng = random.Random(0)\ndata = train_set[:]\nfor epoch in range(200):\n    rng.shuffle(data)\n    for text, label in data:\n        y = 1 if label == \"软件安装\" else 0\n        fs = features(text)\n        p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in fs))))\n        for f in fs:                              # 沿着降低误差的方向，微调每个权重\n            w[f] = w.get(f, 0.0) - 0.1 * (p - y)\n        b -= 0.1 * (p - y)\n\ndef predict(text):\n    p = 1 / (1 + math.exp(-(b + sum(w.get(f, 0.0) for f in features(text)))))\n    return (\"软件安装\" if p >= 0.5 else \"账号申请\"), p\n\nprint(\"练习题：\", sum(predict(t)[0] == y for t, y in train_set), \"/\", len(train_set))\nprint(\"考卷：\")\nrun(lambda text: predict(text)[0])\n\nranked = sorted(w, key=w.get)\nprint(\"它眼里最像“账号申请”的线索：\", ranked[:5])\nprint(\"它眼里最像“软件安装”的线索：\", ranked[-5:][::-1])\nprint(\"“账号已有了，软件怎么安装？”是安装的把握：\", round(predict(\"账号已有了，软件怎么安装？\")[1], 2))\n",
+    "patch1.py": "# patch1.py：第一个补丁，两个词都出现时，回答安装\nfrom exam import run\n\ndef reply(text):\n    if \"账号\" in text and \"安装\" in text:\n        return \"软件安装\"\n    if \"账号\" in text:\n        return \"账号申请\"\n    if \"安装\" in text:\n        return \"软件安装\"\n    return \"未识别\"\n\nrun(reply)\n",
+    "llm.py": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()\n",
+    "cut.py": "# cut.py：资料助手的第一块“识字”零件。拿一本小词典，把一句话切成块、换成编号\nfrom exam import exam\n\nvocab = {\n    \"<unk>\": 0, \"账号\": 1, \"软件\": 2, \"怎么\": 3,\n    \"申请\": 4, \"安装\": 5, \"已经\": 6, \"有了\": 7, \"好了\": 8,\n}\n\ndef cut(text):\n    out, i = [], 0\n    while i < len(text):\n        if text[i] in \"？，。\":\n            i += 1\n        elif text[i:i+2] in vocab:\n            out.append(vocab[text[i:i+2]])\n            i += 2\n        else:\n            out.append(0)\n            i += 1\n    return out\n\nif __name__ == \"__main__\":\n    for text, _ in exam:\n        print(f\"{text} -> {cut(text)}\")\n",
+    "hello.py": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n",
+    "reward.py": "# reward.py：资料助手 v0.3，给回答打分，再看最高分的回答是什么\nquestion = \"账号怎么申请？\"\n\ncandidates = [\n    \"请在入职系统提交账号申请，经理审批后即可开通。\",\n    \"账号申请见上手指南第一节。\",\n    \"不知道。\",\n    \"账号账号申请申请，账号怎么申请？申请账号很重要，账号申请请申请账号，\"\n    \"关于账号申请，我们需要了解账号申请的流程，账号申请就是申请账号。\",\n]\n\ndef score_v1(answer):\n    \"\"\"第一版打分：和问题重合的字越多越好，越详细越好\"\"\"\n    overlap = sum(answer.count(ch) for ch in set(question) if ch not in \"？\")\n    return overlap + len(answer) / 10\n\ndef score_v2(answer):\n    \"\"\"第二版打分：重合的字只算一次，长度封顶 30 字\"\"\"\n    overlap = len(set(question) & set(answer) - {\"？\"})\n    return overlap + min(len(answer), 30) / 10\n\nfor name, score in ((\"第一版\", score_v1), (\"第二版\", score_v2)):\n    print(f\"== {name}打分\")\n    for ans in sorted(candidates, key=score, reverse=True):\n        print(f\"{score(ans):5.1f}  {ans[:24]}{'……' if len(ans) > 24 else ''}\")\n",
+    "bigram.py": "# bigram.py：只看前一个词，猜下一个词；再用“温度”调一调胆子\nfrom collections import defaultdict, Counter\nimport random\n\ntexts = [\n    \"新同事 先 申请 账号\",\n    \"新同事 先 申请 权限\",\n    \"新同事 先 安装 软件\",\n    \"管理员 确认 后 开通 账号\",\n    \"开通 后 安装 软件\",\n    \"安装 失败 先 检查 网络\",\n]\ncounts = defaultdict(Counter)\nfor text in texts:\n    words = [\"^\", *text.split(), \"$\"]          # ^ 表示开头，$ 表示结尾\n    for left, right in zip(words, words[1:]):\n        counts[left][right] += 1\n\nrow = counts[\"先\"]\ntotal = sum(row.values())\nprint(\"“先”后面：\", {w: round(n / total, 2) for w, n in row.items()})\n\ndef generate(temperature, rng):\n    word, out = \"^\", []\n    for _ in range(10):\n        row = counts[word]\n        weights = [n ** (1 / temperature) for n in row.values()]\n        word = rng.choices(list(row), weights=weights)[0]\n        if word == \"$\":\n            break\n        out.append(word)\n    return \" \".join(out)\n\nrng = random.Random(3)\nfor t in (0.3, 1.0, 3.0):\n    print(f\"温度 {t}：\", \" ｜ \".join(generate(t, rng) for _ in range(3)))\n",
+    "oops.py": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n",
+    "ask.py": "# ask.py：资料助手 v0.4，不训练，把四个例子写进前文\n# 需要第 00 章配好的环境变量：LLM_BASE_URL、LLM_API_KEY、LLM_MODEL\nimport json, os, urllib.request\nfrom exam import run\n\ndef chat(prompt):\n    req = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\n            \"model\": os.environ[\"LLM_MODEL\"],\n            \"messages\": [{\"role\": \"user\", \"content\": prompt}],\n            \"temperature\": 0,\n        }).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\",\n                 \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]},\n    )\n    with urllib.request.urlopen(req, timeout=60) as resp:\n        return json.load(resp)[\"choices\"][0][\"message\"][\"content\"].strip()\n\nFRONT = \"\"\"把新同事的问题分成两类：账号申请、软件安装。只输出类别名。\n\n问题：怎么开通账号\n类别：账号申请\n问题：插件装不上\n类别：软件安装\n问题：登录名怎么获取\n类别：账号申请\n问题：本地环境怎么部署\n类别：软件安装\n问题：{q}\n类别：\"\"\"\n\nif __name__ == \"__main__\":\n    print(\"模型：\", os.environ[\"LLM_MODEL\"])\n    run(lambda text: chat(FRONT.format(q=text)))\n",
+    "eliza.py": "# eliza.py：分解 → 换人称 → 重组\nimport re\n\nSWAP = str.maketrans({\"我\": \"你\", \"你\": \"我\"})\n\nscript = [\n    (r\"我担心(.+)\", \"你为什么担心{0}？\"),\n    (r\"我觉得(.+)\", \"是什么让你觉得{0}？\"),\n    (r\".*(妈妈|爸爸|家里).*\", \"多说说你的家人吧。\"),\n]\n\ndef eliza(text):\n    text = text.rstrip(\"。！？\")\n    for pattern, template in script:\n        m = re.fullmatch(pattern, text)\n        if m:\n            parts = [g.translate(SWAP) for g in m.groups()]\n            return template.format(*parts)\n    return \"请继续说。\"\n\nfor line in [\n    \"我担心入职后跟不上。\",\n    \"我担心你不理解我。\",\n    \"我觉得流程太复杂了。\",\n    \"我妈妈也这么说。\",\n    \"让我不踏实的是入职后跟不上。\",\n    \"我担心的不是入职，是房租。\",\n]:\n    print(line, \"->\", eliza(line))\n",
+    "attention.py": "# attention.py：手算一次注意力。向量是人手设的，只为看清计算过程\nimport math\n\nwords = [\"实习生\", \"同事\", \"使用\", \"独立\", \"入口\", \"这位\", \"同事\", \"该\", \"怎么\", \"申请\"]\n# 每个词的 Key：[和“人”有关, 和“入口”有关, 和“动作”有关]\nkeys = [\n    [4.0, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 2.5, 0.0], [0.0, 4.0, 0.0],\n    [1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.5, 3.0],\n]\n# 最后一个词“申请”发出的 Query：我想知道“谁”在申请、“从哪个入口”申请\nquery = [1.0, 1.0, 0.0]\n\nscores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(3) for key in keys]\nexps = [math.exp(s) for s in scores]\nweights = [e / sum(exps) for e in exps]\nfor w, a in sorted(zip(words, weights), key=lambda x: -x[1])[:5]:\n    print(f\"{w}：{a:.2f}\", \"█\" * round(a * 40))\nprint(\"权重合计：\", round(sum(weights), 2))\n",
+    "maze.py": "# maze.py：没有人教它怎么走，只在走到终点时给它 10 分\nimport random\n\nCOIN = \"没有\"        # 稍后改成 \"踩到就给\" 或 \"走进来才给\"\n\nMAP = [\"S....\",\n       \".###.\",\n       \"..C..\",\n       \".###.\",\n       \"....G\"]\nMOVES = {\"↑\": (-1, 0), \"↓\": (1, 0), \"←\": (0, -1), \"→\": (0, 1)}\n\ndef step(pos, move):\n    r, c = pos[0] + MOVES[move][0], pos[1] + MOVES[move][1]\n    if not (0 <= r < 5 and 0 <= c < 5) or MAP[r][c] == \"#\":\n        r, c = pos                                  # 撞墙：原地不动\n    reward, done = -0.1, False                      # 每走一步扣 0.1，免得它磨蹭\n    if MAP[r][c] == \"G\":\n        reward, done = 10, True\n    elif MAP[r][c] == \"C\":\n        if COIN == \"踩到就给\" or (COIN == \"走进来才给\" and (r, c) != pos):\n            reward += 1\n    return (r, c), reward, done\n\ndef train(games=3000, seed=0):\n    rng = random.Random(seed)\n    value = {}                                      # （位置, 动作）→ 它估计的“往后一共还能拿多少分”\n    for _ in range(games):\n        pos = (0, 0)\n        for _ in range(50):                         # 一局最多 50 步\n            if rng.random() < 0.1:\n                move = rng.choice(list(MOVES))      # 偶尔乱走一步，换换口味\n            else:\n                move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n            nxt, reward, done = step(pos, move)\n            later = 0.0 if done else max(value.get((nxt, m), 0.0) for m in MOVES)\n            old = value.get((pos, move), 0.0)\n            value[(pos, move)] = old + 0.5 * (reward + 0.95 * later - old)\n            pos = nxt\n            if done:\n                break\n    return value\n\ndef play(value):\n    pos, path, total, done = (0, 0), [], 0.0, False\n    for _ in range(50):\n        move = max(MOVES, key=lambda m: value.get((pos, m), 0.0))\n        pos, reward, done = step(pos, move)\n        path.append(move)\n        total += reward\n        if done:\n            break\n    shown = \" \".join(path[:14]) + (\" ……\" if len(path) > 14 else \"\")\n    print(f\"金币：{COIN}\")\n    print(f\"它的走法：{shown}\")\n    print(f\"结果：{'到了终点' if done else '50 步用完，没到终点'}，一共 {total:.1f} 分\")\n\ndef show_map(value):\n    print(\"它心里的地图（站在每一格，估计往后还能拿多少分）：\")\n    for r in range(5):\n        row = []\n        for c in range(5):\n            if MAP[r][c] in \"#G\":\n                row.append(\" 墙  \" if MAP[r][c] == \"#\" else \"终点 \")\n            else:\n                row.append(f\"{max(value.get(((r, c), m), 0.0) for m in MOVES):4.1f} \")\n        print(\"\".join(row))\n\nif __name__ == \"__main__\":\n    value = train()\n    play(value)\n    if COIN == \"没有\":\n        show_map(value)\n",
+    "bill.py": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n",
+    "three_tasks.py": "# three_tasks.py：同一张评分表，三门功课\nfrom perceptron import train\n\ntasks = {\n    \"两样都办完才开通\": [0, 0, 0, 1],\n    \"有一张证就放行\":   [0, 1, 1, 1],\n    \"楼梯灯\":           [0, 1, 1, 0],\n}\nfor name, labels in tasks.items():\n    for rounds in (20, 1000):\n        w1, w2, b, wrong = train(labels, rounds)\n        print(f\"{name}｜练 {rounds} 轮：最后一轮错 {wrong} 题\")\n",
+    "expert.py": "# expert.py：事实 + 规则 → 推理出结论\nrules = [\n    ({\"新同事\"}, \"需要账号\"),\n    ({\"需要账号\", \"经理已批准\"}, \"走标准入口开通\"),\n    ({\"实习生\"}, \"走独立入口开通\"),\n]\n\ndef infer(facts):\n    facts = set(facts)\n    changed = True\n    while changed:              # 一直推，直到推不出新东西\n        changed = False\n        for need, then in rules:\n            if need <= facts and then not in facts:\n                facts.add(then)\n                changed = True\n    return sorted(f for f in facts if f.endswith(\"开通\"))\n\nprint(infer({\"新同事\", \"经理已批准\"}))\nprint(infer({\"新同事\", \"实习生\", \"经理已批准\"}))\n",
+    "minimind_pretrain_sketch.py": "# minimind_pretrain_sketch.py：MiniMind 预训练的核心循环（PyTorch 骨架）\n# 注：这是对应原理的示意骨架，不能单独运行；尚未定义数据加载器、模型和优化器，安装 torch 并不足够\nimport torch\nimport torch.nn.functional as F\n\n# 1. 模型结构：和 mini_gpt.py 一样，只是把 list[Value] 换成了 nn.Module 张量层\n#    每一步输入一串 token 编号 x: [batch_size, seq_len]\n#    模型输出每个位置对 6400 个词的打分 logits: [batch_size, seq_len, 6400]\nfor x, y in dataloader:                 # x 是前文，y 是往后错开一位的“下一个词”\n    logits = model(x)\n    loss = F.cross_entropy(             # 等价于 mini_gpt.py 里的 -log(probs[nxt])\n        logits.view(-1, logits.size(-1)),\n        y.view(-1),\n    )\n    optimizer.zero_grad()               # 等价于 for p in params: p.grad = 0.0\n    loss.backward()                     # 等价于 Value.backward()\n    optimizer.step()                    # 等价于 p.data -= lr * p.grad\n",
+    "docs.py": "# docs.py：测试组的新人资料包（全部是为练习编的）\nDOCS = [\n    {\"id\": \"D01\", \"title\": \"账号申请流程\", \"date\": \"2026-03-01\", \"status\": \"现行\",\n     \"text\": \"新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\"},\n    {\"id\": \"D02\", \"title\": \"账号审批时限规定\", \"date\": \"2025-01-10\", \"status\": \"已废止\",\n     \"text\": \"账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\"},\n    {\"id\": \"D03\", \"title\": \"关于调整账号审批时限的通知\", \"date\": \"2026-11-05\", \"status\": \"现行\",\n     \"text\": \"自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职员工。实习生除外，其账号审批时限为 2 个工作日。\"},\n    {\"id\": \"D04\", \"title\": \"开发工具安装指南\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"账号开通以后，才能安装开发工具。工具包下载约需 20 分钟，安装约需 15 分钟。安装完成后请做环境自检。\"},\n    {\"id\": \"D05\", \"title\": \"实习生入职须知\", \"date\": \"2026-06-02\", \"status\": \"现行\",\n     \"text\": \"实习生不使用入职系统，统一从独立入口提交申请。申请须附项目经理签字的用工单。\"},\n    {\"id\": \"D06\", \"title\": \"环境自检清单\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"自检共三项：能登录代码仓库，能拉取主干代码，能在本地跑通冒烟测试。全部通过约需 10 分钟。\"},\n    {\"id\": \"D07\", \"title\": \"账号注销流程\", \"date\": \"2026-02-20\", \"status\": \"现行\",\n     \"text\": \"员工离职当日，由管理员注销其账号。注销后 30 天内数据可以恢复，逾期永久删除。\"},\n    {\"id\": \"D08\", \"title\": \"办公设备领用\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"新同事入职当天到前台领取笔记本电脑和工牌。显示器需另行申请，三个工作日内配发。\"},\n    {\"id\": \"D09\", \"title\": \"请假与考勤\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"请假须提前一天在考勤系统提交。病假可事后补交证明。迟到三次记一次缺勤。\"},\n    {\"id\": \"D10\", \"title\": \"会议室预订\", \"date\": \"2025-09-01\", \"status\": \"现行\",\n     \"text\": \"会议室在三楼，通过日历系统预订。单次预订不超过两小时，超时须续订。\"},\n    {\"id\": \"D11\", \"title\": \"代码提交规范\", \"date\": \"2026-05-09\", \"status\": \"现行\",\n     \"text\": \"提交前必须跑通本地测试。每次提交须关联需求编号。主干分支禁止直接推送。\"},\n    {\"id\": \"D12\", \"title\": \"报销流程\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"差旅报销须在返回后十个工作日内提交。单笔超过两千元的，须部门负责人审批。\"},\n    {\"id\": \"D13\", \"title\": \"新人第一周日程\", \"date\": \"2026-07-01\", \"status\": \"现行\",\n     \"text\": \"第一天办理账号和设备，第二天参加安全培训，第三天起跟随导师熟悉项目。周五有新人答疑。\"},\n    {\"id\": \"D14\", \"title\": \"入职流程（2024 版）\", \"date\": \"2024-03-01\", \"status\": \"已废止\",\n     \"text\": \"新同事可以先安装开发工具，再提交账号申请。两项可以同时进行，以节省时间。\"},\n]\n\ndef show(doc):\n    return f\"【{doc['id']}】{doc['title']}（{doc['date']}，{doc['status']}）\\n{doc['text']}\"\n"
+  },
+  "sourceFile": "上册/第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习.md"
+}

@@ -1,0 +1,686 @@
+{
+  "id": "upper-00",
+  "title": "第 0 章｜出发前：环境、预算与第一次调用",
+  "shortTitle": "出发前：环境、预算与第一次调用",
+  "volume": "upper",
+  "group": "启程 · 准备出发",
+  "order": 2,
+  "kind": "chapter",
+  "minutes": 22,
+  "summary": "在回到 1956 年的达特茅斯会场之前，先花半小时把你的电脑准备好：确认 Python 能跑，把第一句话寄出去，再把第一张账单看懂。",
+  "text": "# 第 0 章｜出发前：环境、预算与第一次调用\n\n配套课件在这里：[[零基础学AI/attachments/mygpt-companion-20261117-r4-8c90a8fb.zip|下载上册配套代码与实验材料（r4）]]。解压后先读 README，按对应章节说明使用。\n\n## 出发前的热身\n\n在回到 1956 年的达特茅斯会场之前，先花半小时把你的电脑准备好：确认 Python 能跑，把第一句话寄出去，再把第一张账单看懂。\n\n如果你已经调用过大模型的接口，可以只看“第一张账单”和“全书共用的那包资料”两节，然后直接去第 01 章。\n\n![[零基础学AI/attachments/第 0 章｜出发前：环境、预算与第一次调用/ScZHbjZTqozhsTxy4SNcqyocn2c.png|出发前，把要带的东西摆出来点一遍。]]\n\n## 要带的东西只有三样\n\n**一个 Python。** 3.9 或者更新的都行，苹果电脑自带的多半就够用。\n\n**前半程零依赖，只用 Python 自带的标准库。** 第 01 章到第 04 章亲手搭出迷你大脑的过程，不用装任何第三方包，也就没有版本打架的事。连第 10 章的协议，都是用标准库从头手写的。第 04 章后半段会用到 PyTorch 的训练骨架，说明怎样走向 MiniMind；但完整训练与保存重载的步骤尚待补齐，普通笔记本 CPU 的具体配置和耗时也还不能据这段骨架作保证。\n\n**一个能调用的大模型。** 我们统一使用兼容 OpenAI Chat Completions 协议的商汤 Token Plan 平台（`https://token.sensetime.com/api/v1`），默认选用轻量模型 `sensenova-6.8-flash`。你只需要拿到自己的密钥，把下面三样放进环境变量（以后想换别家兼容同一协议的平台，也只改这三个变量，代码一行不用动）：\n\n```\nexport LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"\n```\n\n为什么放在环境变量里，不直接写进代码？\n\n因为密钥就是钱。谁拿到它，谁就能花你的额度。写进代码里的密钥，迟早会跟着代码被发给同事、传到网上。这本书的每一段代码都只从环境变量里读它，没有一处把它写下来，也没有一处把它印出来。请你也守这条规矩。\n\n设好了，跑一下检查：\n\n```python\n# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n```\n\n```\nPython 3.9.6 —— 可以\n地址： https://token.sensetime.com/api/v1\n模型： sensenova-6.8-flash\n密钥： 设了，共 67 位（不印出来）\n那一头：通（它回了一个 404 ，说明有人应门）\n```\n\n最后一行那个 404 不用担心。我们只是敲了敲门，没说要办什么事，对面回一句“没有这个页面”，恰好说明有人应门。\n\n## 第一句话\n\n寄出第一句话。这一回我们不用任何封装，把寄出去的和收回来的都原样印出来。往后十四章里往来的东西，全在这两段里了。\n\n```python\n# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n```\n\n```\n寄出去的：\n{\n \"model\": \"sensenova-6.8-flash\",\n \"messages\": [\n  {\n   \"role\": \"user\",\n   \"content\": \"用一句话向一位今天刚入职的新同事问好。\"\n  }\n ]\n}\n\n收回来的（注：以下为 OpenAI 兼容接口返回结构示例，实际运行 `sensenova-6.8-flash` 时 `usage` 数字以你的返回为准）：\n{\n \"id\": \"chatcmpl-2328c9e5-2394-483d-ae92-d2af27ae7dbe\",\n \"choices\": [\n  {\n   \"index\": 0,\n   \"finish_reason\": \"stop\",\n   \"message\": {\n    \"role\": \"assistant\",\n    \"content\": \"欢迎加入团队，祝你今天入职顺利！\"\n   }\n  }\n ],\n \"created\": 1794497498,\n \"model\": \"sensenova-6.8-flash\",\n \"object\": \"chat.completion\",\n \"system_fingerprint\": \"vllm-0.29.0-tp2-c639578c\",\n \"usage\": {\n  \"prompt_tokens\": 225,\n  \"prompt_tokens_details\": {\n   \"cached_tokens\": 0\n  },\n  \"completion_tokens\": 10,\n  \"completion_tokens_details\": {},\n  \"total_tokens\": 235\n }\n}\n```\n\n![[零基础学AI/attachments/第 0 章｜出发前：环境、预算与第一次调用/Dv4JbkrMdoC6uhxQKnKcQ9cRnze.png|第一声招呼。它回了一句，顺手打出一张小票。]]\n\n寄出去的很短：模型的名字，和一摞消息。这一摞里现在只有一条，标着 `user`，意思是“这句是用户说的”。\n\n收回来的长一些。有三处值得现在就认一认。\n\n`content`，是它的回答。\n\n`finish_reason`，是它为什么停下。`stop` 表示它自己说完了。往后你会见到别的值。\n\n`usage`，是这一次的账：读进去多少，写出来多少。\n\n![[零基础学AI/attachments/第 0 章｜出发前：环境、预算与第一次调用/PZ7BbpBexoo7KtxVHtNc24FQnCf.png|一次调用里，来回的是什么。]]\n\n## 先撞三堵墙\n\n第一次调用很少一次就通。与其等你撞上了再慌，不如现在故意撞一遍，认一认它们各自长什么样。\n\n```python\n# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n```\n\n```\n密钥写错了： 401　{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n地址少了一截： 404　404 page not found\n模型名字写错了： 400　{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033,\"ref_scope\":\"common\"}\n```\n\n![[零基础学AI/attachments/第 0 章｜出发前：环境、预算与第一次调用/ZkfQb7Ee6ooTECxAgVMcPrAKnFr.png|三扇门：钥匙不对，路没修到，门牌是空的。]]\n\n三个数字，三种错。\n\n401，密钥不对。回头检查 `LLM_API_KEY`，最常见的是复制的时候多了一个空格，或者少了开头几位。\n\n404，地址不对。多半是 `LLM_BASE_URL` 少了末尾的 `/v1`，或者多写了一截。\n\n400，这里是模型的名字不对。去平台的模型列表里把名字原样抄一遍。\n\n错误信息的写法各家平台不一样，上面是我用的那家的原话。数字的意思是通用的。\n\n## 每次都这么写太麻烦？封装出 `llm.py` 初版\n\n`hello.py` 跑通了第一句话。可你很快就会发现一个问题：如果我想紧接着再问第二句、第三句，难道每次都要把 `urllib.request.Request`、请求头、`json.loads` 这二十行复制粘贴一遍吗？\n\n就像刚学写程序时，发现一段逻辑要反复用，最自然的反应就是**把它封装成一个函数**。我们把刚才那串寄信和拆信的动作包进 `llm.py` 的第一版（以后它会随着资料助手一起越长越大，加进 JSON 模式、工具调用和更细的账本）：\n\n```python\n# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()\n```\n\n就这么二十来行。它只从环境变量里读地址、密钥和模型名——以后不管是换别的云端模型，还是换成你自己训练出来的本地小模型，调用方式都长这个样子。\n\n## 三轮调用小实验：它为什么不记得刚才说过的话？\n\n既然封装好了 `chat()`，我们来做个三轮调用的小实验，顺便看懂第一张账单：连续问它三句话，最后让它“把上一句的回答翻译成英文”。\n\n```python\n# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n```\n\n```\n问：你好。\n答：你好！我是 SenseNova，由商汤科技 SenseTime 的大模型提供支持。请问有什么我可以帮你的\n   读进去 216 个 token，写出来 44 个\n\n问：用三句话解释什么是 token。\n答：Token 是自然语言处理模型中用于表示文本的基本单位，通常对应一个单词、子词或标点符号。模型通过将这些单元转换为数值向量来处理和理解语言内\n   读进去 221 个 token，写出来 59 个\n\n问：把上面那个问题的回答翻译成英文。\n答：Please provide the specific question or answer you would like me to tr\n   读进去 222 个 token，写出来 17 个\n\n三次一共：读进去 659，写出来 120。按每百万 1.0 和 2.0 算，是 0.000899\n```\n\n![[零基础学AI/attachments/第 0 章｜出发前：环境、预算与第一次调用/I2QPbnKKTowAPCxQ9P9ccN7cnyw.png|第一张账单。]]\n\n跑完这三轮，账单上有两件怪事，都请你现在就记住：\n\n**第一件：“你好”两个字，为什么读进去 216 个 token？**\n\ntoken 是模型数字数的单位，一个汉字大约一个上下。两个字，怎么读出了两百多？看它的回答，它自我介绍了一番——多半是平台在你的话前面垫了一段它自己的开场白，告诉模型它是谁、该怎么说话。这一段你看不见，可它每一次都要读，读了就算你的。所以说到花费，从来不靠估，每个数字都要从 `usage` 那一栏读实数。\n\n**第二件（更反直觉）：第三轮，它把前两轮全忘了。**\n\n你明明刚让它解释完什么是 token，紧接着第三轮让它“把上面那个问题的回答翻译成英文”，它却反过来问你：请提供你要翻译的内容。\n\n为什么？因为大模型本质上就像编程里一个**无状态的纯函数** `f(x) -> y`——好比一位每次接诊都会失忆的医生：你递过去一张写着问题的纸条，它给你开出一张回答的处方；转过身去，下一秒它就把刚才发生的事忘得干干净净。**调用一次，只给一次回答；下一次再调，它永远从一张白纸开始。**\n\n这就留下了一个很值得琢磨的悬念：**既然模型本身只是个“调一次忘一次”的函数，那为什么我们平时用的聊天软件、甚至后面要做的 Agent，却能记得你是谁、上一步干了什么、昨天做到第几步？**\n\n先别急着猜答案。真相不在模型的脑子里，而在我们围着这个函数套上去的那层程序里。到了第 05 章和第 11 章，我们会亲手把这个“让无状态函数长出记性”的机关拆开给你看。\n\n最后是钱。账单最底下那一行，是把 token 换成钱的算法：读进去的和写出来的分开计价，各自乘上单价。代码里那两个单价是我随手填的，只为演示怎么算。请你去查你用的那家平台的价目表，换成真的。\n\n给你一个量级上的参考。这本书各章的实验，少的几万个 token，多的几十万个。花费最高的是第 12 章，因为那一章请了好几位帮手，反复办同一批事。把简单活儿分给本地小模型，可以省下线上接口调用费，但仍有本机算力成本；本版第 12 章尚未接入自训模型，不能把这个方向说成已经测过的结果。\n\n## 书里的东西放在哪儿\n\n### 配套包更新：2026-11-17 r4\n\n本次交付的是**可运行教学代码，不是可用的成品资料助手**。实际分章快照在 `companion/chapters/chXX/`，来源和继承关系在 `companion/chapter-manifest.json`，原始运行结果在 `measured-logs/`。下面保留的 `chXX/code` 和 `_out_` 是原稿目录约定，不是 r4 的实际路径；包内 `TESTED.md`、`DOC-UPDATES.md` 说明实测边界和补丁，不改正文代码。包内原文快照不覆盖本地新修订，r3旧包也不删除。\n\n**Mac Python 3.9.6 已在全新、未安装 torch 的隔离环境复验。** 解压 zip，在解压根目录打开终端，默认路线只用标准库，不需安装第三方依赖或升级 pip：\n\n```bash\npython3 -m venv .venv\nsource .venv/bin/activate\npython -m companion.examples\npython -W error::ResourceWarning -m unittest discover -s companion/tests -p 'test_*.py' -v\npython -W error::ResourceWarning -m unittest discover -s source-snapshot/offline-tests/approval -p 'test_*.py' -v\n```\n\n本机实际结果：默认入口**36项正常运行、2项任务质量失败、0次意外崩溃**；配套测试共20项，**19项通过、1项 torch 测试跳过**（跳过不算通过），另17项审批测试通过。592参数模型训练40轮，loss 2.933→1.703，独立进程重载后续写「先事先先申」；这是真计算，不是可用回答。\n\n任务卡空输出、真实 agent 不选工具，仍按退出码3单独记录；分类和乘法即使程序退出0，也可能是0/6。技能卡、记忆、多助手的成功机制路径是明确标注的 mock 测试，不是小模型办事成功。**第09章有代码快照，但没有登记独立 examples 脚本**；`--chapter ch9` / `ch09` 明确退出2并给出提示，`ch99` 也退出2，不再把空跑算通过。不宣称所有章节的真实模型任务已闭环。\n\n**torch 是可选路线，不是 Mac 安装步骤。** `requirements-torch.txt` 中的版本只由编码环境在 Linux x86_64、Python 3.12.3 测过；本机 Mac 未安装、未验证 torch。缺少 torch 时，`--with-torch` 明确退出2。10803参数 torch 小模型也不是 MiniMind 64M；64M和GPU未测。无密钥、无外部模型请求、无真实外发。\n\n---\n\n\n配套代码包约定按章分文件夹，代码放在各章的 `code` 里。注意：以下是配套包的目录约定，不是这份 Obsidian 笔记目录的现有文件清单。当前修订尚未核验配套包的交付位置与完整性；若你手上只有这些笔记，请先确认是否拿到了完整代码包：\n\n```\nch00/code/     这一章\nch01/code/     第 01 章\n……\nch14/code/     第 14 章\n```\n\n完整配套包应当让每章独立运行：进到该章的 `code` 文件夹，用 `python3 文件名.py` 运行，跨章依赖也应放齐。当前这批笔记还不能替配套包作出“已经全部放齐并逐章验证”的承诺；正文里注明“不再贴全文”的改动，需要以对应版本的完整文件为准。\n\n配套包约定用 `_out_` 开头的文本文件保存原始输出，但当前修订尚未核对这些日志的位置、完整性及其与现版代码的对应关系。正文保留的历史输出，不能自动当成迁移接口后重新跑出的结果；核对时要连同原模型、时间与版本一起看，不能只用“每次回答略有不同”解释差异。\n\n还有一样东西全书共用：一包资料。它是为练习编的，一个虚构的测试组给新同事准备的十四份规定。\n\n```python\n# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")\n```\n\n```\n一共 14 份，其中现行 12 份，已废止 2 份。头三份：\n\n【D01】账号申请流程（2026-03-01，现行）\n新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\n\n【D02】账号审批时限规定（2025-01-10，已废止）\n账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\n\n【D03】关于调整账号审批时限的通知（2026-11-05，现行）\n自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职正式员工。实习生除外，其账号审批时限为 2 个工作日。\n```\n\n请留意第二份和第三份。同一件事有两个版本，一份现行，一份废止，数字不一样；而且正式员工和实习生的时限也不一样。这包资料里特意埋了几处这样的地方。从第 07 章起，它们会一处一处地冒出来给你添麻烦。\n\n## 没有网，或者不想花钱\n\n如果你没法使用线上的平台，还有一条路：在自己的电脑上跑一个开源的小模型。\n\n现在有一些工具可以把模型下载到本机运行，并且对外提供同一种 Chat Completions 的寄法。那样的话，`LLM_BASE_URL` 填本机的地址，`LLM_API_KEY` 随便填几个字，`LLM_MODEL` 填你下载的那个模型的名字，书里的代码照样不用改。\n\n这条资料助手主线的目标，仍是看清从模型到工具箱、再到循环的关系。当前第 04 章（上）能从零练的是 592 参数的纯 Python 玩具；第 04 章（下）只有 MiniMind 训练骨架。完整的 MiniMind 训练、保存重载，以及自训小模型与强模型在工具任务上的同题对照，尚待补齐。后面的 Harness 实验先用接口模型，不把这段缺口说成已经跑通。\n\n## 这一章你留下了什么\n\n`check.py`，出发前的检查。哪天换了电脑、换了平台，先跑它。\n\n`hello.py`，没有任何封装的一次调用。哪天你怀疑封装出了毛病，回到它。\n\n`oops.py`，三种最常见的错。\n\n`llm.py`，全书共用的那个函数的第一版。\n\n`bill.py`，第一张账单。\n\n`docs.py`，那包资料。\n\n还有三句话。\n\n密钥只放在环境变量里。\n\n花费不估，读 `usage`。\n\n它每一次都从一张白纸开始。\n\n## 出发\n\n东西带齐了。\n\n下一页，时间是 1956 年的夏天。有一群人相信，只要把规则写够，机器就能听懂人话。\n\n你也去写几条试试。\n",
+  "codeCount": 14,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "第 0 章｜出发前：环境、预算与第一次调用",
+      "id": "upper-00-987df6850ea7"
+    },
+    {
+      "type": "prose",
+      "text": "配套课件在这里：下载上册配套代码与实验材料（r4）。解压后先读 README，按对应章节说明使用。",
+      "html": "<p>配套课件在这里：下载上册配套代码与实验材料（r4） <span>（原始资料包不公开；本章代码见实验区文件）</span>。解压后先读 README，按对应章节说明使用。</p>\n",
+      "id": "upper-00-dd773ddd04b4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "出发前的热身",
+      "id": "upper-00-09331a59aede"
+    },
+    {
+      "type": "prose",
+      "text": "在回到 1956 年的达特茅斯会场之前，先花半小时把你的电脑准备好：确认 Python 能跑，把第一句话寄出去，再把第一张账单看懂。",
+      "html": "<p>在回到 1956 年的达特茅斯会场之前，先花半小时把你的电脑准备好：确认 Python 能跑，把第一句话寄出去，再把第一张账单看懂。</p>\n",
+      "id": "upper-00-6bc045ecabed"
+    },
+    {
+      "type": "prose",
+      "text": "如果你已经调用过大模型的接口，可以只看“第一张账单”和“全书共用的那包资料”两节，然后直接去第 01 章。",
+      "html": "<p>如果你已经调用过大模型的接口，可以只看“第一张账单”和“全书共用的那包资料”两节，然后直接去第 01 章。</p>\n",
+      "id": "upper-00-93c0a98a087c"
+    },
+    {
+      "type": "image",
+      "alt": "出发前，把要带的东西摆出来点一遍。",
+      "caption": "出发前，把要带的东西摆出来点一遍。",
+      "available": true,
+      "src": "/media/52bb921a7e0dfb99133bcdb7.webp",
+      "id": "upper-00-0bbbb4475ee4",
+      "previewWidth": 960,
+      "previewSrc": "/media/77951d4cf7a46ec1e27a3686.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/77951d4cf7a46ec1e27a3686.webp 960w, /media/52bb921a7e0dfb99133bcdb7.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "要带的东西只有三样",
+      "id": "upper-00-6c5a11c123b0"
+    },
+    {
+      "type": "prose",
+      "text": "一个 Python。 3.9 或者更新的都行，苹果电脑自带的多半就够用。",
+      "html": "<p><strong>一个 Python。</strong> 3.9 或者更新的都行，苹果电脑自带的多半就够用。</p>\n",
+      "id": "upper-00-aca50c9563d5"
+    },
+    {
+      "type": "prose",
+      "text": "前半程零依赖，只用 Python 自带的标准库。 第 01 章到第 04 章亲手搭出迷你大脑的过程，不用装任何第三方包，也就没有版本打架的事。连第 10 章的协议，都是用标准库从头手写的。第 04 章后半段会用到 PyTorch 的训练骨架，说明怎样走向 MiniMind；但完整训练与保存重载的步骤尚待补齐，普通笔记本 CPU 的具体配置和耗时也还不能据这段骨架作保证。",
+      "html": "<p><strong>前半程零依赖，只用 Python 自带的标准库。</strong> 第 01 章到第 04 章亲手搭出迷你大脑的过程，不用装任何第三方包，也就没有版本打架的事。连第 10 章的协议，都是用标准库从头手写的。第 04 章后半段会用到 PyTorch 的训练骨架，说明怎样走向 MiniMind；但完整训练与保存重载的步骤尚待补齐，普通笔记本 CPU 的具体配置和耗时也还不能据这段骨架作保证。</p>\n",
+      "id": "upper-00-e314dbed54a4"
+    },
+    {
+      "type": "prose",
+      "text": "一个能调用的大模型。 我们统一使用兼容 OpenAI Chat Completions 协议的商汤 Token Plan 平台（https://token.sensetime.com/api/v1），默认选用轻量模型 sensenova-6.8-flash。你只需要拿到自己的密钥，把下面三样放进环境变量（以后想换别家兼容同一协议的平台，也只改这三个变量，代码一行不用动）：",
+      "html": "<p><strong>一个能调用的大模型。</strong> 我们统一使用兼容 OpenAI Chat Completions 协议的商汤 Token Plan 平台（<code>https://token.sensetime.com/api/v1</code>），默认选用轻量模型 <code>sensenova-6.8-flash</code>。你只需要拿到自己的密钥，把下面三样放进环境变量（以后想换别家兼容同一协议的平台，也只改这三个变量，代码一行不用动）：</p>\n",
+      "id": "upper-00-67362ec4bd3a"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"",
+      "text": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "upper-00-60547cfe53e4"
+    },
+    {
+      "type": "prose",
+      "text": "为什么放在环境变量里，不直接写进代码？",
+      "html": "<p>为什么放在环境变量里，不直接写进代码？</p>\n",
+      "id": "upper-00-62da930db6cb"
+    },
+    {
+      "type": "prose",
+      "text": "因为密钥就是钱。谁拿到它，谁就能花你的额度。写进代码里的密钥，迟早会跟着代码被发给同事、传到网上。这本书的每一段代码都只从环境变量里读它，没有一处把它写下来，也没有一处把它印出来。请你也守这条规矩。",
+      "html": "<p>因为密钥就是钱。谁拿到它，谁就能花你的额度。写进代码里的密钥，迟早会跟着代码被发给同事、传到网上。这本书的每一段代码都只从环境变量里读它，没有一处把它写下来，也没有一处把它印出来。请你也守这条规矩。</p>\n",
+      "id": "upper-00-b9a2d3bd2f42"
+    },
+    {
+      "type": "prose",
+      "text": "设好了，跑一下检查：",
+      "html": "<p>设好了，跑一下检查：</p>\n",
+      "id": "upper-00-6e641fc099a1"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)",
+      "text": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)",
+      "runnable": true,
+      "filename": "check.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-00-4f05d5628c8e"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "Python 3.9.6 —— 可以\n地址： https://token.sensetime.com/api/v1\n模型： sensenova-6.8-flash\n密钥： 设了，共 67 位（不印出来）\n那一头：通（它回了一个 404 ，说明有人应门）",
+      "text": "Python 3.9.6 —— 可以\n地址： https://token.sensetime.com/api/v1\n模型： sensenova-6.8-flash\n密钥： 设了，共 67 位（不印出来）\n那一头：通（它回了一个 404 ，说明有人应门）",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-27c2bd4dfbe4"
+    },
+    {
+      "type": "prose",
+      "text": "最后一行那个 404 不用担心。我们只是敲了敲门，没说要办什么事，对面回一句“没有这个页面”，恰好说明有人应门。",
+      "html": "<p>最后一行那个 404 不用担心。我们只是敲了敲门，没说要办什么事，对面回一句“没有这个页面”，恰好说明有人应门。</p>\n",
+      "id": "upper-00-b190e49c9bc0"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "第一句话",
+      "id": "upper-00-a4e32836d0d3"
+    },
+    {
+      "type": "prose",
+      "text": "寄出第一句话。这一回我们不用任何封装，把寄出去的和收回来的都原样印出来。往后十四章里往来的东西，全在这两段里了。",
+      "html": "<p>寄出第一句话。这一回我们不用任何封装，把寄出去的和收回来的都原样印出来。往后十四章里往来的东西，全在这两段里了。</p>\n",
+      "id": "upper-00-938a9534565a"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))",
+      "text": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))",
+      "runnable": true,
+      "filename": "hello.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-00-70b06fc33ec4"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "寄出去的：\n{\n \"model\": \"sensenova-6.8-flash\",\n \"messages\": [\n  {\n   \"role\": \"user\",\n   \"content\": \"用一句话向一位今天刚入职的新同事问好。\"\n  }\n ]\n}\n\n收回来的（注：以下为 OpenAI 兼容接口返回结构示例，实际运行 `sensenova-6.8-flash` 时 `usage` 数字以你的返回为准）：\n{\n \"id\": \"chatcmpl-2328c9e5-2394-483d-ae92-d2af27ae7dbe\",\n \"choices\": [\n  {\n   \"index\": 0,\n   \"finish_reason\": \"stop\",\n   \"message\": {\n    \"role\": \"assistant\",\n    \"content\": \"欢迎加入团队，祝你今天入职顺利！\"\n   }\n  }\n ],\n \"created\": 1794497498,\n \"model\": \"sensenova-6.8-flash\",\n \"object\": \"chat.completion\",\n \"system_fingerprint\": \"vllm-0.29.0-tp2-c639578c\",\n \"usage\": {\n  \"prompt_tokens\": 225,\n  \"prompt_tokens_details\": {\n   \"cached_tokens\": 0\n  },\n  \"completion_tokens\": 10,\n  \"completion_tokens_details\": {},\n  \"total_tokens\": 235\n }\n}",
+      "text": "寄出去的：\n{\n \"model\": \"sensenova-6.8-flash\",\n \"messages\": [\n  {\n   \"role\": \"user\",\n   \"content\": \"用一句话向一位今天刚入职的新同事问好。\"\n  }\n ]\n}\n\n收回来的（注：以下为 OpenAI 兼容接口返回结构示例，实际运行 `sensenova-6.8-flash` 时 `usage` 数字以你的返回为准）：\n{\n \"id\": \"chatcmpl-2328c9e5-2394-483d-ae92-d2af27ae7dbe\",\n \"choices\": [\n  {\n   \"index\": 0,\n   \"finish_reason\": \"stop\",\n   \"message\": {\n    \"role\": \"assistant\",\n    \"content\": \"欢迎加入团队，祝你今天入职顺利！\"\n   }\n  }\n ],\n \"created\": 1794497498,\n \"model\": \"sensenova-6.8-flash\",\n \"object\": \"chat.completion\",\n \"system_fingerprint\": \"vllm-0.29.0-tp2-c639578c\",\n \"usage\": {\n  \"prompt_tokens\": 225,\n  \"prompt_tokens_details\": {\n   \"cached_tokens\": 0\n  },\n  \"completion_tokens\": 10,\n  \"completion_tokens_details\": {},\n  \"total_tokens\": 235\n }\n}",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-cffbb249b49c"
+    },
+    {
+      "type": "image",
+      "alt": "第一声招呼。它回了一句，顺手打出一张小票。",
+      "caption": "第一声招呼。它回了一句，顺手打出一张小票。",
+      "available": true,
+      "src": "/media/3cb8a33b820d29e27b62516d.webp",
+      "id": "upper-00-14f7dea0f2f4",
+      "previewWidth": 960,
+      "previewSrc": "/media/d1ee5ec7bea7ddf5e196e7c0.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/d1ee5ec7bea7ddf5e196e7c0.webp 960w, /media/3cb8a33b820d29e27b62516d.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "寄出去的很短：模型的名字，和一摞消息。这一摞里现在只有一条，标着 user，意思是“这句是用户说的”。",
+      "html": "<p>寄出去的很短：模型的名字，和一摞消息。这一摞里现在只有一条，标着 <code>user</code>，意思是“这句是用户说的”。</p>\n",
+      "id": "upper-00-086c02316a71"
+    },
+    {
+      "type": "prose",
+      "text": "收回来的长一些。有三处值得现在就认一认。",
+      "html": "<p>收回来的长一些。有三处值得现在就认一认。</p>\n",
+      "id": "upper-00-601e271175b4"
+    },
+    {
+      "type": "prose",
+      "text": "content，是它的回答。",
+      "html": "<p><code>content</code>，是它的回答。</p>\n",
+      "id": "upper-00-1aa8ede536df"
+    },
+    {
+      "type": "prose",
+      "text": "finish_reason，是它为什么停下。stop 表示它自己说完了。往后你会见到别的值。",
+      "html": "<p><code>finish_reason</code>，是它为什么停下。<code>stop</code> 表示它自己说完了。往后你会见到别的值。</p>\n",
+      "id": "upper-00-4a78f8f89c0a"
+    },
+    {
+      "type": "prose",
+      "text": "usage，是这一次的账：读进去多少，写出来多少。",
+      "html": "<p><code>usage</code>，是这一次的账：读进去多少，写出来多少。</p>\n",
+      "id": "upper-00-acbd297faa2d"
+    },
+    {
+      "type": "image",
+      "alt": "一次调用里，来回的是什么。",
+      "caption": "一次调用里，来回的是什么。",
+      "available": true,
+      "src": "/media/3e89e9d1fa0b5ed3.png",
+      "id": "upper-00-2d135006a206",
+      "previewWidth": 960,
+      "previewSrc": "/media/8b792a44de7de80f4a7a7285.webp",
+      "height": 954,
+      "previewHeight": 509,
+      "srcSet": "/media/8b792a44de7de80f4a7a7285.webp 960w, /media/3e89e9d1fa0b5ed3.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "先撞三堵墙",
+      "id": "upper-00-887c20c8964c"
+    },
+    {
+      "type": "prose",
+      "text": "第一次调用很少一次就通。与其等你撞上了再慌，不如现在故意撞一遍，认一认它们各自长什么样。",
+      "html": "<p>第一次调用很少一次就通。与其等你撞上了再慌，不如现在故意撞一遍，认一认它们各自长什么样。</p>\n",
+      "id": "upper-00-a0c55f589299"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))",
+      "text": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))",
+      "runnable": true,
+      "filename": "oops.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-00-db8ada6a7399"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "密钥写错了： 401　{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n地址少了一截： 404　404 page not found\n模型名字写错了： 400　{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033,\"ref_scope\":\"common\"}",
+      "text": "密钥写错了： 401　{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n地址少了一截： 404　404 page not found\n模型名字写错了： 400　{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033,\"ref_scope\":\"common\"}",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-9d95d8299e3c"
+    },
+    {
+      "type": "image",
+      "alt": "三扇门：钥匙不对，路没修到，门牌是空的。",
+      "caption": "三扇门：钥匙不对，路没修到，门牌是空的。",
+      "available": true,
+      "src": "/media/79360e6c3b4ffb7b4fb39294.webp",
+      "id": "upper-00-f6a59f3eddb6",
+      "previewWidth": 960,
+      "previewSrc": "/media/75aa9d061a1d7c5a966b4897.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/75aa9d061a1d7c5a966b4897.webp 960w, /media/79360e6c3b4ffb7b4fb39294.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "三个数字，三种错。",
+      "html": "<p>三个数字，三种错。</p>\n",
+      "id": "upper-00-0d5c78916dae"
+    },
+    {
+      "type": "prose",
+      "text": "401，密钥不对。回头检查 LLM_API_KEY，最常见的是复制的时候多了一个空格，或者少了开头几位。",
+      "html": "<p>401，密钥不对。回头检查 <code>LLM_API_KEY</code>，最常见的是复制的时候多了一个空格，或者少了开头几位。</p>\n",
+      "id": "upper-00-fe0b907cd9ce"
+    },
+    {
+      "type": "prose",
+      "text": "404，地址不对。多半是 LLM_BASE_URL 少了末尾的 /v1，或者多写了一截。",
+      "html": "<p>404，地址不对。多半是 <code>LLM_BASE_URL</code> 少了末尾的 <code>/v1</code>，或者多写了一截。</p>\n",
+      "id": "upper-00-32a75485f44c"
+    },
+    {
+      "type": "prose",
+      "text": "400，这里是模型的名字不对。去平台的模型列表里把名字原样抄一遍。",
+      "html": "<p>400，这里是模型的名字不对。去平台的模型列表里把名字原样抄一遍。</p>\n",
+      "id": "upper-00-0ac5facb3e16"
+    },
+    {
+      "type": "prose",
+      "text": "错误信息的写法各家平台不一样，上面是我用的那家的原话。数字的意思是通用的。",
+      "html": "<p>错误信息的写法各家平台不一样，上面是我用的那家的原话。数字的意思是通用的。</p>\n",
+      "id": "upper-00-56a02dfe7194"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "每次都这么写太麻烦？封装出 llm.py 初版",
+      "id": "upper-00-389ff72cf1a7"
+    },
+    {
+      "type": "prose",
+      "text": "hello.py 跑通了第一句话。可你很快就会发现一个问题：如果我想紧接着再问第二句、第三句，难道每次都要把 urllib.request.Request、请求头、json.loads 这二十行复制粘贴一遍吗？",
+      "html": "<p><code>hello.py</code> 跑通了第一句话。可你很快就会发现一个问题：如果我想紧接着再问第二句、第三句，难道每次都要把 <code>urllib.request.Request</code>、请求头、<code>json.loads</code> 这二十行复制粘贴一遍吗？</p>\n",
+      "id": "upper-00-76de0aaa6a63"
+    },
+    {
+      "type": "prose",
+      "text": "就像刚学写程序时，发现一段逻辑要反复用，最自然的反应就是把它封装成一个函数。我们把刚才那串寄信和拆信的动作包进 llm.py 的第一版（以后它会随着资料助手一起越长越大，加进 JSON 模式、工具调用和更细的账本）：",
+      "html": "<p>就像刚学写程序时，发现一段逻辑要反复用，最自然的反应就是<strong>把它封装成一个函数</strong>。我们把刚才那串寄信和拆信的动作包进 <code>llm.py</code> 的第一版（以后它会随着资料助手一起越长越大，加进 JSON 模式、工具调用和更细的账本）：</p>\n",
+      "id": "upper-00-c6dee2b24b70"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()",
+      "text": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()",
+      "runnable": true,
+      "filename": "llm.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-00-8db79b9f3b8e"
+    },
+    {
+      "type": "prose",
+      "text": "就这么二十来行。它只从环境变量里读地址、密钥和模型名——以后不管是换别的云端模型，还是换成你自己训练出来的本地小模型，调用方式都长这个样子。",
+      "html": "<p>就这么二十来行。它只从环境变量里读地址、密钥和模型名——以后不管是换别的云端模型，还是换成你自己训练出来的本地小模型，调用方式都长这个样子。</p>\n",
+      "id": "upper-00-fdfe7d477fe9"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "三轮调用小实验：它为什么不记得刚才说过的话？",
+      "id": "upper-00-dd18b30f01cc"
+    },
+    {
+      "type": "prose",
+      "text": "既然封装好了 chat()，我们来做个三轮调用的小实验，顺便看懂第一张账单：连续问它三句话，最后让它“把上一句的回答翻译成英文”。",
+      "html": "<p>既然封装好了 <code>chat()</code>，我们来做个三轮调用的小实验，顺便看懂第一张账单：连续问它三句话，最后让它“把上一句的回答翻译成英文”。</p>\n",
+      "id": "upper-00-bdbaee096b96"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")",
+      "text": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")",
+      "runnable": true,
+      "filename": "bill.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "upper-00-2e435e9a3f47"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "问：你好。\n答：你好！我是 SenseNova，由商汤科技 SenseTime 的大模型提供支持。请问有什么我可以帮你的\n   读进去 216 个 token，写出来 44 个\n\n问：用三句话解释什么是 token。\n答：Token 是自然语言处理模型中用于表示文本的基本单位，通常对应一个单词、子词或标点符号。模型通过将这些单元转换为数值向量来处理和理解语言内\n   读进去 221 个 token，写出来 59 个\n\n问：把上面那个问题的回答翻译成英文。\n答：Please provide the specific question or answer you would like me to tr\n   读进去 222 个 token，写出来 17 个\n\n三次一共：读进去 659，写出来 120。按每百万 1.0 和 2.0 算，是 0.000899",
+      "text": "问：你好。\n答：你好！我是 SenseNova，由商汤科技 SenseTime 的大模型提供支持。请问有什么我可以帮你的\n   读进去 216 个 token，写出来 44 个\n\n问：用三句话解释什么是 token。\n答：Token 是自然语言处理模型中用于表示文本的基本单位，通常对应一个单词、子词或标点符号。模型通过将这些单元转换为数值向量来处理和理解语言内\n   读进去 221 个 token，写出来 59 个\n\n问：把上面那个问题的回答翻译成英文。\n答：Please provide the specific question or answer you would like me to tr\n   读进去 222 个 token，写出来 17 个\n\n三次一共：读进去 659，写出来 120。按每百万 1.0 和 2.0 算，是 0.000899",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-73848f2472a7"
+    },
+    {
+      "type": "image",
+      "alt": "第一张账单。",
+      "caption": "第一张账单。",
+      "available": true,
+      "src": "/media/251b87d4297cb151.png",
+      "id": "upper-00-4dfeeb89b855",
+      "previewWidth": 960,
+      "previewSrc": "/media/646c45d852c60bf53f7ae66c.webp",
+      "height": 882,
+      "previewHeight": 470,
+      "srcSet": "/media/646c45d852c60bf53f7ae66c.webp 960w, /media/251b87d4297cb151.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "跑完这三轮，账单上有两件怪事，都请你现在就记住：",
+      "html": "<p>跑完这三轮，账单上有两件怪事，都请你现在就记住：</p>\n",
+      "id": "upper-00-852661f0a2e4"
+    },
+    {
+      "type": "prose",
+      "text": "第一件：“你好”两个字，为什么读进去 216 个 token？",
+      "html": "<p><strong>第一件：“你好”两个字，为什么读进去 216 个 token？</strong></p>\n",
+      "id": "upper-00-97e46e2ab7ce"
+    },
+    {
+      "type": "prose",
+      "text": "token 是模型数字数的单位，一个汉字大约一个上下。两个字，怎么读出了两百多？看它的回答，它自我介绍了一番——多半是平台在你的话前面垫了一段它自己的开场白，告诉模型它是谁、该怎么说话。这一段你看不见，可它每一次都要读，读了就算你的。所以说到花费，从来不靠估，每个数字都要从 usage 那一栏读实数。",
+      "html": "<p>token 是模型数字数的单位，一个汉字大约一个上下。两个字，怎么读出了两百多？看它的回答，它自我介绍了一番——多半是平台在你的话前面垫了一段它自己的开场白，告诉模型它是谁、该怎么说话。这一段你看不见，可它每一次都要读，读了就算你的。所以说到花费，从来不靠估，每个数字都要从 <code>usage</code> 那一栏读实数。</p>\n",
+      "id": "upper-00-ea4c2863a025"
+    },
+    {
+      "type": "prose",
+      "text": "第二件（更反直觉）：第三轮，它把前两轮全忘了。",
+      "html": "<p><strong>第二件（更反直觉）：第三轮，它把前两轮全忘了。</strong></p>\n",
+      "id": "upper-00-93337d53a092"
+    },
+    {
+      "type": "prose",
+      "text": "你明明刚让它解释完什么是 token，紧接着第三轮让它“把上面那个问题的回答翻译成英文”，它却反过来问你：请提供你要翻译的内容。",
+      "html": "<p>你明明刚让它解释完什么是 token，紧接着第三轮让它“把上面那个问题的回答翻译成英文”，它却反过来问你：请提供你要翻译的内容。</p>\n",
+      "id": "upper-00-5e331982ad7e"
+    },
+    {
+      "type": "prose",
+      "text": "为什么？因为大模型本质上就像编程里一个无状态的纯函数 f(x) -> y——好比一位每次接诊都会失忆的医生：你递过去一张写着问题的纸条，它给你开出一张回答的处方；转过身去，下一秒它就把刚才发生的事忘得干干净净。调用一次，只给一次回答；下一次再调，它永远从一张白纸开始。",
+      "html": "<p>为什么？因为大模型本质上就像编程里一个<strong>无状态的纯函数</strong> <code>f(x) -&gt; y</code>——好比一位每次接诊都会失忆的医生：你递过去一张写着问题的纸条，它给你开出一张回答的处方；转过身去，下一秒它就把刚才发生的事忘得干干净净。<strong>调用一次，只给一次回答；下一次再调，它永远从一张白纸开始。</strong></p>\n",
+      "id": "upper-00-5592e1137106"
+    },
+    {
+      "type": "prose",
+      "text": "这就留下了一个很值得琢磨的悬念：既然模型本身只是个“调一次忘一次”的函数，那为什么我们平时用的聊天软件、甚至后面要做的 Agent，却能记得你是谁、上一步干了什么、昨天做到第几步？",
+      "html": "<p>这就留下了一个很值得琢磨的悬念：<strong>既然模型本身只是个“调一次忘一次”的函数，那为什么我们平时用的聊天软件、甚至后面要做的 Agent，却能记得你是谁、上一步干了什么、昨天做到第几步？</strong></p>\n",
+      "id": "upper-00-aba16d6de8f0"
+    },
+    {
+      "type": "prose",
+      "text": "先别急着猜答案。真相不在模型的脑子里，而在我们围着这个函数套上去的那层程序里。到了第 05 章和第 11 章，我们会亲手把这个“让无状态函数长出记性”的机关拆开给你看。",
+      "html": "<p>先别急着猜答案。真相不在模型的脑子里，而在我们围着这个函数套上去的那层程序里。到了第 05 章和第 11 章，我们会亲手把这个“让无状态函数长出记性”的机关拆开给你看。</p>\n",
+      "id": "upper-00-24bf710c0f8a"
+    },
+    {
+      "type": "prose",
+      "text": "最后是钱。账单最底下那一行，是把 token 换成钱的算法：读进去的和写出来的分开计价，各自乘上单价。代码里那两个单价是我随手填的，只为演示怎么算。请你去查你用的那家平台的价目表，换成真的。",
+      "html": "<p>最后是钱。账单最底下那一行，是把 token 换成钱的算法：读进去的和写出来的分开计价，各自乘上单价。代码里那两个单价是我随手填的，只为演示怎么算。请你去查你用的那家平台的价目表，换成真的。</p>\n",
+      "id": "upper-00-17e092cd0fc0"
+    },
+    {
+      "type": "prose",
+      "text": "给你一个量级上的参考。这本书各章的实验，少的几万个 token，多的几十万个。花费最高的是第 12 章，因为那一章请了好几位帮手，反复办同一批事。把简单活儿分给本地小模型，可以省下线上接口调用费，但仍有本机算力成本；本版第 12 章尚未接入自训模型，不能把这个方向说成已经测过的结果。",
+      "html": "<p>给你一个量级上的参考。这本书各章的实验，少的几万个 token，多的几十万个。花费最高的是第 12 章，因为那一章请了好几位帮手，反复办同一批事。把简单活儿分给本地小模型，可以省下线上接口调用费，但仍有本机算力成本；本版第 12 章尚未接入自训模型，不能把这个方向说成已经测过的结果。</p>\n",
+      "id": "upper-00-c155e7f3410f"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "书里的东西放在哪儿",
+      "id": "upper-00-7a4a27d7775c"
+    },
+    {
+      "type": "heading",
+      "level": 3,
+      "text": "配套包更新：2026-11-17 r4",
+      "id": "upper-00-45a2bf5a3d0d"
+    },
+    {
+      "type": "prose",
+      "text": "本次交付的是可运行教学代码，不是可用的成品资料助手。实际分章快照在 companion/chapters/chXX/，来源和继承关系在 companion/chapter-manifest.json，原始运行结果在 measured-logs/。下面保留的 chXX/code 和 _out_ 是原稿目录约定，不是 r4 的实际路径；包内 TESTED.md、DOC-UPDATES.md 说明实测边界和补丁，不改正文代码。包内原文快照不覆盖本地新修订，r3旧包也不删除。",
+      "html": "<p>本次交付的是<strong>可运行教学代码，不是可用的成品资料助手</strong>。实际分章快照在 <code>companion/chapters/chXX/</code>，来源和继承关系在 <code>companion/chapter-manifest.json</code>，原始运行结果在 <code>measured-logs/</code>。下面保留的 <code>chXX/code</code> 和 <code>_out_</code> 是原稿目录约定，不是 r4 的实际路径；包内 <code>TESTED.md</code>、<code>DOC-UPDATES.md</code> 说明实测边界和补丁，不改正文代码。包内原文快照不覆盖本地新修订，r3旧包也不删除。</p>\n",
+      "id": "upper-00-a244a31a4fce"
+    },
+    {
+      "type": "prose",
+      "text": "Mac Python 3.9.6 已在全新、未安装 torch 的隔离环境复验。 解压 zip，在解压根目录打开终端，默认路线只用标准库，不需安装第三方依赖或升级 pip：",
+      "html": "<p><strong>Mac Python 3.9.6 已在全新、未安装 torch 的隔离环境复验。</strong> 解压 zip，在解压根目录打开终端，默认路线只用标准库，不需安装第三方依赖或升级 pip：</p>\n",
+      "id": "upper-00-a991051e2f52"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "python3 -m venv .venv\nsource .venv/bin/activate\npython -m companion.examples\npython -W error::ResourceWarning -m unittest discover -s companion/tests -p 'test_*.py' -v\npython -W error::ResourceWarning -m unittest discover -s source-snapshot/offline-tests/approval -p 'test_*.py' -v",
+      "text": "python3 -m venv .venv\nsource .venv/bin/activate\npython -m companion.examples\npython -W error::ResourceWarning -m unittest discover -s companion/tests -p 'test_*.py' -v\npython -W error::ResourceWarning -m unittest discover -s source-snapshot/offline-tests/approval -p 'test_*.py' -v",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "upper-00-b8745c8f20b7"
+    },
+    {
+      "type": "prose",
+      "text": "本机实际结果：默认入口36项正常运行、2项任务质量失败、0次意外崩溃；配套测试共20项，19项通过、1项 torch 测试跳过（跳过不算通过），另17项审批测试通过。592参数模型训练40轮，loss 2.933→1.703，独立进程重载后续写「先事先先申」；这是真计算，不是可用回答。",
+      "html": "<p>本机实际结果：默认入口<strong>36项正常运行、2项任务质量失败、0次意外崩溃</strong>；配套测试共20项，<strong>19项通过、1项 torch 测试跳过</strong>（跳过不算通过），另17项审批测试通过。592参数模型训练40轮，loss 2.933→1.703，独立进程重载后续写「先事先先申」；这是真计算，不是可用回答。</p>\n",
+      "id": "upper-00-782d523b6cd1"
+    },
+    {
+      "type": "prose",
+      "text": "任务卡空输出、真实 agent 不选工具，仍按退出码3单独记录；分类和乘法即使程序退出0，也可能是0/6。技能卡、记忆、多助手的成功机制路径是明确标注的 mock 测试，不是小模型办事成功。第09章有代码快照，但没有登记独立 examples 脚本；--chapter ch9 / ch09 明确退出2并给出提示，ch99 也退出2，不再把空跑算通过。不宣称所有章节的真实模型任务已闭环。",
+      "html": "<p>任务卡空输出、真实 agent 不选工具，仍按退出码3单独记录；分类和乘法即使程序退出0，也可能是0/6。技能卡、记忆、多助手的成功机制路径是明确标注的 mock 测试，不是小模型办事成功。<strong>第09章有代码快照，但没有登记独立 examples 脚本</strong>；<code>--chapter ch9</code> / <code>ch09</code> 明确退出2并给出提示，<code>ch99</code> 也退出2，不再把空跑算通过。不宣称所有章节的真实模型任务已闭环。</p>\n",
+      "id": "upper-00-d7fa3765ea12"
+    },
+    {
+      "type": "prose",
+      "text": "torch 是可选路线，不是 Mac 安装步骤。 requirements-torch.txt 中的版本只由编码环境在 Linux x86_64、Python 3.12.3 测过；本机 Mac 未安装、未验证 torch。缺少 torch 时，--with-torch 明确退出2。10803参数 torch 小模型也不是 MiniMind 64M；64M和GPU未测。无密钥、无外部模型请求、无真实外发。",
+      "html": "<p><strong>torch 是可选路线，不是 Mac 安装步骤。</strong> <code>requirements-torch.txt</code> 中的版本只由编码环境在 Linux x86_64、Python 3.12.3 测过；本机 Mac 未安装、未验证 torch。缺少 torch 时，<code>--with-torch</code> 明确退出2。10803参数 torch 小模型也不是 MiniMind 64M；64M和GPU未测。无密钥、无外部模型请求、无真实外发。</p>\n",
+      "id": "upper-00-1a6e8a4cad34"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "upper-00-a3583fe48122"
+    },
+    {
+      "type": "prose",
+      "text": "配套代码包约定按章分文件夹，代码放在各章的 code 里。注意：以下是配套包的目录约定，不是这份 Obsidian 笔记目录的现有文件清单。当前修订尚未核验配套包的交付位置与完整性；若你手上只有这些笔记，请先确认是否拿到了完整代码包：",
+      "html": "<p>配套代码包约定按章分文件夹，代码放在各章的 <code>code</code> 里。注意：以下是配套包的目录约定，不是这份 Obsidian 笔记目录的现有文件清单。当前修订尚未核验配套包的交付位置与完整性；若你手上只有这些笔记，请先确认是否拿到了完整代码包：</p>\n",
+      "id": "upper-00-12928da50959"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "ch00/code/     这一章\nch01/code/     第 01 章\n……\nch14/code/     第 14 章",
+      "text": "ch00/code/     这一章\nch01/code/     第 01 章\n……\nch14/code/     第 14 章",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-261773369593"
+    },
+    {
+      "type": "prose",
+      "text": "完整配套包应当让每章独立运行：进到该章的 code 文件夹，用 python3 文件名.py 运行，跨章依赖也应放齐。当前这批笔记还不能替配套包作出“已经全部放齐并逐章验证”的承诺；正文里注明“不再贴全文”的改动，需要以对应版本的完整文件为准。",
+      "html": "<p>完整配套包应当让每章独立运行：进到该章的 <code>code</code> 文件夹，用 <code>python3 文件名.py</code> 运行，跨章依赖也应放齐。当前这批笔记还不能替配套包作出“已经全部放齐并逐章验证”的承诺；正文里注明“不再贴全文”的改动，需要以对应版本的完整文件为准。</p>\n",
+      "id": "upper-00-ad8e9f44b04d"
+    },
+    {
+      "type": "prose",
+      "text": "配套包约定用 _out_ 开头的文本文件保存原始输出，但当前修订尚未核对这些日志的位置、完整性及其与现版代码的对应关系。正文保留的历史输出，不能自动当成迁移接口后重新跑出的结果；核对时要连同原模型、时间与版本一起看，不能只用“每次回答略有不同”解释差异。",
+      "html": "<p>配套包约定用 <code>_out_</code> 开头的文本文件保存原始输出，但当前修订尚未核对这些日志的位置、完整性及其与现版代码的对应关系。正文保留的历史输出，不能自动当成迁移接口后重新跑出的结果；核对时要连同原模型、时间与版本一起看，不能只用“每次回答略有不同”解释差异。</p>\n",
+      "id": "upper-00-0450d6435af2"
+    },
+    {
+      "type": "prose",
+      "text": "还有一样东西全书共用：一包资料。它是为练习编的，一个虚构的测试组给新同事准备的十四份规定。",
+      "html": "<p>还有一样东西全书共用：一包资料。它是为练习编的，一个虚构的测试组给新同事准备的十四份规定。</p>\n",
+      "id": "upper-00-f44ce4d90f61"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")",
+      "text": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")",
+      "runnable": true,
+      "filename": "peek.py",
+      "runtime": "browser",
+      "reason": "纯 Python／已预置本章模块，可在浏览器沙盒运行。",
+      "id": "upper-00-47d5a65e136a"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "一共 14 份，其中现行 12 份，已废止 2 份。头三份：\n\n【D01】账号申请流程（2026-03-01，现行）\n新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\n\n【D02】账号审批时限规定（2025-01-10，已废止）\n账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\n\n【D03】关于调整账号审批时限的通知（2026-11-05，现行）\n自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职正式员工。实习生除外，其账号审批时限为 2 个工作日。",
+      "text": "一共 14 份，其中现行 12 份，已废止 2 份。头三份：\n\n【D01】账号申请流程（2026-03-01，现行）\n新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\n\n【D02】账号审批时限规定（2025-01-10，已废止）\n账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\n\n【D03】关于调整账号审批时限的通知（2026-11-05，现行）\n自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职正式员工。实习生除外，其账号审批时限为 2 个工作日。",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "upper-00-60aaf0c67b72"
+    },
+    {
+      "type": "prose",
+      "text": "请留意第二份和第三份。同一件事有两个版本，一份现行，一份废止，数字不一样；而且正式员工和实习生的时限也不一样。这包资料里特意埋了几处这样的地方。从第 07 章起，它们会一处一处地冒出来给你添麻烦。",
+      "html": "<p>请留意第二份和第三份。同一件事有两个版本，一份现行，一份废止，数字不一样；而且正式员工和实习生的时限也不一样。这包资料里特意埋了几处这样的地方。从第 07 章起，它们会一处一处地冒出来给你添麻烦。</p>\n",
+      "id": "upper-00-cfbde771d40e"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "没有网，或者不想花钱",
+      "id": "upper-00-615f80aa0992"
+    },
+    {
+      "type": "prose",
+      "text": "如果你没法使用线上的平台，还有一条路：在自己的电脑上跑一个开源的小模型。",
+      "html": "<p>如果你没法使用线上的平台，还有一条路：在自己的电脑上跑一个开源的小模型。</p>\n",
+      "id": "upper-00-91efd35bc16e"
+    },
+    {
+      "type": "prose",
+      "text": "现在有一些工具可以把模型下载到本机运行，并且对外提供同一种 Chat Completions 的寄法。那样的话，LLM_BASE_URL 填本机的地址，LLM_API_KEY 随便填几个字，LLM_MODEL 填你下载的那个模型的名字，书里的代码照样不用改。",
+      "html": "<p>现在有一些工具可以把模型下载到本机运行，并且对外提供同一种 Chat Completions 的寄法。那样的话，<code>LLM_BASE_URL</code> 填本机的地址，<code>LLM_API_KEY</code> 随便填几个字，<code>LLM_MODEL</code> 填你下载的那个模型的名字，书里的代码照样不用改。</p>\n",
+      "id": "upper-00-41a6111512cb"
+    },
+    {
+      "type": "prose",
+      "text": "这条资料助手主线的目标，仍是看清从模型到工具箱、再到循环的关系。当前第 04 章（上）能从零练的是 592 参数的纯 Python 玩具；第 04 章（下）只有 MiniMind 训练骨架。完整的 MiniMind 训练、保存重载，以及自训小模型与强模型在工具任务上的同题对照，尚待补齐。后面的 Harness 实验先用接口模型，不把这段缺口说成已经跑通。",
+      "html": "<p>这条资料助手主线的目标，仍是看清从模型到工具箱、再到循环的关系。当前第 04 章（上）能从零练的是 592 参数的纯 Python 玩具；第 04 章（下）只有 MiniMind 训练骨架。完整的 MiniMind 训练、保存重载，以及自训小模型与强模型在工具任务上的同题对照，尚待补齐。后面的 Harness 实验先用接口模型，不把这段缺口说成已经跑通。</p>\n",
+      "id": "upper-00-7d21e34c6c88"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "upper-00-17912e889c19"
+    },
+    {
+      "type": "prose",
+      "text": "check.py，出发前的检查。哪天换了电脑、换了平台，先跑它。",
+      "html": "<p><code>check.py</code>，出发前的检查。哪天换了电脑、换了平台，先跑它。</p>\n",
+      "id": "upper-00-b4c060bb73e3"
+    },
+    {
+      "type": "prose",
+      "text": "hello.py，没有任何封装的一次调用。哪天你怀疑封装出了毛病，回到它。",
+      "html": "<p><code>hello.py</code>，没有任何封装的一次调用。哪天你怀疑封装出了毛病，回到它。</p>\n",
+      "id": "upper-00-27fdafe9baaa"
+    },
+    {
+      "type": "prose",
+      "text": "oops.py，三种最常见的错。",
+      "html": "<p><code>oops.py</code>，三种最常见的错。</p>\n",
+      "id": "upper-00-aea4d1db69d4"
+    },
+    {
+      "type": "prose",
+      "text": "llm.py，全书共用的那个函数的第一版。",
+      "html": "<p><code>llm.py</code>，全书共用的那个函数的第一版。</p>\n",
+      "id": "upper-00-21857164e497"
+    },
+    {
+      "type": "prose",
+      "text": "bill.py，第一张账单。",
+      "html": "<p><code>bill.py</code>，第一张账单。</p>\n",
+      "id": "upper-00-c28caaed81b0"
+    },
+    {
+      "type": "prose",
+      "text": "docs.py，那包资料。",
+      "html": "<p><code>docs.py</code>，那包资料。</p>\n",
+      "id": "upper-00-d4cd0f4a1b09"
+    },
+    {
+      "type": "prose",
+      "text": "还有三句话。",
+      "html": "<p>还有三句话。</p>\n",
+      "id": "upper-00-699de4491588"
+    },
+    {
+      "type": "prose",
+      "text": "密钥只放在环境变量里。",
+      "html": "<p>密钥只放在环境变量里。</p>\n",
+      "id": "upper-00-0b918d27a6b3"
+    },
+    {
+      "type": "prose",
+      "text": "花费不估，读 usage。",
+      "html": "<p>花费不估，读 <code>usage</code>。</p>\n",
+      "id": "upper-00-0b340caf8f57"
+    },
+    {
+      "type": "prose",
+      "text": "它每一次都从一张白纸开始。",
+      "html": "<p>它每一次都从一张白纸开始。</p>\n",
+      "id": "upper-00-c02b24ca1614"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "出发",
+      "id": "upper-00-115d48edfbe6"
+    },
+    {
+      "type": "prose",
+      "text": "东西带齐了。",
+      "html": "<p>东西带齐了。</p>\n",
+      "id": "upper-00-f98c47d7d874"
+    },
+    {
+      "type": "prose",
+      "text": "下一页，时间是 1956 年的夏天。有一群人相信，只要把规则写够，机器就能听懂人话。",
+      "html": "<p>下一页，时间是 1956 年的夏天。有一群人相信，只要把规则写够，机器就能听懂人话。</p>\n",
+      "id": "upper-00-9991bec0a0f0"
+    },
+    {
+      "type": "prose",
+      "text": "你也去写几条试试。",
+      "html": "<p>你也去写几条试试。</p>\n",
+      "id": "upper-00-7789473f9a7c"
+    }
+  ],
+  "files": {
+    "check.py": "# check.py：出发前检查。三样东西：Python 够不够新，三个环境变量设了没有，那一头通不通\nimport os, sys, urllib.request, urllib.error\n\nprint(\"Python\", sys.version.split()[0], \"——\", \"可以\" if sys.version_info >= (3, 9) else \"太旧了，请装 3.9 或更新的\")\nmissing = [name for name in (\"LLM_BASE_URL\", \"LLM_API_KEY\", \"LLM_MODEL\") if not os.environ.get(name)]\nif missing:\n    sys.exit(\"还缺环境变量：\" + \"、\".join(missing) + \"。设好再来\")\nprint(\"地址：\", os.environ[\"LLM_BASE_URL\"])\nprint(\"模型：\", os.environ[\"LLM_MODEL\"])\nprint(\"密钥：\", \"设了，共 %d 位（不印出来）\" % len(os.environ[\"LLM_API_KEY\"]))\ntry:\n    urllib.request.urlopen(os.environ[\"LLM_BASE_URL\"], timeout=15)\n    print(\"那一头：通\")\nexcept urllib.error.HTTPError as e:\n    print(\"那一头：通（它回了一个\", e.code, \"，说明有人应门）\")\nexcept OSError as e:\n    print(\"那一头：不通。\", e)\n",
+    "peek.py": "# peek.py：翻一翻全书共用的那包资料。它是为练习编的，十四份，从第 07 章起每一章都要用\nfrom docs import DOCS, show\n\nprint(f\"一共 {len(DOCS)} 份，其中现行 {sum(d['status'] == '现行' for d in DOCS)} 份，已废止 {sum(d['status'] == '已废止' for d in DOCS)} 份。头三份：\\n\")\nfor doc in DOCS[:3]:\n    print(show(doc), \"\\n\")\n",
+    "llm.py": "# llm.py（初版）：把寄信和拆信包成一个函数，顺手记一本花销账\nimport json, os, urllib.request\n\nSPENT = {\"calls\": 0, \"in\": 0, \"out\": 0}                # 一本账：问了几次，读进去多少 token，写出来多少 token\n\ndef chat(messages):\n    if isinstance(messages, str):                      # 只给一句话也行\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    request = urllib.request.Request(\n        os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": os.environ[\"LLM_MODEL\"], \"messages\": messages}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\n    with urllib.request.urlopen(request, timeout=120) as response:\n        reply = json.loads(response.read().decode(\"utf-8\"))\n    usage = reply.get(\"usage\", {})\n    SPENT[\"calls\"] += 1\n    SPENT[\"in\"] += usage.get(\"prompt_tokens\", 0)\n    SPENT[\"out\"] += usage.get(\"completion_tokens\", 0)\n    return reply[\"choices\"][0][\"message\"][\"content\"].strip()\n",
+    "hello.py": "# hello.py：第一次调用。把寄出去的和收回来的都原样印出来看\nimport json, os, urllib.request\n\nbody = {\"model\": os.environ[\"LLM_MODEL\"],\n        \"messages\": [{\"role\": \"user\", \"content\": \"用一句话向一位今天刚入职的新同事问好。\"}]}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=1))\n\nrequest = urllib.request.Request(\n    os.environ[\"LLM_BASE_URL\"].rstrip(\"/\") + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + os.environ[\"LLM_API_KEY\"]})\nwith urllib.request.urlopen(request, timeout=120) as response:\n    reply = json.loads(response.read().decode(\"utf-8\"))\n\nprint(\"\\n收回来的：\")\nprint(json.dumps(reply, ensure_ascii=False, indent=1))\n",
+    "oops.py": "# oops.py：故意错三回。第一次调用最常撞上的三堵墙，先认一认它们长什么样\nimport json, os, urllib.request, urllib.error\n\ndef call(base, key, model):\n    request = urllib.request.Request(base.rstrip(\"/\") + \"/chat/completions\",\n        data=json.dumps({\"model\": model, \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + key})\n    try:\n        with urllib.request.urlopen(request, timeout=60) as response:\n            return \"通了\"\n    except urllib.error.HTTPError as e:\n        return f\"{e.code}　{' '.join(e.read().decode('utf-8', 'replace').split())[:110]}\"\n    except OSError as e:\n        return f\"连不上　{e}\"\n\nbase, key, model = os.environ[\"LLM_BASE_URL\"], os.environ[\"LLM_API_KEY\"], os.environ[\"LLM_MODEL\"]\nprint(\"密钥写错了：\", call(base, \"[已脱敏]\", model))\nprint(\"地址少了一截：\", call(base.rsplit(\"/v1\", 1)[0], key, model))\nprint(\"模型名字写错了：\", call(base, key, \"no-such-model\"))\n",
+    "bill.py": "# bill.py：连续发起三轮调用，看账单，也看它记不记得上一轮\nimport os\nfrom llm import chat, SPENT\n\nPRICE_IN = float(os.environ.get(\"PRICE_IN\", 1.0))      # 读进去的，每一百万 token 多少钱\nPRICE_OUT = float(os.environ.get(\"PRICE_OUT\", 2.0))    # 写出来的，每一百万 token 多少钱\n\nfor question in [\"你好。\", \"用三句话解释什么是 token。\", \"把上面那个问题的回答翻译成英文。\"]:\n    before = dict(SPENT)\n    reply = chat(question)\n    print(f\"问：{question}\\n答：{' '.join(reply.split())[:70]}\\n   读进去 {SPENT['in'] - before['in']} 个 token，写出来 {SPENT['out'] - before['out']} 个\\n\")\n\ncost = SPENT[\"in\"] / 1e6 * PRICE_IN + SPENT[\"out\"] / 1e6 * PRICE_OUT\nprint(f\"三次一共：读进去 {SPENT['in']}，写出来 {SPENT['out']}。按每百万 {PRICE_IN} 和 {PRICE_OUT} 算，是 {cost:.6f}\")\n",
+    "docs.py": "# docs.py：测试组的新人资料包（全部是为练习编的）\nDOCS = [\n    {\"id\": \"D01\", \"title\": \"账号申请流程\", \"date\": \"2026-03-01\", \"status\": \"现行\",\n     \"text\": \"新同事在入职系统里提交账号申请。管理员确认后，账号即开通。账号开通之前，不得进行后续步骤。\"},\n    {\"id\": \"D02\", \"title\": \"账号审批时限规定\", \"date\": \"2025-01-10\", \"status\": \"已废止\",\n     \"text\": \"账号审批时限为 30 分钟。超过时限未处理的，申请人可以催办。\"},\n    {\"id\": \"D03\", \"title\": \"关于调整账号审批时限的通知\", \"date\": \"2026-11-05\", \"status\": \"现行\",\n     \"text\": \"自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分钟。本规定适用于全体新入职员工。实习生除外，其账号审批时限为 2 个工作日。\"},\n    {\"id\": \"D04\", \"title\": \"开发工具安装指南\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"账号开通以后，才能安装开发工具。工具包下载约需 20 分钟，安装约需 15 分钟。安装完成后请做环境自检。\"},\n    {\"id\": \"D05\", \"title\": \"实习生入职须知\", \"date\": \"2026-06-02\", \"status\": \"现行\",\n     \"text\": \"实习生不使用入职系统，统一从独立入口提交申请。申请须附项目经理签字的用工单。\"},\n    {\"id\": \"D06\", \"title\": \"环境自检清单\", \"date\": \"2026-04-18\", \"status\": \"现行\",\n     \"text\": \"自检共三项：能登录代码仓库，能拉取主干代码，能在本地跑通冒烟测试。全部通过约需 10 分钟。\"},\n    {\"id\": \"D07\", \"title\": \"账号注销流程\", \"date\": \"2026-02-20\", \"status\": \"现行\",\n     \"text\": \"员工离职当日，由管理员注销其账号。注销后 30 天内数据可以恢复，逾期永久删除。\"},\n    {\"id\": \"D08\", \"title\": \"办公设备领用\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"新同事入职当天到前台领取笔记本电脑和工牌。显示器需另行申请，三个工作日内配发。\"},\n    {\"id\": \"D09\", \"title\": \"请假与考勤\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"请假须提前一天在考勤系统提交。病假可事后补交证明。迟到三次记一次缺勤。\"},\n    {\"id\": \"D10\", \"title\": \"会议室预订\", \"date\": \"2025-09-01\", \"status\": \"现行\",\n     \"text\": \"会议室在三楼，通过日历系统预订。单次预订不超过两小时，超时须续订。\"},\n    {\"id\": \"D11\", \"title\": \"代码提交规范\", \"date\": \"2026-05-09\", \"status\": \"现行\",\n     \"text\": \"提交前必须跑通本地测试。每次提交须关联需求编号。主干分支禁止直接推送。\"},\n    {\"id\": \"D12\", \"title\": \"报销流程\", \"date\": \"2026-01-15\", \"status\": \"现行\",\n     \"text\": \"差旅报销须在返回后十个工作日内提交。单笔超过两千元的，须部门负责人审批。\"},\n    {\"id\": \"D13\", \"title\": \"新人第一周日程\", \"date\": \"2026-07-01\", \"status\": \"现行\",\n     \"text\": \"第一天办理账号和设备，第二天参加安全培训，第三天起跟随导师熟悉项目。周五有新人答疑。\"},\n    {\"id\": \"D14\", \"title\": \"入职流程（2024 版）\", \"date\": \"2024-03-01\", \"status\": \"已废止\",\n     \"text\": \"新同事可以先安装开发工具，再提交账号申请。两项可以同时进行，以节省时间。\"},\n]\n\ndef show(doc):\n    return f\"【{doc['id']}】{doc['title']}（{doc['date']}，{doc['status']}）\\n{doc['text']}\"\n"
+  },
+  "sourceFile": "上册/第 00 章｜出发前：环境、预算与第一次调用.md"
+}

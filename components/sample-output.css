@@ -1,0 +1,19 @@
+.sample-output-trigger {
+  width: 100%; height: 38px; padding: 0 12px; display: flex; align-items: center; gap: 8px;
+  border: 1px solid #d2d6c5; border-radius: 5px; background: #f5f5eb; color: #475740;
+  cursor: pointer; font: 12px/1.4 var(--sans, system-ui, sans-serif); text-align: left;
+}
+.sample-output-trigger svg:last-child { margin-left: auto; }
+.sample-output-trigger:hover { background: #eceddf; border-color: #acb79a; }
+.sample-output-trigger:focus-visible, .sample-output-dialog button:focus-visible { outline: 2px solid #9e4d33; outline-offset: 2px; }
+.sample-output-dialog {
+  position: fixed; inset: 0; margin: auto; padding: 0; width: min(540px, calc(100vw - 32px));
+  max-height: 80dvh; border: 1px solid #cfcdb6; border-radius: 8px;
+  color: #364233; background: #fcfaf1; box-shadow: 0 14px 55px #26331e33;
+}
+.sample-output-dialog::backdrop { background: #30392b66; }
+.sample-output-dialog section { padding: 18px 20px 20px; }
+.sample-output-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sample-output-dialog h2 { margin: 0; font: 500 19px/1.45 var(--serif, serif); }
+.sample-output-dialog button { padding: 8px; display: grid; place-items: center; color: inherit; border: 0; border-radius: 4px; cursor: pointer; background: transparent; }
+.sample-output-dialog pre { margin: 12px 0 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: #354537; background: #f1f3e9; font: 13px/1.75 ui-monospace, monospace; }

@@ -1,0 +1,486 @@
+{
+  "id": "lower-01",
+  "title": "下册第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本",
+  "shortTitle": "和模型说上话：Token Plan、流式输出、缓存与账本",
+  "volume": "lower",
+  "group": "下册 · 动手实践",
+  "order": 26,
+  "kind": "chapter",
+  "minutes": 28,
+  "summary": "这一章做完：你手里有一份自动写好的《上册知识库目录.md》，二十五篇《上册》笔记每篇一行，标题、一句话摘要、三个标签。更重要的是，你亲手写出了一生受用的 llm.py——统一接入商汤 Token Plan，自带流式输出、本地缓存、预算保险丝、残信兜底和“成了 / 没成 / 不知道”三分法。对应上册第",
+  "text": "# 下册第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本\n\n*这一章做完：你手里有一份自动写好的《上册知识库目录.md》，二十五篇《上册》笔记每篇一行，标题、一句话摘要、三个标签。更重要的是，你亲手写出了一生受用的 `llm.py`——统一接入商汤 Token Plan，自带流式输出、本地缓存、预算保险丝、残信兜底和“成了 / 没成 / 不知道”三分法。对应上册第 00 章。*\n\n## 把《上册》装进抽屉之前\n\n上册十四章，你一直站在历史现场里看：从 1956 年的达特茅斯，到感知机、反向传播、强化学习、Transformer、RAG、Tool Calling、MCP 和多 Agent 协作。看懂了，不等于会做。\n\n到了下册，你手头刚好有一套现成的、四十多万字的知识库语料——就是你在《上册》读过的那二十五篇正文、番外和教学视频。\n\n我们直接**拿《上册》当你的第一座知识库**，从一个空文件夹开始，一行一行敲。写完这本下册，你可以直接在终端里问它：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会翻遍全部笔记，给出带着精确 `[文件名:行号]` 出处的回答；哪天想换成你自己的 Obsidian 笔记库，只要在命令行里改一个目录路径就行。\n\n![[零基础学AI/attachments/下册第 1 章｜和模型说上话：一封信，一本账/EnR2bacEcodMuNxD6yGcQcTYnxO.png|抽屉里塞满了笔记。先让它递过来一页目录。]]\n\n这一章的目标很小：先让程序稳定地和模型说上话，然后扫描《上册》全部二十五篇笔记，自动写出一份目录。\n\n---\n\n## 第一封信：不用任何封装，亲手寄一次\n\n上册第 00 章说过，和模型说话，就是往一个地址寄一封信，再等它回一封。为了看清信封里面到底装了什么，这一步我们不用任何第三方 SDK，只用 Python 自带的 `urllib.request`，亲手把请求寄出去、把回执原样印出来。\n\n先把三样东西放进环境变量。密钥就是钱，绝不写进任何代码文件：\n\n```bash\nexport LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"\n```\n\n上面是本书统一使用的商汤 **Token Plan** 接口。只要兼容 OpenAI Chat Completions 协议，换成 DeepSeek、阿里百炼或者你本机跑的 Ollama 小模型，也只需要改这三行环境变量，代码一行不用动。\n\n现在写第一个程序 `raw.py`：\n\n```python\n# raw.py：不用任何封装，亲手向 Token Plan 寄出第一封信，把请求和完整回执原样印出来\nimport json\nimport os\nimport urllib.request\n\nBASE_URL = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\nAPI_KEY = os.environ[\"LLM_API_KEY\"]\nMODEL = os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\")\n\nbody = {\n    \"model\": MODEL,\n    \"messages\": [{\"role\": \"user\", \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"}],\n}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=2))\n\nreq = urllib.request.Request(\n    BASE_URL + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {API_KEY}\"},\n)\nwith urllib.request.urlopen(req, timeout=60) as resp:\n    data = json.loads(resp.read().decode(\"utf-8\"))\n\nif \"id\" in data:\n    data[\"id\"] = data[\"id\"][:14] + \"…\"\nprint(\"\\n收回来的：\")\nprint(json.dumps(data, ensure_ascii=False, indent=2))\n```\n\n跑一遍，盯着收回来的这封信看：\n\n```\n寄出去的：\n{\n  \"model\": \"sensenova-6.8-flash\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"\n    }\n  ]\n}\n\n收回来的：\n{\n  \"id\": \"chatcmpl-863c…\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"finish_reason\": \"stop\",\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"把《上册》笔记装进个人知识库后，你可以随时用自然语言精准检索任意概念与代码出处，把读过的理论真正变成日常可用的工作台。\"\n      }\n    }\n  ],\n  \"created\": 1794583055,\n  \"model\": \"sensenova-6.8-flash\",\n  \"object\": \"chat.completion\",\n  \"usage\": {\n    \"prompt_tokens\": 229,\n    \"completion_tokens\": 39,\n    \"total_tokens\": 268\n  }\n}\n```\n\n请把收回来的这封信从头到尾读一遍，三个地方值得停下来认熟：\n\n**1. `message.content` 是它的回答。** 平时在聊天窗口里看到的，就只有这一段。\n\n**2. `finish_reason` 是它为什么停下。** `stop` 代表正常说完。要是你看见 `length`，说明它写到最大长度被一刀掐断了，回答只有前半截；要是看见 `tool_calls`，说明它没说话，而是从门缝里递出来一张“要调工具的纸条”。\n\n**3. `usage` 是这一封信的小账。** 它读了多少（`prompt_tokens`），写了多少（`completion_tokens`）。平台按这两个数字算钱。你会注意到：我寄出去的明明只有二十几个字，它却说读了 229 个 token。多出来的那两百个，通常是平台在你的话前面悄悄垫了一段系统开场白。不同平台、不同模型，这个底数都不一样——所以**算账从来不能靠猜，必须读回执里的 `usage`**。\n\n![[零基础学AI/attachments/下册第 1 章｜和模型说上话：一封信，一本账/Q5KXbpo1hoqLHjxjrRycpWq4nHf.png|你拿着放大镜读它回的信。角落里有一行小字是账单。]]\n\n![[零基础学AI/attachments/下册第 1 章｜和模型说上话：一封信，一本账/SULYbuqjEoIO9GxpFCKcxlhCnJf.png|一次请求，一个来回。]]\n\n---\n\n## 把它包成 `llm.py`：缓存、预算保险丝与“成/败/未知”三分法\n\n每次发请求都要写二十行 `urllib.request`，太累了。更重要的是，直接拿 `raw.py` 去扫《上册》25 篇长文，不出十分钟就会撞上四个真实的工程麻烦：\n\n1. **调试一次烧一次钱**：改完一行输出格式重跑，25 篇笔记又得重新问一遍。如果能把 `temperature=0` 的确定性回答缓存到本地，没改过的笔记零耗时、零费用直接返回，开发体验会好十倍。\n2. **死循环跑飞风险**：后面第 06 章放开自主循环后，万一终止条件写歪了，一分钟能刷掉几百次调用。代码里必须焊死一只**单次运行预算保险丝**（比如默认最多真实请求 50 次）。\n3. **报错分不清该不该重试**：密钥错、模型名拼错、地址少写 `/v1`，重试一百次也是错；但 429 限流、502 网关抖动或超时，等 1 秒、2 秒、4 秒再试往往就能通。\n4. **超时不等于没干成**：信可能已经寄到对面、对面也写完了，只是回执在半路丢了。对只读问答，重问一次无非多花一点钱；可等到第 05 章和第 10 章能往硬盘写笔记时，“超时就盲目重发”就会把同一篇笔记写两遍。\n\n所以我们在 `课件/ch01/llm.py` 里把这四道防线一次性写齐：\n\n```python\n# llm.py：整本下册和模型说话的唯一入口（Token Plan 统一接入 + 流式 + 缓存 + 预算保险丝 + 三分法）\nimport hashlib\nimport json\nimport os\nimport re\nimport time\nimport urllib.error\nimport urllib.request\n\nDEFAULT_BASE_URL = \"https://token.sensetime.com/api/v1\"\nDEFAULT_MODEL = \"sensenova-6.8-flash\"\nCACHE_DIR = os.environ.get(\"MYKB_CACHE_DIR\", os.path.join(os.path.dirname(__file__), \".cache\"))\n\nLEDGER = {\n    \"calls\": 0,\n    \"cache_hits\": 0,\n    \"prompt\": 0,\n    \"completion\": 0,\n    \"seconds\": 0.0,\n    \"unknown\": 0,\n}\n\nRETRY_CODES = {429, 500, 502, 503, 504}\n\n\nclass LLMError(Exception):\n    \"\"\"明确失败：密钥错、地址错、参数错，或者重试多次依然连不上。\"\"\"\n\n\nclass NotDone(LLMError):\n    \"\"\"它回了话，但这次不能算完成（写到一半被掐断、被拦截、或递来工具纸条）。\"\"\"\n\n\nclass BudgetExceeded(LLMError):\n    \"\"\"触发单次运行预算保险丝，防止死循环或批量脚本跑飞。\"\"\"\n\n\ndef _cfg():\n    base = os.environ.get(\"LLM_BASE_URL\", DEFAULT_BASE_URL).rstrip(\"/\")\n    key = os.environ.get(\"LLM_API_KEY\", \"\")\n    model = os.environ.get(\"LLM_MODEL\", DEFAULT_MODEL)\n    if not key:\n        raise LLMError(\"未设置环境变量 LLM_API_KEY，请先 export LLM_API_KEY=你的密钥\")\n    return base, key, model\n\n\ndef _check_budget():\n    max_calls = int(os.environ.get(\"MYKB_MAX_CALLS\", \"50\"))\n    if LEDGER[\"calls\"] >= max_calls:\n        raise BudgetExceeded(f\"本次真实调用已达上限 {max_calls} 次（可用 MYKB_MAX_CALLS 调高）\")\n\n\ndef _post(body, timeout=120):\n    base, key, _ = _cfg()\n    req = urllib.request.Request(\n        f\"{base}/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {key}\"},\n    )\n    for attempt in range(4):\n        try:\n            return urllib.request.urlopen(req, timeout=timeout)\n        except urllib.error.HTTPError as e:\n            detail = e.read().decode(\"utf-8\", \"replace\")[:200]\n            if e.code not in RETRY_CODES or attempt == 3:\n                raise LLMError(f\"HTTP {e.code}：{detail}\") from None\n        except (urllib.error.URLError, TimeoutError) as e:\n            if attempt == 3:\n                raise LLMError(f\"连不上（状态未知，请勿盲目重发写操作）：{e}\") from None\n        time.sleep(2 ** attempt)\n\n\ndef _book(usage, began):\n    LEDGER[\"calls\"] += 1\n    if not usage or \"completion_tokens\" not in usage:\n        LEDGER[\"unknown\"] += 1\n    else:\n        LEDGER[\"prompt\"] += usage.get(\"prompt_tokens\", 0)\n        LEDGER[\"completion\"] += usage.get(\"completion_tokens\", 0)\n    LEDGER[\"seconds\"] += time.time() - began\n\n\ndef _parse(raw):\n    \"\"\"正常情况直接 json.loads；若平台偶尔把末尾 usage 截断而 content 完整，则先把回答抠出来。\"\"\"\n    try:\n        return json.loads(raw)\n    except ValueError:\n        if '\"content\":' not in raw:\n            raise LLMError(f\"回来的内容不完整：{raw[-80:]!r}\") from None\n        start = raw.index('\"content\":') + len('\"content\":')\n        content, _ = json.JSONDecoder().raw_decode(raw, start)\n        usage = {\n            k: int(m.group(1))\n            for k in (\"prompt_tokens\", \"completion_tokens\")\n            for m in [re.search(f'\"{k}\":(\\\\d+)', raw)]\n            if m\n        }\n        return {\"choices\": [{\"message\": {\"content\": content}, \"finish_reason\": \"stop\"}], \"usage\": usage or None}\n\n\ndef done(choice):\n    \"\"\"成了、没成、还是半截：只认 stop 且有正文。\"\"\"\n    why = choice.get(\"finish_reason\")\n    text = (choice.get(\"message\") or {}).get(\"content\") or \"\"\n    if why == \"stop\" and text.strip():\n        return\n    reasons = {\n        \"length\": f\"写到上限被掐断了，只有前半截：{text[-30:]!r}\",\n        \"content_filter\": \"被平台的内容过滤拦下了\",\n        \"tool_calls\": \"它没说话，递来了一张要用工具的纸条\",\n    }\n    raise NotDone(reasons.get(why, f\"停下的原因是 {why!r}，内容{'为空' if not text.strip() else '不完整'}\"))\n\n\ndef _cache_key(model, messages, temperature, extra):\n    payload = json.dumps({\"model\": model, \"messages\": messages, \"temperature\": temperature, \"extra\": extra}, sort_keys=True, ensure_ascii=False)\n    return hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:24]\n\n\ndef chat(messages, model=None, temperature=0, use_cache=None, **extra):\n    \"\"\"交出一串对话，拿回它的回答。默认开启本地缓存（MYKB_CACHE=0 可关闭）。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    m = model or default_model\n    cache_on = (os.environ.get(\"MYKB_CACHE\", \"1\") != \"0\") if use_cache is None else use_cache\n\n    key = _cache_key(m, messages, temperature, extra)\n    cache_path = os.path.join(CACHE_DIR, f\"{key}.json\")\n    if cache_on and temperature == 0 and os.path.exists(cache_path):\n        LEDGER[\"cache_hits\"] += 1\n        return json.load(open(cache_path, encoding=\"utf-8\"))[\"content\"]\n\n    _check_budget()\n    began = time.time()\n    body = {\"model\": m, \"messages\": messages, \"temperature\": temperature, **extra}\n    with _post(body) as resp:\n        raw = resp.read().decode(\"utf-8\", \"replace\")\n    data = _parse(raw)\n    _book(data.get(\"usage\"), began)\n    choice = data[\"choices\"][0]\n    done(choice)\n    content = choice[\"message\"][\"content\"]\n\n    if cache_on and temperature == 0:\n        os.makedirs(CACHE_DIR, exist_ok=True)\n        with open(cache_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"model\": m, \"content\": content}, f, ensure_ascii=False, indent=2)\n    return content\n\n\ndef stream(messages, model=None, temperature=0):\n    \"\"\"一边写一边交，降低首字等待。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    _check_budget()\n    began = time.time()\n    body = {\n        \"model\": model or default_model,\n        \"messages\": messages,\n        \"temperature\": temperature,\n        \"stream\": True,\n        \"stream_options\": {\"include_usage\": True},\n    }\n    usage = None\n    with _post(body) as resp:\n        for raw in resp:\n            line = raw.decode(\"utf-8\", \"replace\").strip()\n            if not line.startswith(\"data:\") or line == \"data: [DONE]\":\n                continue\n            chunk = json.loads(line[5:])\n            usage = chunk.get(\"usage\") or usage\n            for choice in chunk.get(\"choices\", []):\n                piece = (choice.get(\"delta\") or {}).get(\"content\")\n                if piece:\n                    yield piece\n    _book(usage, began)\n\n\ndef bill(price_in=None, price_out=None):\n    unknown = f\"（含 {LEDGER['unknown']} 次账不全）\" if LEDGER[\"unknown\"] else \"\"\n    line = (\n        f\"真实调用 {LEDGER['calls']} 次，命中缓存 {LEDGER['cache_hits']} 次，\"\n        f\"读 {LEDGER['prompt']} / 写 {LEDGER['completion']} token，\"\n        f\"耗时 {LEDGER['seconds']:.1f} 秒{unknown}\"\n    )\n    if price_in is not None and price_out is not None:\n        cost = LEDGER[\"prompt\"] / 1e6 * price_in + LEDGER[\"completion\"] / 1e6 * price_out\n        line += f\"，约 {cost:.4f} 元\"\n    return line\n```\n\n仔细看 `llm.py` 里两个容易被忽略的设计：\n\n- **`_book()` 里专门记了 `unknown`**：万一某次响应没带回 `completion_tokens`（或者被截断了），绝不能写成 `0`，因为 `0` 的意思是“免费”，而真相是“不知道”。\n- **缓存只在 `temperature == 0` 时生效**：带随机性的采样（`temperature > 0`）本来就希望每次有点不一样，强制缓存反而会破坏实验。\n\n> **老办法，新地方**\n>\n> “成了、没成、结果未知”这三分法，不是大模型时代才发明的。银行转账、网上下单早就为它头疼了几十年：钱扣了，回执没到，这一单算成没成？那一行的老规矩是：给每次操作一个编号，状态未知时先去查，查清了再决定要不要重来。第 06 章断点续传和第 10 章幂等去重，用的都是这一条老规矩。\n\n---\n\n## 一边写一边交：流式输出到底省了什么？\n\n问它一个稍微长点的问题，等它全部写完再一次交出来，你往往要盯着空白屏幕干等一两秒。打开 `\"stream\": True` 后，服务端会以 `data: {...}` 的形式一行一行把刚吐出来的字推过来。\n\n写一个 `streaming.py`，把同一个问题用两种方式各跑一遍，量一量两个时间：第一个字什么时候出来，全部什么时候写完：\n\n```python\n# streaming.py：对比一次交完与流式输出的首字等待时间\nimport time\nfrom llm import chat, stream\n\nQ = [{\"role\": \"user\", \"content\": \"我想把《零基础学 AI》上册的笔记搭成一个能问答的知识库，请用三点说说第一步该注意什么。\"}]\n\nt = time.time()\nans = chat(Q, use_cache=False)\nprint(f\"一次交完：首字与全文字均在 {time.time() - t:.2f} 秒出现（共 {len(ans)} 字）\\n\")\n\nt, first, pieces = time.time(), None, []\nfor piece in stream(Q):\n    if first is None:\n        first = time.time() - t\n    pieces.append(piece)\n    print(piece, end=\"\", flush=True)\nprint(f\"\\n\\n流式输出：首字在 {first:.2f} 秒出现，全部写完在 {time.time() - t:.2f} 秒（共 {len(pieces)} 小段）\")\n```\n\n```\n一次交完：首字与全文字均在 1.62 秒出现（共 210 字）\n流式输出：首字在 0.31 秒出现，全部写完在 1.54 秒（共 75 小段）\n```\n\n全部写完，两种办法差不多都是一秒半。但**第一个字出现的时间，从 1.62 秒压到了 0.31 秒**。总时间没省，省的是你盯着黑框怀疑程序是不是卡死的那一秒多。\n\n![[零基础学AI/attachments/下册第 1 章｜和模型说上话：一封信，一本账/Eo8pbjposoZURnx3SwncvM3Vnb1.png|一个等着整页交过来，一个已经在读头几行了。]]\n\n---\n\n## 故意弄错几样：把常见报错的脸认熟\n\n与其等半夜批处理跑到一半突然崩掉，不如现在就故意写个 `oops.py` 踩一遍坑，把最常见的几种报错脸谱认熟：\n\n```python\n# oops.py：故意踩四种常见坑，把出错的脸认熟\nimport os\nimport llm\n\n\ndef attempt(label, **env):\n    saved = {k: os.environ.get(k) for k in env}\n    os.environ.update(env)\n    try:\n        llm.chat([{\"role\": \"user\", \"content\": \"你好\"}], use_cache=False)\n        print(f\"{label}：居然通了\")\n    except llm.LLMError as e:\n        print(f\"{label}：{e}\")\n    finally:\n        for k, v in saved.items():\n            if v is None:\n                os.environ.pop(k, None)\n            else:\n                os.environ[k] = v\n\n\nbase = os.environ.get(\"LLM_BASE_URL\", llm.DEFAULT_BASE_URL)\nkey = os.environ.get(\"LLM_API_KEY\", \"sk-placeholder\")\n\nattempt(\"密钥错了一位\", LLM_API_KEY=key[:-1] + \"x\")\nattempt(\"模型名拼错\", LLM_MODEL=\"sensenova-not-exist\")\nattempt(\"地址少了 /v1\", LLM_BASE_URL=base.rstrip(\"/\").rsplit(\"/v1\", 1)[0])\nattempt(\"地址写错了域名\", LLM_BASE_URL=\"https://api.invalid.example/v1\")\n```\n\n跑完四下，四张脸一目了然：\n\n```\n密钥错了一位：HTTP 401：{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n模型名拼错：HTTP 400：{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033}\n地址少了 /v1：HTTP 404：404 page not found\n地址写错了域名：连不上（状态未知，请勿盲目重发写操作）：<urlopen error ...>\n```\n\n记住这四张脸：401 是钥匙不对、400 是模型名或参数不对、404 是路没修到 `/v1`，这三种再试一百次还是错，`_post()` 直接报错停下；只有网络超时、429 限流或 5xx 对面抽风，才按 `1s → 2s → 4s` 退避重试。\n\n![[零基础学AI/attachments/下册第 1 章｜和模型说上话：一封信，一本账/S6X0bOOE4opfyRxFYcCcZO6xnfz.png|分清正常完成、明确失败与结果未知，是工程第一课。]]\n\n---\n\n## 本章实战成品：给《上册》自动写一份总目录\n\n现在把工具拉上战场。`index_kb.py` 会扫描 `零基础学AI/上册/` 里的全部 25 篇 Markdown 笔记，先用 `clean_preview()` 剥掉开头的 `---` YAML 元数据和正文里的 `![[...png]]` / `> 🎬` 多媒体嵌入行，再让模型为每篇写出“一句话摘要 + 三个标签”，拼成一份 `上册知识库目录.md`：\n\n```python\n# index_kb.py：第 01 章实战成品——扫描《上册》全部笔记，生成《上册知识库目录.md》\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nASK = (\n    \"下面是一篇技术教程笔记的开头节选。请只输出一行，严格使用以下格式：\\n\"\n    \"一句话摘要（不超过30字）｜标签1, 标签2, 标签3\\n\"\n    \"不要输出任何多余解释。\\n\\n\"\n)\n\n\ndef clean_preview(raw_text, limit=1200):\n    \"\"\"去掉 Obsidian YAML 头信息和图片/视频嵌入行，保留标题与核心正文前段。\"\"\"\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = []\n    for ln in lines:\n        s = ln.strip()\n        if s.startswith(\"![[\") or s.startswith(\"> 🎬\"):\n            continue\n        kept.append(ln)\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    if not os.path.isdir(folder):\n        sys.exit(f\"找不到目录：{folder}\")\n\n    rows, odd = [], []\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n    for name in md_files:\n        raw = open(os.path.join(folder, name), encoding=\"utf-8\").read()\n        preview = clean_preview(raw)\n        title = next((l.lstrip(\"# \").strip() for l in preview.splitlines() if l.startswith(\"#\")), name[:-3])\n        line = llm.chat([{\"role\": \"user\", \"content\": ASK + preview}]).strip().splitlines()[0]\n        if line.count(\"｜\") != 1:\n            odd.append(f\"{name}：{line}\")\n            continue\n        summary, tags = (p.strip() for p in line.split(\"｜\"))\n        rows.append(f\"| [{title}]({name}) | {summary} | {tags} |\")\n\n    out_path = os.path.join(folder, \"上册知识库目录.md\")\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        f.write(\"# 上册知识库目录\\n\\n| 章节 | 一句话 | 标签 |\\n|-|-|-|\\n\" + \"\\n\".join(rows) + \"\\n\")\n\n    print(f\"已生成 {out_path}：收录 {len(rows)} 篇\" + (f\"，格式不符跳过 {len(odd)} 篇\" if odd else \"\"))\n    for o in odd:\n        print(\"  跳过：\", o)\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()\n```\n\n跑一遍 `python3 课件/ch01/index_kb.py`（如果紧接着再跑第二遍，你会看到 `真实调用 0 次，命中缓存 25 次`，一分钱不花）。\n\n但先别急着庆祝——打开生成的 `上册知识库目录.md`，仔细盯一眼最后一栏的标签：\n\n```markdown\n| [第 01 章｜规则总也写不完](第 01 章｜规则总也写不完.md) | 规则写不完的三堵墙与正确分工 | 符号主义, ELIZA, 专家系统 |\n| [第 02 章｜给它例子，它就能学会吗？](第 02 章｜给它例子，它就能学会吗？.md) | 从感知机到反向传播与泛化 | 感知机，神经网络，反向传播 |\n```\n\n你发现了什么？第一行用的是**英文逗号加空格**，第二行用的是**中文逗号**；而且提示词里只要模型偶尔多嘴写一句“好的，摘要如下：”，就会因为 `line.count(\"｜\") != 1` 整篇被跳过。\n\n人看着没问题，下游程序按标签聚合时却会直接崩溃。**第 02 章**，我们就来治这个毛病：让模型交出严格合规、绝不走样的结构化 JSON 卡片。\n\n---\n\n## 这一章你留下了什么\n\n```text\n课件/ch01/\n  raw.py         无封装原始 HTTP 调用，怀疑封装出问题时随时回来查它\n  llm.py         全册统一入口：Token Plan 接入、流式、SHA-256 缓存、预算保险丝、三分法与账本\n  streaming.py   首字等待时间对比实验\n  oops.py        401 / 400 / 404 / 超时四张常见报错脸谱\n  index_kb.py    清洗头信息与多媒体行，扫描《上册》生成总目录\n```\n\n## 改一改\n\n1. 把 `index_kb.py` 里的 `clean_preview(..., limit=1200)` 改成只截取前 200 字，对比一下同一篇《第 01 章》生成的摘要有什么变化，并观察 `llm.bill()` 里的缓存命中情况。\n2. 故意把环境变量 `MYKB_MAX_CALLS=3` 设小，再删掉 `.cache/` 重跑 `index_kb.py`，亲眼看一眼 `BudgetExceeded` 保险丝是怎么在第 4 次请求前及时踩住刹车的。\n3. 在 `index_kb.py` 里把 `chat` 换成 `stream`，让目录一边生成一边实时打印到终端，算一算此时 `LEDGER` 还能不能准确记下每次调用的 Token 账。\n4. 把 `index_kb.py` 末尾的目录路径参数换成你自己电脑里的一个 Obsidian 文件夹（`python3 index_kb.py ~/你的笔记目录`），看看给你自己的抽屉写一页目录花了多少钱。\n",
+  "codeCount": 11,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "下册第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本",
+      "id": "lower-01-beb64040e64c"
+    },
+    {
+      "type": "prose",
+      "text": "这一章做完：你手里有一份自动写好的《上册知识库目录.md》，二十五篇《上册》笔记每篇一行，标题、一句话摘要、三个标签。更重要的是，你亲手写出了一生受用的 llm.py——统一接入商汤 Token Plan，自带流式输出、本地缓存、预算保险丝、残信兜底和“成了 / 没成 / 不知道”三分法。对应上册第 00 章。",
+      "html": "<p><em>这一章做完：你手里有一份自动写好的《上册知识库目录.md》，二十五篇《上册》笔记每篇一行，标题、一句话摘要、三个标签。更重要的是，你亲手写出了一生受用的 <code>llm.py</code>——统一接入商汤 Token Plan，自带流式输出、本地缓存、预算保险丝、残信兜底和“成了 / 没成 / 不知道”三分法。对应上册第 00 章。</em></p>\n",
+      "id": "lower-01-b96127ea8acf"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "把《上册》装进抽屉之前",
+      "id": "lower-01-000a9b3a5689"
+    },
+    {
+      "type": "prose",
+      "text": "上册十四章，你一直站在历史现场里看：从 1956 年的达特茅斯，到感知机、反向传播、强化学习、Transformer、RAG、Tool Calling、MCP 和多 Agent 协作。看懂了，不等于会做。",
+      "html": "<p>上册十四章，你一直站在历史现场里看：从 1956 年的达特茅斯，到感知机、反向传播、强化学习、Transformer、RAG、Tool Calling、MCP 和多 Agent 协作。看懂了，不等于会做。</p>\n",
+      "id": "lower-01-79b7c6a3ba85"
+    },
+    {
+      "type": "prose",
+      "text": "到了下册，你手头刚好有一套现成的、四十多万字的知识库语料——就是你在《上册》读过的那二十五篇正文、番外和教学视频。",
+      "html": "<p>到了下册，你手头刚好有一套现成的、四十多万字的知识库语料——就是你在《上册》读过的那二十五篇正文、番外和教学视频。</p>\n",
+      "id": "lower-01-543e06e35398"
+    },
+    {
+      "type": "prose",
+      "text": "我们直接拿《上册》当你的第一座知识库，从一个空文件夹开始，一行一行敲。写完这本下册，你可以直接在终端里问它：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会翻遍全部笔记，给出带着精确 [文件名:行号] 出处的回答；哪天想换成你自己的 Obsidian 笔记库，只要在命令行里改一个目录路径就行。",
+      "html": "<p>我们直接<strong>拿《上册》当你的第一座知识库</strong>，从一个空文件夹开始，一行一行敲。写完这本下册，你可以直接在终端里问它：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会翻遍全部笔记，给出带着精确 <code>[文件名:行号]</code> 出处的回答；哪天想换成你自己的 Obsidian 笔记库，只要在命令行里改一个目录路径就行。</p>\n",
+      "id": "lower-01-46822aba739a"
+    },
+    {
+      "type": "image",
+      "alt": "抽屉里塞满了笔记。先让它递过来一页目录。",
+      "caption": "抽屉里塞满了笔记。先让它递过来一页目录。",
+      "available": true,
+      "src": "/media/e1ea49d361fe515932ef9d35.webp",
+      "id": "lower-01-043eadb93ca8",
+      "previewWidth": 960,
+      "previewSrc": "/media/3cd9fff29f5db89cddd43685.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/3cd9fff29f5db89cddd43685.webp 960w, /media/e1ea49d361fe515932ef9d35.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "这一章的目标很小：先让程序稳定地和模型说上话，然后扫描《上册》全部二十五篇笔记，自动写出一份目录。",
+      "html": "<p>这一章的目标很小：先让程序稳定地和模型说上话，然后扫描《上册》全部二十五篇笔记，自动写出一份目录。</p>\n",
+      "id": "lower-01-0d3d712e4c97"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "第一封信：不用任何封装，亲手寄一次",
+      "id": "lower-01-16785089bf05"
+    },
+    {
+      "type": "prose",
+      "text": "上册第 00 章说过，和模型说话，就是往一个地址寄一封信，再等它回一封。为了看清信封里面到底装了什么，这一步我们不用任何第三方 SDK，只用 Python 自带的 urllib.request，亲手把请求寄出去、把回执原样印出来。",
+      "html": "<p>上册第 00 章说过，和模型说话，就是往一个地址寄一封信，再等它回一封。为了看清信封里面到底装了什么，这一步我们不用任何第三方 SDK，只用 Python 自带的 <code>urllib.request</code>，亲手把请求寄出去、把回执原样印出来。</p>\n",
+      "id": "lower-01-2dbfa27705fb"
+    },
+    {
+      "type": "prose",
+      "text": "先把三样东西放进环境变量。密钥就是钱，绝不写进任何代码文件：",
+      "html": "<p>先把三样东西放进环境变量。密钥就是钱，绝不写进任何代码文件：</p>\n",
+      "id": "lower-01-69e5e4deaf56"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"",
+      "text": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "lower-01-60547cfe53e4"
+    },
+    {
+      "type": "prose",
+      "text": "上面是本书统一使用的商汤 Token Plan 接口。只要兼容 OpenAI Chat Completions 协议，换成 DeepSeek、阿里百炼或者你本机跑的 Ollama 小模型，也只需要改这三行环境变量，代码一行不用动。",
+      "html": "<p>上面是本书统一使用的商汤 <strong>Token Plan</strong> 接口。只要兼容 OpenAI Chat Completions 协议，换成 DeepSeek、阿里百炼或者你本机跑的 Ollama 小模型，也只需要改这三行环境变量，代码一行不用动。</p>\n",
+      "id": "lower-01-98ba816b85b3"
+    },
+    {
+      "type": "prose",
+      "text": "现在写第一个程序 raw.py：",
+      "html": "<p>现在写第一个程序 <code>raw.py</code>：</p>\n",
+      "id": "lower-01-f3c97fca1210"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# raw.py：不用任何封装，亲手向 Token Plan 寄出第一封信，把请求和完整回执原样印出来\nimport json\nimport os\nimport urllib.request\n\nBASE_URL = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\nAPI_KEY = os.environ[\"LLM_API_KEY\"]\nMODEL = os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\")\n\nbody = {\n    \"model\": MODEL,\n    \"messages\": [{\"role\": \"user\", \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"}],\n}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=2))\n\nreq = urllib.request.Request(\n    BASE_URL + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {API_KEY}\"},\n)\nwith urllib.request.urlopen(req, timeout=60) as resp:\n    data = json.loads(resp.read().decode(\"utf-8\"))\n\nif \"id\" in data:\n    data[\"id\"] = data[\"id\"][:14] + \"…\"\nprint(\"\\n收回来的：\")\nprint(json.dumps(data, ensure_ascii=False, indent=2))",
+      "text": "# raw.py：不用任何封装，亲手向 Token Plan 寄出第一封信，把请求和完整回执原样印出来\nimport json\nimport os\nimport urllib.request\n\nBASE_URL = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\nAPI_KEY = os.environ[\"LLM_API_KEY\"]\nMODEL = os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\")\n\nbody = {\n    \"model\": MODEL,\n    \"messages\": [{\"role\": \"user\", \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"}],\n}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=2))\n\nreq = urllib.request.Request(\n    BASE_URL + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {API_KEY}\"},\n)\nwith urllib.request.urlopen(req, timeout=60) as resp:\n    data = json.loads(resp.read().decode(\"utf-8\"))\n\nif \"id\" in data:\n    data[\"id\"] = data[\"id\"][:14] + \"…\"\nprint(\"\\n收回来的：\")\nprint(json.dumps(data, ensure_ascii=False, indent=2))",
+      "runnable": true,
+      "filename": "raw.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "lower-01-1da3a123550f"
+    },
+    {
+      "type": "prose",
+      "text": "跑一遍，盯着收回来的这封信看：",
+      "html": "<p>跑一遍，盯着收回来的这封信看：</p>\n",
+      "id": "lower-01-2fa54a39a6d2"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "寄出去的：\n{\n  \"model\": \"sensenova-6.8-flash\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"\n    }\n  ]\n}\n\n收回来的：\n{\n  \"id\": \"chatcmpl-863c…\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"finish_reason\": \"stop\",\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"把《上册》笔记装进个人知识库后，你可以随时用自然语言精准检索任意概念与代码出处，把读过的理论真正变成日常可用的工作台。\"\n      }\n    }\n  ],\n  \"created\": 1794583055,\n  \"model\": \"sensenova-6.8-flash\",\n  \"object\": \"chat.completion\",\n  \"usage\": {\n    \"prompt_tokens\": 229,\n    \"completion_tokens\": 39,\n    \"total_tokens\": 268\n  }\n}",
+      "text": "寄出去的：\n{\n  \"model\": \"sensenova-6.8-flash\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"\n    }\n  ]\n}\n\n收回来的：\n{\n  \"id\": \"chatcmpl-863c…\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"finish_reason\": \"stop\",\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"把《上册》笔记装进个人知识库后，你可以随时用自然语言精准检索任意概念与代码出处，把读过的理论真正变成日常可用的工作台。\"\n      }\n    }\n  ],\n  \"created\": 1794583055,\n  \"model\": \"sensenova-6.8-flash\",\n  \"object\": \"chat.completion\",\n  \"usage\": {\n    \"prompt_tokens\": 229,\n    \"completion_tokens\": 39,\n    \"total_tokens\": 268\n  }\n}",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "lower-01-4f785d8c9bb9"
+    },
+    {
+      "type": "prose",
+      "text": "请把收回来的这封信从头到尾读一遍，三个地方值得停下来认熟：",
+      "html": "<p>请把收回来的这封信从头到尾读一遍，三个地方值得停下来认熟：</p>\n",
+      "id": "lower-01-37bfad9616b3"
+    },
+    {
+      "type": "prose",
+      "text": "1. message.content 是它的回答。 平时在聊天窗口里看到的，就只有这一段。",
+      "html": "<p><strong>1. <code>message.content</code> 是它的回答。</strong> 平时在聊天窗口里看到的，就只有这一段。</p>\n",
+      "id": "lower-01-8aa3853f0707"
+    },
+    {
+      "type": "prose",
+      "text": "2. finish_reason 是它为什么停下。 stop 代表正常说完。要是你看见 length，说明它写到最大长度被一刀掐断了，回答只有前半截；要是看见 tool_calls，说明它没说话，而是从门缝里递出来一张“要调工具的纸条”。",
+      "html": "<p><strong>2. <code>finish_reason</code> 是它为什么停下。</strong> <code>stop</code> 代表正常说完。要是你看见 <code>length</code>，说明它写到最大长度被一刀掐断了，回答只有前半截；要是看见 <code>tool_calls</code>，说明它没说话，而是从门缝里递出来一张“要调工具的纸条”。</p>\n",
+      "id": "lower-01-8520867ed243"
+    },
+    {
+      "type": "prose",
+      "text": "3. usage 是这一封信的小账。 它读了多少（prompt_tokens），写了多少（completion_tokens）。平台按这两个数字算钱。你会注意到：我寄出去的明明只有二十几个字，它却说读了 229 个 token。多出来的那两百个，通常是平台在你的话前面悄悄垫了一段系统开场白。不同平台、不同模型，这个底数都不一样——所以算账从来不能靠猜，必须读回执里的 usage。",
+      "html": "<p><strong>3. <code>usage</code> 是这一封信的小账。</strong> 它读了多少（<code>prompt_tokens</code>），写了多少（<code>completion_tokens</code>）。平台按这两个数字算钱。你会注意到：我寄出去的明明只有二十几个字，它却说读了 229 个 token。多出来的那两百个，通常是平台在你的话前面悄悄垫了一段系统开场白。不同平台、不同模型，这个底数都不一样——所以<strong>算账从来不能靠猜，必须读回执里的 <code>usage</code></strong>。</p>\n",
+      "id": "lower-01-11a2a1a36e96"
+    },
+    {
+      "type": "image",
+      "alt": "你拿着放大镜读它回的信。角落里有一行小字是账单。",
+      "caption": "你拿着放大镜读它回的信。角落里有一行小字是账单。",
+      "available": true,
+      "src": "/media/d21e5ec615c28a917b9721b4.webp",
+      "id": "lower-01-037c14666f1a",
+      "previewWidth": 960,
+      "previewSrc": "/media/c01430561220488281f75cba.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/c01430561220488281f75cba.webp 960w, /media/d21e5ec615c28a917b9721b4.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "image",
+      "alt": "一次请求，一个来回。",
+      "caption": "一次请求，一个来回。",
+      "available": true,
+      "src": "/media/f5034181aec3cfce.png",
+      "id": "lower-01-fbcea26680b7",
+      "previewWidth": 960,
+      "previewSrc": "/media/689c7507ea76c62cbfe09bf1.webp",
+      "height": 870,
+      "previewHeight": 464,
+      "srcSet": "/media/689c7507ea76c62cbfe09bf1.webp 960w, /media/f5034181aec3cfce.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122-2"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "把它包成 llm.py：缓存、预算保险丝与“成/败/未知”三分法",
+      "id": "lower-01-46cb7edb2777"
+    },
+    {
+      "type": "prose",
+      "text": "每次发请求都要写二十行 urllib.request，太累了。更重要的是，直接拿 raw.py 去扫《上册》25 篇长文，不出十分钟就会撞上四个真实的工程麻烦：",
+      "html": "<p>每次发请求都要写二十行 <code>urllib.request</code>，太累了。更重要的是，直接拿 <code>raw.py</code> 去扫《上册》25 篇长文，不出十分钟就会撞上四个真实的工程麻烦：</p>\n",
+      "id": "lower-01-57c54c5625a0"
+    },
+    {
+      "type": "prose",
+      "text": "调试一次烧一次钱：改完一行输出格式重跑，25 篇笔记又得重新问一遍。如果能把 temperature=0 的确定性回答缓存到本地，没改过的笔记零耗时、零费用直接返回，开发体验会好十倍。\n死循环跑飞风险：后面第 06 章放开自主循环后，万一终止条件写歪了，一分钟能刷掉几百次调用。代码里必须焊死一只单次运行预算保险丝（比如默认最多真实请求 50 次）。\n报错分不清该不该重试：密钥错、模型名拼错、地址少写 /v1，重试一百次也是错；但 429 限流、502 网关抖动或超时，等 1 秒、2 秒、4 秒再试往往就能通。\n超时不等于没干成：信可能已经寄到对面、对面也写完了，只是回执在半路丢了。对只读问答，重问一次无非多花一点钱；可等到第 05 章和第 10 章能往硬盘写笔记时，“超时就盲目重发”就会把同一篇笔记写两遍。",
+      "html": "<ol>\n<li><strong>调试一次烧一次钱</strong>：改完一行输出格式重跑，25 篇笔记又得重新问一遍。如果能把 <code>temperature=0</code> 的确定性回答缓存到本地，没改过的笔记零耗时、零费用直接返回，开发体验会好十倍。</li>\n<li><strong>死循环跑飞风险</strong>：后面第 06 章放开自主循环后，万一终止条件写歪了，一分钟能刷掉几百次调用。代码里必须焊死一只<strong>单次运行预算保险丝</strong>（比如默认最多真实请求 50 次）。</li>\n<li><strong>报错分不清该不该重试</strong>：密钥错、模型名拼错、地址少写 <code>/v1</code>，重试一百次也是错；但 429 限流、502 网关抖动或超时，等 1 秒、2 秒、4 秒再试往往就能通。</li>\n<li><strong>超时不等于没干成</strong>：信可能已经寄到对面、对面也写完了，只是回执在半路丢了。对只读问答，重问一次无非多花一点钱；可等到第 05 章和第 10 章能往硬盘写笔记时，“超时就盲目重发”就会把同一篇笔记写两遍。</li>\n</ol>\n",
+      "id": "lower-01-d7e7410b0896"
+    },
+    {
+      "type": "prose",
+      "text": "所以我们在 课件/ch01/llm.py 里把这四道防线一次性写齐：",
+      "html": "<p>所以我们在 <code>课件/ch01/llm.py</code> 里把这四道防线一次性写齐：</p>\n",
+      "id": "lower-01-023fd59dc375"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# llm.py：整本下册和模型说话的唯一入口（Token Plan 统一接入 + 流式 + 缓存 + 预算保险丝 + 三分法）\nimport hashlib\nimport json\nimport os\nimport re\nimport time\nimport urllib.error\nimport urllib.request\n\nDEFAULT_BASE_URL = \"https://token.sensetime.com/api/v1\"\nDEFAULT_MODEL = \"sensenova-6.8-flash\"\nCACHE_DIR = os.environ.get(\"MYKB_CACHE_DIR\", os.path.join(os.path.dirname(__file__), \".cache\"))\n\nLEDGER = {\n    \"calls\": 0,\n    \"cache_hits\": 0,\n    \"prompt\": 0,\n    \"completion\": 0,\n    \"seconds\": 0.0,\n    \"unknown\": 0,\n}\n\nRETRY_CODES = {429, 500, 502, 503, 504}\n\n\nclass LLMError(Exception):\n    \"\"\"明确失败：密钥错、地址错、参数错，或者重试多次依然连不上。\"\"\"\n\n\nclass NotDone(LLMError):\n    \"\"\"它回了话，但这次不能算完成（写到一半被掐断、被拦截、或递来工具纸条）。\"\"\"\n\n\nclass BudgetExceeded(LLMError):\n    \"\"\"触发单次运行预算保险丝，防止死循环或批量脚本跑飞。\"\"\"\n\n\ndef _cfg():\n    base = os.environ.get(\"LLM_BASE_URL\", DEFAULT_BASE_URL).rstrip(\"/\")\n    key = os.environ.get(\"LLM_API_KEY\", \"\")\n    model = os.environ.get(\"LLM_MODEL\", DEFAULT_MODEL)\n    if not key:\n        raise LLMError(\"未设置环境变量 LLM_API_KEY，请先 export LLM_API_KEY=你的密钥\")\n    return base, key, model\n\n\ndef _check_budget():\n    max_calls = int(os.environ.get(\"MYKB_MAX_CALLS\", \"50\"))\n    if LEDGER[\"calls\"] >= max_calls:\n        raise BudgetExceeded(f\"本次真实调用已达上限 {max_calls} 次（可用 MYKB_MAX_CALLS 调高）\")\n\n\ndef _post(body, timeout=120):\n    base, key, _ = _cfg()\n    req = urllib.request.Request(\n        f\"{base}/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {key}\"},\n    )\n    for attempt in range(4):\n        try:\n            return urllib.request.urlopen(req, timeout=timeout)\n        except urllib.error.HTTPError as e:\n            detail = e.read().decode(\"utf-8\", \"replace\")[:200]\n            if e.code not in RETRY_CODES or attempt == 3:\n                raise LLMError(f\"HTTP {e.code}：{detail}\") from None\n        except (urllib.error.URLError, TimeoutError) as e:\n            if attempt == 3:\n                raise LLMError(f\"连不上（状态未知，请勿盲目重发写操作）：{e}\") from None\n        time.sleep(2 ** attempt)\n\n\ndef _book(usage, began):\n    LEDGER[\"calls\"] += 1\n    if not usage or \"completion_tokens\" not in usage:\n        LEDGER[\"unknown\"] += 1\n    else:\n        LEDGER[\"prompt\"] += usage.get(\"prompt_tokens\", 0)\n        LEDGER[\"completion\"] += usage.get(\"completion_tokens\", 0)\n    LEDGER[\"seconds\"] += time.time() - began\n\n\ndef _parse(raw):\n    \"\"\"正常情况直接 json.loads；若平台偶尔把末尾 usage 截断而 content 完整，则先把回答抠出来。\"\"\"\n    try:\n        return json.loads(raw)\n    except ValueError:\n        if '\"content\":' not in raw:\n            raise LLMError(f\"回来的内容不完整：{raw[-80:]!r}\") from None\n        start = raw.index('\"content\":') + len('\"content\":')\n        content, _ = json.JSONDecoder().raw_decode(raw, start)\n        usage = {\n            k: int(m.group(1))\n            for k in (\"prompt_tokens\", \"completion_tokens\")\n            for m in [re.search(f'\"{k}\":(\\\\d+)', raw)]\n            if m\n        }\n        return {\"choices\": [{\"message\": {\"content\": content}, \"finish_reason\": \"stop\"}], \"usage\": usage or None}\n\n\ndef done(choice):\n    \"\"\"成了、没成、还是半截：只认 stop 且有正文。\"\"\"\n    why = choice.get(\"finish_reason\")\n    text = (choice.get(\"message\") or {}).get(\"content\") or \"\"\n    if why == \"stop\" and text.strip():\n        return\n    reasons = {\n        \"length\": f\"写到上限被掐断了，只有前半截：{text[-30:]!r}\",\n        \"content_filter\": \"被平台的内容过滤拦下了\",\n        \"tool_calls\": \"它没说话，递来了一张要用工具的纸条\",\n    }\n    raise NotDone(reasons.get(why, f\"停下的原因是 {why!r}，内容{'为空' if not text.strip() else '不完整'}\"))\n\n\ndef _cache_key(model, messages, temperature, extra):\n    payload = json.dumps({\"model\": model, \"messages\": messages, \"temperature\": temperature, \"extra\": extra}, sort_keys=True, ensure_ascii=False)\n    return hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:24]\n\n\ndef chat(messages, model=None, temperature=0, use_cache=None, **extra):\n    \"\"\"交出一串对话，拿回它的回答。默认开启本地缓存（MYKB_CACHE=0 可关闭）。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    m = model or default_model\n    cache_on = (os.environ.get(\"MYKB_CACHE\", \"1\") != \"0\") if use_cache is None else use_cache\n\n    key = _cache_key(m, messages, temperature, extra)\n    cache_path = os.path.join(CACHE_DIR, f\"{key}.json\")\n    if cache_on and temperature == 0 and os.path.exists(cache_path):\n        LEDGER[\"cache_hits\"] += 1\n        return json.load(open(cache_path, encoding=\"utf-8\"))[\"content\"]\n\n    _check_budget()\n    began = time.time()\n    body = {\"model\": m, \"messages\": messages, \"temperature\": temperature, **extra}\n    with _post(body) as resp:\n        raw = resp.read().decode(\"utf-8\", \"replace\")\n    data = _parse(raw)\n    _book(data.get(\"usage\"), began)\n    choice = data[\"choices\"][0]\n    done(choice)\n    content = choice[\"message\"][\"content\"]\n\n    if cache_on and temperature == 0:\n        os.makedirs(CACHE_DIR, exist_ok=True)\n        with open(cache_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"model\": m, \"content\": content}, f, ensure_ascii=False, indent=2)\n    return content\n\n\ndef stream(messages, model=None, temperature=0):\n    \"\"\"一边写一边交，降低首字等待。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    _check_budget()\n    began = time.time()\n    body = {\n        \"model\": model or default_model,\n        \"messages\": messages,\n        \"temperature\": temperature,\n        \"stream\": True,\n        \"stream_options\": {\"include_usage\": True},\n    }\n    usage = None\n    with _post(body) as resp:\n        for raw in resp:\n            line = raw.decode(\"utf-8\", \"replace\").strip()\n            if not line.startswith(\"data:\") or line == \"data: [DONE]\":\n                continue\n            chunk = json.loads(line[5:])\n            usage = chunk.get(\"usage\") or usage\n            for choice in chunk.get(\"choices\", []):\n                piece = (choice.get(\"delta\") or {}).get(\"content\")\n                if piece:\n                    yield piece\n    _book(usage, began)\n\n\ndef bill(price_in=None, price_out=None):\n    unknown = f\"（含 {LEDGER['unknown']} 次账不全）\" if LEDGER[\"unknown\"] else \"\"\n    line = (\n        f\"真实调用 {LEDGER['calls']} 次，命中缓存 {LEDGER['cache_hits']} 次，\"\n        f\"读 {LEDGER['prompt']} / 写 {LEDGER['completion']} token，\"\n        f\"耗时 {LEDGER['seconds']:.1f} 秒{unknown}\"\n    )\n    if price_in is not None and price_out is not None:\n        cost = LEDGER[\"prompt\"] / 1e6 * price_in + LEDGER[\"completion\"] / 1e6 * price_out\n        line += f\"，约 {cost:.4f} 元\"\n    return line",
+      "text": "# llm.py：整本下册和模型说话的唯一入口（Token Plan 统一接入 + 流式 + 缓存 + 预算保险丝 + 三分法）\nimport hashlib\nimport json\nimport os\nimport re\nimport time\nimport urllib.error\nimport urllib.request\n\nDEFAULT_BASE_URL = \"https://token.sensetime.com/api/v1\"\nDEFAULT_MODEL = \"sensenova-6.8-flash\"\nCACHE_DIR = os.environ.get(\"MYKB_CACHE_DIR\", os.path.join(os.path.dirname(__file__), \".cache\"))\n\nLEDGER = {\n    \"calls\": 0,\n    \"cache_hits\": 0,\n    \"prompt\": 0,\n    \"completion\": 0,\n    \"seconds\": 0.0,\n    \"unknown\": 0,\n}\n\nRETRY_CODES = {429, 500, 502, 503, 504}\n\n\nclass LLMError(Exception):\n    \"\"\"明确失败：密钥错、地址错、参数错，或者重试多次依然连不上。\"\"\"\n\n\nclass NotDone(LLMError):\n    \"\"\"它回了话，但这次不能算完成（写到一半被掐断、被拦截、或递来工具纸条）。\"\"\"\n\n\nclass BudgetExceeded(LLMError):\n    \"\"\"触发单次运行预算保险丝，防止死循环或批量脚本跑飞。\"\"\"\n\n\ndef _cfg():\n    base = os.environ.get(\"LLM_BASE_URL\", DEFAULT_BASE_URL).rstrip(\"/\")\n    key = os.environ.get(\"LLM_API_KEY\", \"\")\n    model = os.environ.get(\"LLM_MODEL\", DEFAULT_MODEL)\n    if not key:\n        raise LLMError(\"未设置环境变量 LLM_API_KEY，请先 export LLM_API_KEY=你的密钥\")\n    return base, key, model\n\n\ndef _check_budget():\n    max_calls = int(os.environ.get(\"MYKB_MAX_CALLS\", \"50\"))\n    if LEDGER[\"calls\"] >= max_calls:\n        raise BudgetExceeded(f\"本次真实调用已达上限 {max_calls} 次（可用 MYKB_MAX_CALLS 调高）\")\n\n\ndef _post(body, timeout=120):\n    base, key, _ = _cfg()\n    req = urllib.request.Request(\n        f\"{base}/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {key}\"},\n    )\n    for attempt in range(4):\n        try:\n            return urllib.request.urlopen(req, timeout=timeout)\n        except urllib.error.HTTPError as e:\n            detail = e.read().decode(\"utf-8\", \"replace\")[:200]\n            if e.code not in RETRY_CODES or attempt == 3:\n                raise LLMError(f\"HTTP {e.code}：{detail}\") from None\n        except (urllib.error.URLError, TimeoutError) as e:\n            if attempt == 3:\n                raise LLMError(f\"连不上（状态未知，请勿盲目重发写操作）：{e}\") from None\n        time.sleep(2 ** attempt)\n\n\ndef _book(usage, began):\n    LEDGER[\"calls\"] += 1\n    if not usage or \"completion_tokens\" not in usage:\n        LEDGER[\"unknown\"] += 1\n    else:\n        LEDGER[\"prompt\"] += usage.get(\"prompt_tokens\", 0)\n        LEDGER[\"completion\"] += usage.get(\"completion_tokens\", 0)\n    LEDGER[\"seconds\"] += time.time() - began\n\n\ndef _parse(raw):\n    \"\"\"正常情况直接 json.loads；若平台偶尔把末尾 usage 截断而 content 完整，则先把回答抠出来。\"\"\"\n    try:\n        return json.loads(raw)\n    except ValueError:\n        if '\"content\":' not in raw:\n            raise LLMError(f\"回来的内容不完整：{raw[-80:]!r}\") from None\n        start = raw.index('\"content\":') + len('\"content\":')\n        content, _ = json.JSONDecoder().raw_decode(raw, start)\n        usage = {\n            k: int(m.group(1))\n            for k in (\"prompt_tokens\", \"completion_tokens\")\n            for m in [re.search(f'\"{k}\":(\\\\d+)', raw)]\n            if m\n        }\n        return {\"choices\": [{\"message\": {\"content\": content}, \"finish_reason\": \"stop\"}], \"usage\": usage or None}\n\n\ndef done(choice):\n    \"\"\"成了、没成、还是半截：只认 stop 且有正文。\"\"\"\n    why = choice.get(\"finish_reason\")\n    text = (choice.get(\"message\") or {}).get(\"content\") or \"\"\n    if why == \"stop\" and text.strip():\n        return\n    reasons = {\n        \"length\": f\"写到上限被掐断了，只有前半截：{text[-30:]!r}\",\n        \"content_filter\": \"被平台的内容过滤拦下了\",\n        \"tool_calls\": \"它没说话，递来了一张要用工具的纸条\",\n    }\n    raise NotDone(reasons.get(why, f\"停下的原因是 {why!r}，内容{'为空' if not text.strip() else '不完整'}\"))\n\n\ndef _cache_key(model, messages, temperature, extra):\n    payload = json.dumps({\"model\": model, \"messages\": messages, \"temperature\": temperature, \"extra\": extra}, sort_keys=True, ensure_ascii=False)\n    return hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:24]\n\n\ndef chat(messages, model=None, temperature=0, use_cache=None, **extra):\n    \"\"\"交出一串对话，拿回它的回答。默认开启本地缓存（MYKB_CACHE=0 可关闭）。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    m = model or default_model\n    cache_on = (os.environ.get(\"MYKB_CACHE\", \"1\") != \"0\") if use_cache is None else use_cache\n\n    key = _cache_key(m, messages, temperature, extra)\n    cache_path = os.path.join(CACHE_DIR, f\"{key}.json\")\n    if cache_on and temperature == 0 and os.path.exists(cache_path):\n        LEDGER[\"cache_hits\"] += 1\n        return json.load(open(cache_path, encoding=\"utf-8\"))[\"content\"]\n\n    _check_budget()\n    began = time.time()\n    body = {\"model\": m, \"messages\": messages, \"temperature\": temperature, **extra}\n    with _post(body) as resp:\n        raw = resp.read().decode(\"utf-8\", \"replace\")\n    data = _parse(raw)\n    _book(data.get(\"usage\"), began)\n    choice = data[\"choices\"][0]\n    done(choice)\n    content = choice[\"message\"][\"content\"]\n\n    if cache_on and temperature == 0:\n        os.makedirs(CACHE_DIR, exist_ok=True)\n        with open(cache_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"model\": m, \"content\": content}, f, ensure_ascii=False, indent=2)\n    return content\n\n\ndef stream(messages, model=None, temperature=0):\n    \"\"\"一边写一边交，降低首字等待。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    _check_budget()\n    began = time.time()\n    body = {\n        \"model\": model or default_model,\n        \"messages\": messages,\n        \"temperature\": temperature,\n        \"stream\": True,\n        \"stream_options\": {\"include_usage\": True},\n    }\n    usage = None\n    with _post(body) as resp:\n        for raw in resp:\n            line = raw.decode(\"utf-8\", \"replace\").strip()\n            if not line.startswith(\"data:\") or line == \"data: [DONE]\":\n                continue\n            chunk = json.loads(line[5:])\n            usage = chunk.get(\"usage\") or usage\n            for choice in chunk.get(\"choices\", []):\n                piece = (choice.get(\"delta\") or {}).get(\"content\")\n                if piece:\n                    yield piece\n    _book(usage, began)\n\n\ndef bill(price_in=None, price_out=None):\n    unknown = f\"（含 {LEDGER['unknown']} 次账不全）\" if LEDGER[\"unknown\"] else \"\"\n    line = (\n        f\"真实调用 {LEDGER['calls']} 次，命中缓存 {LEDGER['cache_hits']} 次，\"\n        f\"读 {LEDGER['prompt']} / 写 {LEDGER['completion']} token，\"\n        f\"耗时 {LEDGER['seconds']:.1f} 秒{unknown}\"\n    )\n    if price_in is not None and price_out is not None:\n        cost = LEDGER[\"prompt\"] / 1e6 * price_in + LEDGER[\"completion\"] / 1e6 * price_out\n        line += f\"，约 {cost:.4f} 元\"\n    return line",
+      "runnable": true,
+      "filename": "llm.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "lower-01-c4d76684e31b"
+    },
+    {
+      "type": "prose",
+      "text": "仔细看 llm.py 里两个容易被忽略的设计：",
+      "html": "<p>仔细看 <code>llm.py</code> 里两个容易被忽略的设计：</p>\n",
+      "id": "lower-01-144cc7c964d2"
+    },
+    {
+      "type": "prose",
+      "text": "_book() 里专门记了 unknown：万一某次响应没带回 completion_tokens（或者被截断了），绝不能写成 0，因为 0 的意思是“免费”，而真相是“不知道”。\n缓存只在 temperature == 0 时生效：带随机性的采样（temperature > 0）本来就希望每次有点不一样，强制缓存反而会破坏实验。",
+      "html": "<ul>\n<li><strong><code>_book()</code> 里专门记了 <code>unknown</code></strong>：万一某次响应没带回 <code>completion_tokens</code>（或者被截断了），绝不能写成 <code>0</code>，因为 <code>0</code> 的意思是“免费”，而真相是“不知道”。</li>\n<li><strong>缓存只在 <code>temperature == 0</code> 时生效</strong>：带随机性的采样（<code>temperature &gt; 0</code>）本来就希望每次有点不一样，强制缓存反而会破坏实验。</li>\n</ul>\n",
+      "id": "lower-01-62e9f7b793bc"
+    },
+    {
+      "type": "prose",
+      "text": "老办法，新地方\n\n“成了、没成、结果未知”这三分法，不是大模型时代才发明的。银行转账、网上下单早就为它头疼了几十年：钱扣了，回执没到，这一单算成没成？那一行的老规矩是：给每次操作一个编号，状态未知时先去查，查清了再决定要不要重来。第 06 章断点续传和第 10 章幂等去重，用的都是这一条老规矩。",
+      "html": "<blockquote>\n<p><strong>老办法，新地方</strong></p>\n<p>“成了、没成、结果未知”这三分法，不是大模型时代才发明的。银行转账、网上下单早就为它头疼了几十年：钱扣了，回执没到，这一单算成没成？那一行的老规矩是：给每次操作一个编号，状态未知时先去查，查清了再决定要不要重来。第 06 章断点续传和第 10 章幂等去重，用的都是这一条老规矩。</p>\n</blockquote>\n",
+      "id": "lower-01-96c7c4d7c45b"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122-3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "一边写一边交：流式输出到底省了什么？",
+      "id": "lower-01-08de7755ea49"
+    },
+    {
+      "type": "prose",
+      "text": "问它一个稍微长点的问题，等它全部写完再一次交出来，你往往要盯着空白屏幕干等一两秒。打开 \"stream\": True 后，服务端会以 data: {...} 的形式一行一行把刚吐出来的字推过来。",
+      "html": "<p>问它一个稍微长点的问题，等它全部写完再一次交出来，你往往要盯着空白屏幕干等一两秒。打开 <code>&quot;stream&quot;: True</code> 后，服务端会以 <code>data: {...}</code> 的形式一行一行把刚吐出来的字推过来。</p>\n",
+      "id": "lower-01-8e1c5dfb3981"
+    },
+    {
+      "type": "prose",
+      "text": "写一个 streaming.py，把同一个问题用两种方式各跑一遍，量一量两个时间：第一个字什么时候出来，全部什么时候写完：",
+      "html": "<p>写一个 <code>streaming.py</code>，把同一个问题用两种方式各跑一遍，量一量两个时间：第一个字什么时候出来，全部什么时候写完：</p>\n",
+      "id": "lower-01-cb3be532d196"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# streaming.py：对比一次交完与流式输出的首字等待时间\nimport time\nfrom llm import chat, stream\n\nQ = [{\"role\": \"user\", \"content\": \"我想把《零基础学 AI》上册的笔记搭成一个能问答的知识库，请用三点说说第一步该注意什么。\"}]\n\nt = time.time()\nans = chat(Q, use_cache=False)\nprint(f\"一次交完：首字与全文字均在 {time.time() - t:.2f} 秒出现（共 {len(ans)} 字）\\n\")\n\nt, first, pieces = time.time(), None, []\nfor piece in stream(Q):\n    if first is None:\n        first = time.time() - t\n    pieces.append(piece)\n    print(piece, end=\"\", flush=True)\nprint(f\"\\n\\n流式输出：首字在 {first:.2f} 秒出现，全部写完在 {time.time() - t:.2f} 秒（共 {len(pieces)} 小段）\")",
+      "text": "# streaming.py：对比一次交完与流式输出的首字等待时间\nimport time\nfrom llm import chat, stream\n\nQ = [{\"role\": \"user\", \"content\": \"我想把《零基础学 AI》上册的笔记搭成一个能问答的知识库，请用三点说说第一步该注意什么。\"}]\n\nt = time.time()\nans = chat(Q, use_cache=False)\nprint(f\"一次交完：首字与全文字均在 {time.time() - t:.2f} 秒出现（共 {len(ans)} 字）\\n\")\n\nt, first, pieces = time.time(), None, []\nfor piece in stream(Q):\n    if first is None:\n        first = time.time() - t\n    pieces.append(piece)\n    print(piece, end=\"\", flush=True)\nprint(f\"\\n\\n流式输出：首字在 {first:.2f} 秒出现，全部写完在 {time.time() - t:.2f} 秒（共 {len(pieces)} 小段）\")",
+      "runnable": true,
+      "filename": "streaming.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "lower-01-2ed73716cbf0"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "一次交完：首字与全文字均在 1.62 秒出现（共 210 字）\n流式输出：首字在 0.31 秒出现，全部写完在 1.54 秒（共 75 小段）",
+      "text": "一次交完：首字与全文字均在 1.62 秒出现（共 210 字）\n流式输出：首字在 0.31 秒出现，全部写完在 1.54 秒（共 75 小段）",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "lower-01-78d6e2ed557b"
+    },
+    {
+      "type": "prose",
+      "text": "全部写完，两种办法差不多都是一秒半。但第一个字出现的时间，从 1.62 秒压到了 0.31 秒。总时间没省，省的是你盯着黑框怀疑程序是不是卡死的那一秒多。",
+      "html": "<p>全部写完，两种办法差不多都是一秒半。但<strong>第一个字出现的时间，从 1.62 秒压到了 0.31 秒</strong>。总时间没省，省的是你盯着黑框怀疑程序是不是卡死的那一秒多。</p>\n",
+      "id": "lower-01-6d20f93b3fc2"
+    },
+    {
+      "type": "image",
+      "alt": "一个等着整页交过来，一个已经在读头几行了。",
+      "caption": "一个等着整页交过来，一个已经在读头几行了。",
+      "available": true,
+      "src": "/media/ad42317b8c57fcf04b5cd19e.webp",
+      "id": "lower-01-385f4cbe3f3b",
+      "previewWidth": 960,
+      "previewSrc": "/media/c9e72ea52f6ca5966ff0623b.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/c9e72ea52f6ca5966ff0623b.webp 960w, /media/ad42317b8c57fcf04b5cd19e.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122-4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "故意弄错几样：把常见报错的脸认熟",
+      "id": "lower-01-5611ba6da5a5"
+    },
+    {
+      "type": "prose",
+      "text": "与其等半夜批处理跑到一半突然崩掉，不如现在就故意写个 oops.py 踩一遍坑，把最常见的几种报错脸谱认熟：",
+      "html": "<p>与其等半夜批处理跑到一半突然崩掉，不如现在就故意写个 <code>oops.py</code> 踩一遍坑，把最常见的几种报错脸谱认熟：</p>\n",
+      "id": "lower-01-b32202c22685"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# oops.py：故意踩四种常见坑，把出错的脸认熟\nimport os\nimport llm\n\n\ndef attempt(label, **env):\n    saved = {k: os.environ.get(k) for k in env}\n    os.environ.update(env)\n    try:\n        llm.chat([{\"role\": \"user\", \"content\": \"你好\"}], use_cache=False)\n        print(f\"{label}：居然通了\")\n    except llm.LLMError as e:\n        print(f\"{label}：{e}\")\n    finally:\n        for k, v in saved.items():\n            if v is None:\n                os.environ.pop(k, None)\n            else:\n                os.environ[k] = v\n\n\nbase = os.environ.get(\"LLM_BASE_URL\", llm.DEFAULT_BASE_URL)\nkey = os.environ.get(\"LLM_API_KEY\", \"sk-placeholder\")\n\nattempt(\"密钥错了一位\", LLM_API_KEY=key[:-1] + \"x\")\nattempt(\"模型名拼错\", LLM_MODEL=\"sensenova-not-exist\")\nattempt(\"地址少了 /v1\", LLM_BASE_URL=base.rstrip(\"/\").rsplit(\"/v1\", 1)[0])\nattempt(\"地址写错了域名\", LLM_BASE_URL=\"https://api.invalid.example/v1\")",
+      "text": "# oops.py：故意踩四种常见坑，把出错的脸认熟\nimport os\nimport llm\n\n\ndef attempt(label, **env):\n    saved = {k: os.environ.get(k) for k in env}\n    os.environ.update(env)\n    try:\n        llm.chat([{\"role\": \"user\", \"content\": \"你好\"}], use_cache=False)\n        print(f\"{label}：居然通了\")\n    except llm.LLMError as e:\n        print(f\"{label}：{e}\")\n    finally:\n        for k, v in saved.items():\n            if v is None:\n                os.environ.pop(k, None)\n            else:\n                os.environ[k] = v\n\n\nbase = os.environ.get(\"LLM_BASE_URL\", llm.DEFAULT_BASE_URL)\nkey = os.environ.get(\"LLM_API_KEY\", \"sk-placeholder\")\n\nattempt(\"密钥错了一位\", LLM_API_KEY=key[:-1] + \"x\")\nattempt(\"模型名拼错\", LLM_MODEL=\"sensenova-not-exist\")\nattempt(\"地址少了 /v1\", LLM_BASE_URL=base.rstrip(\"/\").rsplit(\"/v1\", 1)[0])\nattempt(\"地址写错了域名\", LLM_BASE_URL=\"https://api.invalid.example/v1\")",
+      "runnable": true,
+      "filename": "oops.py",
+      "runtime": "api",
+      "reason": "需要自行配置模型服务、密钥与网络；不会在浏览器中自动调用。",
+      "id": "lower-01-f6ddc6b6f711"
+    },
+    {
+      "type": "prose",
+      "text": "跑完四下，四张脸一目了然：",
+      "html": "<p>跑完四下，四张脸一目了然：</p>\n",
+      "id": "lower-01-4c6c0161ed7b"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "密钥错了一位：HTTP 401：{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n模型名拼错：HTTP 400：{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033}\n地址少了 /v1：HTTP 404：404 page not found\n地址写错了域名：连不上（状态未知，请勿盲目重发写操作）：<urlopen error ...>",
+      "text": "密钥错了一位：HTTP 401：{\"code\":\"authentication_error\",\"message\":\"incorrect API key provided\"}\n模型名拼错：HTTP 400：{\"code\":\"invalid\",\"message\":\"模型未找到\",\"ref_code\":400033}\n地址少了 /v1：HTTP 404：404 page not found\n地址写错了域名：连不上（状态未知，请勿盲目重发写操作）：<urlopen error ...>",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "lower-01-f0cf764d829c"
+    },
+    {
+      "type": "prose",
+      "text": "记住这四张脸：401 是钥匙不对、400 是模型名或参数不对、404 是路没修到 /v1，这三种再试一百次还是错，_post() 直接报错停下；只有网络超时、429 限流或 5xx 对面抽风，才按 1s → 2s → 4s 退避重试。",
+      "html": "<p>记住这四张脸：401 是钥匙不对、400 是模型名或参数不对、404 是路没修到 <code>/v1</code>，这三种再试一百次还是错，<code>_post()</code> 直接报错停下；只有网络超时、429 限流或 5xx 对面抽风，才按 <code>1s → 2s → 4s</code> 退避重试。</p>\n",
+      "id": "lower-01-ac6fc8ea4187"
+    },
+    {
+      "type": "image",
+      "alt": "分清正常完成、明确失败与结果未知，是工程第一课。",
+      "caption": "分清正常完成、明确失败与结果未知，是工程第一课。",
+      "available": true,
+      "src": "/media/572e804c7790b594.png",
+      "id": "lower-01-43921260400d",
+      "previewWidth": 960,
+      "previewSrc": "/media/1b98d393c8bf729dc687b4f9.webp",
+      "height": 903,
+      "previewHeight": 482,
+      "srcSet": "/media/1b98d393c8bf729dc687b4f9.webp 960w, /media/572e804c7790b594.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122-5"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "本章实战成品：给《上册》自动写一份总目录",
+      "id": "lower-01-3e144e37a685"
+    },
+    {
+      "type": "prose",
+      "text": "现在把工具拉上战场。index_kb.py 会扫描 零基础学AI/上册/ 里的全部 25 篇 Markdown 笔记，先用 clean_preview() 剥掉开头的 --- YAML 元数据和正文里的 ![[...png]] / > 🎬 多媒体嵌入行，再让模型为每篇写出“一句话摘要 + 三个标签”，拼成一份 上册知识库目录.md：",
+      "html": "<p>现在把工具拉上战场。<code>index_kb.py</code> 会扫描 <code>零基础学AI/上册/</code> 里的全部 25 篇 Markdown 笔记，先用 <code>clean_preview()</code> 剥掉开头的 <code>---</code> YAML 元数据和正文里的 <code>![[...png]]</code> / <code>&gt; 🎬</code> 多媒体嵌入行，再让模型为每篇写出“一句话摘要 + 三个标签”，拼成一份 <code>上册知识库目录.md</code>：</p>\n",
+      "id": "lower-01-f74bacab1628"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# index_kb.py：第 01 章实战成品——扫描《上册》全部笔记，生成《上册知识库目录.md》\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nASK = (\n    \"下面是一篇技术教程笔记的开头节选。请只输出一行，严格使用以下格式：\\n\"\n    \"一句话摘要（不超过30字）｜标签1, 标签2, 标签3\\n\"\n    \"不要输出任何多余解释。\\n\\n\"\n)\n\n\ndef clean_preview(raw_text, limit=1200):\n    \"\"\"去掉 Obsidian YAML 头信息和图片/视频嵌入行，保留标题与核心正文前段。\"\"\"\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = []\n    for ln in lines:\n        s = ln.strip()\n        if s.startswith(\"![[\") or s.startswith(\"> 🎬\"):\n            continue\n        kept.append(ln)\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    if not os.path.isdir(folder):\n        sys.exit(f\"找不到目录：{folder}\")\n\n    rows, odd = [], []\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n    for name in md_files:\n        raw = open(os.path.join(folder, name), encoding=\"utf-8\").read()\n        preview = clean_preview(raw)\n        title = next((l.lstrip(\"# \").strip() for l in preview.splitlines() if l.startswith(\"#\")), name[:-3])\n        line = llm.chat([{\"role\": \"user\", \"content\": ASK + preview}]).strip().splitlines()[0]\n        if line.count(\"｜\") != 1:\n            odd.append(f\"{name}：{line}\")\n            continue\n        summary, tags = (p.strip() for p in line.split(\"｜\"))\n        rows.append(f\"| [{title}]({name}) | {summary} | {tags} |\")\n\n    out_path = os.path.join(folder, \"上册知识库目录.md\")\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        f.write(\"# 上册知识库目录\\n\\n| 章节 | 一句话 | 标签 |\\n|-|-|-|\\n\" + \"\\n\".join(rows) + \"\\n\")\n\n    print(f\"已生成 {out_path}：收录 {len(rows)} 篇\" + (f\"，格式不符跳过 {len(odd)} 篇\" if odd else \"\"))\n    for o in odd:\n        print(\"  跳过：\", o)\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()",
+      "text": "# index_kb.py：第 01 章实战成品——扫描《上册》全部笔记，生成《上册知识库目录.md》\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nASK = (\n    \"下面是一篇技术教程笔记的开头节选。请只输出一行，严格使用以下格式：\\n\"\n    \"一句话摘要（不超过30字）｜标签1, 标签2, 标签3\\n\"\n    \"不要输出任何多余解释。\\n\\n\"\n)\n\n\ndef clean_preview(raw_text, limit=1200):\n    \"\"\"去掉 Obsidian YAML 头信息和图片/视频嵌入行，保留标题与核心正文前段。\"\"\"\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = []\n    for ln in lines:\n        s = ln.strip()\n        if s.startswith(\"![[\") or s.startswith(\"> 🎬\"):\n            continue\n        kept.append(ln)\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    if not os.path.isdir(folder):\n        sys.exit(f\"找不到目录：{folder}\")\n\n    rows, odd = [], []\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n    for name in md_files:\n        raw = open(os.path.join(folder, name), encoding=\"utf-8\").read()\n        preview = clean_preview(raw)\n        title = next((l.lstrip(\"# \").strip() for l in preview.splitlines() if l.startswith(\"#\")), name[:-3])\n        line = llm.chat([{\"role\": \"user\", \"content\": ASK + preview}]).strip().splitlines()[0]\n        if line.count(\"｜\") != 1:\n            odd.append(f\"{name}：{line}\")\n            continue\n        summary, tags = (p.strip() for p in line.split(\"｜\"))\n        rows.append(f\"| [{title}]({name}) | {summary} | {tags} |\")\n\n    out_path = os.path.join(folder, \"上册知识库目录.md\")\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        f.write(\"# 上册知识库目录\\n\\n| 章节 | 一句话 | 标签 |\\n|-|-|-|\\n\" + \"\\n\".join(rows) + \"\\n\")\n\n    print(f\"已生成 {out_path}：收录 {len(rows)} 篇\" + (f\"，格式不符跳过 {len(odd)} 篇\" if odd else \"\"))\n    for o in odd:\n        print(\"  跳过：\", o)\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()",
+      "runnable": true,
+      "filename": "index_kb.py",
+      "runtime": "linux",
+      "reason": "依赖进程、终端输入、操作系统服务或本地文件环境。",
+      "id": "lower-01-4bd726a537d3"
+    },
+    {
+      "type": "prose",
+      "text": "跑一遍 python3 课件/ch01/index_kb.py（如果紧接着再跑第二遍，你会看到 真实调用 0 次，命中缓存 25 次，一分钱不花）。",
+      "html": "<p>跑一遍 <code>python3 课件/ch01/index_kb.py</code>（如果紧接着再跑第二遍，你会看到 <code>真实调用 0 次，命中缓存 25 次</code>，一分钱不花）。</p>\n",
+      "id": "lower-01-1029f0663a55"
+    },
+    {
+      "type": "prose",
+      "text": "但先别急着庆祝——打开生成的 上册知识库目录.md，仔细盯一眼最后一栏的标签：",
+      "html": "<p>但先别急着庆祝——打开生成的 <code>上册知识库目录.md</code>，仔细盯一眼最后一栏的标签：</p>\n",
+      "id": "lower-01-493d8b74342e"
+    },
+    {
+      "type": "code",
+      "language": "markdown",
+      "code": "| [第 01 章｜规则总也写不完](第 01 章｜规则总也写不完.md) | 规则写不完的三堵墙与正确分工 | 符号主义, ELIZA, 专家系统 |\n| [第 02 章｜给它例子，它就能学会吗？](第 02 章｜给它例子，它就能学会吗？.md) | 从感知机到反向传播与泛化 | 感知机，神经网络，反向传播 |",
+      "text": "| [第 01 章｜规则总也写不完](第 01 章｜规则总也写不完.md) | 规则写不完的三堵墙与正确分工 | 符号主义, ELIZA, 专家系统 |\n| [第 02 章｜给它例子，它就能学会吗？](第 02 章｜给它例子，它就能学会吗？.md) | 从感知机到反向传播与泛化 | 感知机，神经网络，反向传播 |",
+      "runnable": false,
+      "reason": "格式／配置／伪代码示例，不作为 Python 执行。",
+      "id": "lower-01-add44ba1f902"
+    },
+    {
+      "type": "prose",
+      "text": "你发现了什么？第一行用的是英文逗号加空格，第二行用的是中文逗号；而且提示词里只要模型偶尔多嘴写一句“好的，摘要如下：”，就会因为 line.count(\"｜\") != 1 整篇被跳过。",
+      "html": "<p>你发现了什么？第一行用的是<strong>英文逗号加空格</strong>，第二行用的是<strong>中文逗号</strong>；而且提示词里只要模型偶尔多嘴写一句“好的，摘要如下：”，就会因为 <code>line.count(&quot;｜&quot;) != 1</code> 整篇被跳过。</p>\n",
+      "id": "lower-01-1fed3d5482dd"
+    },
+    {
+      "type": "prose",
+      "text": "人看着没问题，下游程序按标签聚合时却会直接崩溃。第 02 章，我们就来治这个毛病：让模型交出严格合规、绝不走样的结构化 JSON 卡片。",
+      "html": "<p>人看着没问题，下游程序按标签聚合时却会直接崩溃。<strong>第 02 章</strong>，我们就来治这个毛病：让模型交出严格合规、绝不走样的结构化 JSON 卡片。</p>\n",
+      "id": "lower-01-1f0e00a72a7d"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-01-a3583fe48122-6"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "lower-01-17912e889c19"
+    },
+    {
+      "type": "code",
+      "language": "text",
+      "code": "课件/ch01/\n  raw.py         无封装原始 HTTP 调用，怀疑封装出问题时随时回来查它\n  llm.py         全册统一入口：Token Plan 接入、流式、SHA-256 缓存、预算保险丝、三分法与账本\n  streaming.py   首字等待时间对比实验\n  oops.py        401 / 400 / 404 / 超时四张常见报错脸谱\n  index_kb.py    清洗头信息与多媒体行，扫描《上册》生成总目录",
+      "text": "课件/ch01/\n  raw.py         无封装原始 HTTP 调用，怀疑封装出问题时随时回来查它\n  llm.py         全册统一入口：Token Plan 接入、流式、SHA-256 缓存、预算保险丝、三分法与账本\n  streaming.py   首字等待时间对比实验\n  oops.py        401 / 400 / 404 / 超时四张常见报错脸谱\n  index_kb.py    清洗头信息与多媒体行，扫描《上册》生成总目录",
+      "runnable": false,
+      "reason": "格式／配置／伪代码示例，不作为 Python 执行。",
+      "id": "lower-01-962c00f9c282"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "改一改",
+      "id": "lower-01-0c6165168e6a"
+    },
+    {
+      "type": "prose",
+      "text": "把 index_kb.py 里的 clean_preview(..., limit=1200) 改成只截取前 200 字，对比一下同一篇《第 01 章》生成的摘要有什么变化，并观察 llm.bill() 里的缓存命中情况。\n故意把环境变量 MYKB_MAX_CALLS=3 设小，再删掉 .cache/ 重跑 index_kb.py，亲眼看一眼 BudgetExceeded 保险丝是怎么在第 4 次请求前及时踩住刹车的。\n在 index_kb.py 里把 chat 换成 stream，让目录一边生成一边实时打印到终端，算一算此时 LEDGER 还能不能准确记下每次调用的 Token 账。\n把 index_kb.py 末尾的目录路径参数换成你自己电脑里的一个 Obsidian 文件夹（python3 index_kb.py ~/你的笔记目录），看看给你自己的抽屉写一页目录花了多少钱。",
+      "html": "<ol>\n<li>把 <code>index_kb.py</code> 里的 <code>clean_preview(..., limit=1200)</code> 改成只截取前 200 字，对比一下同一篇《第 01 章》生成的摘要有什么变化，并观察 <code>llm.bill()</code> 里的缓存命中情况。</li>\n<li>故意把环境变量 <code>MYKB_MAX_CALLS=3</code> 设小，再删掉 <code>.cache/</code> 重跑 <code>index_kb.py</code>，亲眼看一眼 <code>BudgetExceeded</code> 保险丝是怎么在第 4 次请求前及时踩住刹车的。</li>\n<li>在 <code>index_kb.py</code> 里把 <code>chat</code> 换成 <code>stream</code>，让目录一边生成一边实时打印到终端，算一算此时 <code>LEDGER</code> 还能不能准确记下每次调用的 Token 账。</li>\n<li>把 <code>index_kb.py</code> 末尾的目录路径参数换成你自己电脑里的一个 Obsidian 文件夹（<code>python3 index_kb.py ~/你的笔记目录</code>），看看给你自己的抽屉写一页目录花了多少钱。</li>\n</ol>\n",
+      "id": "lower-01-738e46aab5f6"
+    }
+  ],
+  "files": {
+    "raw.py": "# raw.py：不用任何封装，亲手向 Token Plan 寄出第一封信，把请求和完整回执原样印出来\nimport json\nimport os\nimport urllib.request\n\nBASE_URL = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\nAPI_KEY = os.environ[\"LLM_API_KEY\"]\nMODEL = os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\")\n\nbody = {\n    \"model\": MODEL,\n    \"messages\": [{\"role\": \"user\", \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"}],\n}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=2))\n\nreq = urllib.request.Request(\n    BASE_URL + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {API_KEY}\"},\n)\nwith urllib.request.urlopen(req, timeout=60) as resp:\n    data = json.loads(resp.read().decode(\"utf-8\"))\n\nif \"id\" in data:\n    data[\"id\"] = data[\"id\"][:14] + \"…\"\nprint(\"\\n收回来的：\")\nprint(json.dumps(data, ensure_ascii=False, indent=2))\n",
+    "llm.py": "# llm.py：整本下册和模型说话的唯一入口（Token Plan 统一接入 + 流式 + 缓存 + 预算保险丝 + 三分法）\nimport hashlib\nimport json\nimport os\nimport re\nimport time\nimport urllib.error\nimport urllib.request\n\nDEFAULT_BASE_URL = \"https://token.sensetime.com/api/v1\"\nDEFAULT_MODEL = \"sensenova-6.8-flash\"\nCACHE_DIR = os.environ.get(\"MYKB_CACHE_DIR\", os.path.join(os.path.dirname(__file__), \".cache\"))\n\nLEDGER = {\n    \"calls\": 0,\n    \"cache_hits\": 0,\n    \"prompt\": 0,\n    \"completion\": 0,\n    \"seconds\": 0.0,\n    \"unknown\": 0,\n}\n\nRETRY_CODES = {429, 500, 502, 503, 504}\n\n\nclass LLMError(Exception):\n    \"\"\"明确失败：密钥错、地址错、参数错，或者重试多次依然连不上。\"\"\"\n\n\nclass NotDone(LLMError):\n    \"\"\"它回了话，但这次不能算完成（写到一半被掐断、被拦截、或递来工具纸条）。\"\"\"\n\n\nclass BudgetExceeded(LLMError):\n    \"\"\"触发单次运行预算保险丝，防止死循环或批量脚本跑飞。\"\"\"\n\n\ndef _cfg():\n    base = os.environ.get(\"LLM_BASE_URL\", DEFAULT_BASE_URL).rstrip(\"/\")\n    key = os.environ.get(\"LLM_API_KEY\", \"\")\n    model = os.environ.get(\"LLM_MODEL\", DEFAULT_MODEL)\n    if not key:\n        raise LLMError(\"未设置环境变量 LLM_API_KEY，请先 export LLM_API_KEY=你的密钥\")\n    return base, key, model\n\n\ndef _check_budget():\n    max_calls = int(os.environ.get(\"MYKB_MAX_CALLS\", \"50\"))\n    if LEDGER[\"calls\"] >= max_calls:\n        raise BudgetExceeded(f\"本次真实调用已达上限 {max_calls} 次（可用 MYKB_MAX_CALLS 调高）\")\n\n\ndef _post(body, timeout=120):\n    base, key, _ = _cfg()\n    req = urllib.request.Request(\n        f\"{base}/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {key}\"},\n    )\n    for attempt in range(4):\n        try:\n            return urllib.request.urlopen(req, timeout=timeout)\n        except urllib.error.HTTPError as e:\n            detail = e.read().decode(\"utf-8\", \"replace\")[:200]\n            if e.code not in RETRY_CODES or attempt == 3:\n                raise LLMError(f\"HTTP {e.code}：{detail}\") from None\n        except (urllib.error.URLError, TimeoutError) as e:\n            if attempt == 3:\n                raise LLMError(f\"连不上（状态未知，请勿盲目重发写操作）：{e}\") from None\n        time.sleep(2 ** attempt)\n\n\ndef _book(usage, began):\n    LEDGER[\"calls\"] += 1\n    if not usage or \"completion_tokens\" not in usage:\n        LEDGER[\"unknown\"] += 1\n    else:\n        LEDGER[\"prompt\"] += usage.get(\"prompt_tokens\", 0)\n        LEDGER[\"completion\"] += usage.get(\"completion_tokens\", 0)\n    LEDGER[\"seconds\"] += time.time() - began\n\n\ndef _parse(raw):\n    \"\"\"正常情况直接 json.loads；若平台偶尔把末尾 usage 截断而 content 完整，则先把回答抠出来。\"\"\"\n    try:\n        return json.loads(raw)\n    except ValueError:\n        if '\"content\":' not in raw:\n            raise LLMError(f\"回来的内容不完整：{raw[-80:]!r}\") from None\n        start = raw.index('\"content\":') + len('\"content\":')\n        content, _ = json.JSONDecoder().raw_decode(raw, start)\n        usage = {\n            k: int(m.group(1))\n            for k in (\"prompt_tokens\", \"completion_tokens\")\n            for m in [re.search(f'\"{k}\":(\\\\d+)', raw)]\n            if m\n        }\n        return {\"choices\": [{\"message\": {\"content\": content}, \"finish_reason\": \"stop\"}], \"usage\": usage or None}\n\n\ndef done(choice):\n    \"\"\"成了、没成、还是半截：只认 stop 且有正文。\"\"\"\n    why = choice.get(\"finish_reason\")\n    text = (choice.get(\"message\") or {}).get(\"content\") or \"\"\n    if why == \"stop\" and text.strip():\n        return\n    reasons = {\n        \"length\": f\"写到上限被掐断了，只有前半截：{text[-30:]!r}\",\n        \"content_filter\": \"被平台的内容过滤拦下了\",\n        \"tool_calls\": \"它没说话，递来了一张要用工具的纸条\",\n    }\n    raise NotDone(reasons.get(why, f\"停下的原因是 {why!r}，内容{'为空' if not text.strip() else '不完整'}\"))\n\n\ndef _cache_key(model, messages, temperature, extra):\n    payload = json.dumps({\"model\": model, \"messages\": messages, \"temperature\": temperature, \"extra\": extra}, sort_keys=True, ensure_ascii=False)\n    return hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:24]\n\n\ndef chat(messages, model=None, temperature=0, use_cache=None, **extra):\n    \"\"\"交出一串对话，拿回它的回答。默认开启本地缓存（MYKB_CACHE=0 可关闭）。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    m = model or default_model\n    cache_on = (os.environ.get(\"MYKB_CACHE\", \"1\") != \"0\") if use_cache is None else use_cache\n\n    key = _cache_key(m, messages, temperature, extra)\n    cache_path = os.path.join(CACHE_DIR, f\"{key}.json\")\n    if cache_on and temperature == 0 and os.path.exists(cache_path):\n        LEDGER[\"cache_hits\"] += 1\n        return json.load(open(cache_path, encoding=\"utf-8\"))[\"content\"]\n\n    _check_budget()\n    began = time.time()\n    body = {\"model\": m, \"messages\": messages, \"temperature\": temperature, **extra}\n    with _post(body) as resp:\n        raw = resp.read().decode(\"utf-8\", \"replace\")\n    data = _parse(raw)\n    _book(data.get(\"usage\"), began)\n    choice = data[\"choices\"][0]\n    done(choice)\n    content = choice[\"message\"][\"content\"]\n\n    if cache_on and temperature == 0:\n        os.makedirs(CACHE_DIR, exist_ok=True)\n        with open(cache_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"model\": m, \"content\": content}, f, ensure_ascii=False, indent=2)\n    return content\n\n\ndef stream(messages, model=None, temperature=0):\n    \"\"\"一边写一边交，降低首字等待。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    _check_budget()\n    began = time.time()\n    body = {\n        \"model\": model or default_model,\n        \"messages\": messages,\n        \"temperature\": temperature,\n        \"stream\": True,\n        \"stream_options\": {\"include_usage\": True},\n    }\n    usage = None\n    with _post(body) as resp:\n        for raw in resp:\n            line = raw.decode(\"utf-8\", \"replace\").strip()\n            if not line.startswith(\"data:\") or line == \"data: [DONE]\":\n                continue\n            chunk = json.loads(line[5:])\n            usage = chunk.get(\"usage\") or usage\n            for choice in chunk.get(\"choices\", []):\n                piece = (choice.get(\"delta\") or {}).get(\"content\")\n                if piece:\n                    yield piece\n    _book(usage, began)\n\n\ndef bill(price_in=None, price_out=None):\n    unknown = f\"（含 {LEDGER['unknown']} 次账不全）\" if LEDGER[\"unknown\"] else \"\"\n    line = (\n        f\"真实调用 {LEDGER['calls']} 次，命中缓存 {LEDGER['cache_hits']} 次，\"\n        f\"读 {LEDGER['prompt']} / 写 {LEDGER['completion']} token，\"\n        f\"耗时 {LEDGER['seconds']:.1f} 秒{unknown}\"\n    )\n    if price_in is not None and price_out is not None:\n        cost = LEDGER[\"prompt\"] / 1e6 * price_in + LEDGER[\"completion\"] / 1e6 * price_out\n        line += f\"，约 {cost:.4f} 元\"\n    return line\n",
+    "index_kb.py": "# index_kb.py：第 01 章实战成品——扫描《上册》全部笔记，生成《上册知识库目录.md》\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nASK = (\n    \"下面是一篇技术教程笔记的开头节选。请只输出一行，严格使用以下格式：\\n\"\n    \"一句话摘要（不超过30字）｜标签1, 标签2, 标签3\\n\"\n    \"不要输出任何多余解释。\\n\\n\"\n)\n\n\ndef clean_preview(raw_text, limit=1200):\n    \"\"\"去掉 Obsidian YAML 头信息和图片/视频嵌入行，保留标题与核心正文前段。\"\"\"\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = []\n    for ln in lines:\n        s = ln.strip()\n        if s.startswith(\"![[\") or s.startswith(\"> 🎬\"):\n            continue\n        kept.append(ln)\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    if not os.path.isdir(folder):\n        sys.exit(f\"找不到目录：{folder}\")\n\n    rows, odd = [], []\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n    for name in md_files:\n        raw = open(os.path.join(folder, name), encoding=\"utf-8\").read()\n        preview = clean_preview(raw)\n        title = next((l.lstrip(\"# \").strip() for l in preview.splitlines() if l.startswith(\"#\")), name[:-3])\n        line = llm.chat([{\"role\": \"user\", \"content\": ASK + preview}]).strip().splitlines()[0]\n        if line.count(\"｜\") != 1:\n            odd.append(f\"{name}：{line}\")\n            continue\n        summary, tags = (p.strip() for p in line.split(\"｜\"))\n        rows.append(f\"| [{title}]({name}) | {summary} | {tags} |\")\n\n    out_path = os.path.join(folder, \"上册知识库目录.md\")\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        f.write(\"# 上册知识库目录\\n\\n| 章节 | 一句话 | 标签 |\\n|-|-|-|\\n\" + \"\\n\".join(rows) + \"\\n\")\n\n    print(f\"已生成 {out_path}：收录 {len(rows)} 篇\" + (f\"，格式不符跳过 {len(odd)} 篇\" if odd else \"\"))\n    for o in odd:\n        print(\"  跳过：\", o)\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()\n",
+    "oops.py": "# oops.py：故意踩四种常见坑，把出错的脸认熟\nimport os\nimport llm\n\n\ndef attempt(label, **env):\n    saved = {k: os.environ.get(k) for k in env}\n    os.environ.update(env)\n    try:\n        llm.chat([{\"role\": \"user\", \"content\": \"你好\"}], use_cache=False)\n        print(f\"{label}：居然通了\")\n    except llm.LLMError as e:\n        print(f\"{label}：{e}\")\n    finally:\n        for k, v in saved.items():\n            if v is None:\n                os.environ.pop(k, None)\n            else:\n                os.environ[k] = v\n\n\nbase = os.environ.get(\"LLM_BASE_URL\", llm.DEFAULT_BASE_URL)\nkey = os.environ.get(\"LLM_API_KEY\", \"sk-placeholder\")\n\nattempt(\"密钥错了一位\", LLM_API_KEY=key[:-1] + \"x\")\nattempt(\"模型名拼错\", LLM_MODEL=\"sensenova-not-exist\")\nattempt(\"地址少了 /v1\", LLM_BASE_URL=base.rstrip(\"/\").rsplit(\"/v1\", 1)[0])\nattempt(\"地址写错了域名\", LLM_BASE_URL=\"https://api.invalid.example/v1\")\n",
+    "streaming.py": "# streaming.py：对比一次交完与流式输出的首字等待时间\nimport time\nfrom llm import chat, stream\n\nQ = [{\"role\": \"user\", \"content\": \"我想把《零基础学 AI》上册的笔记搭成一个能问答的知识库，请用三点说说第一步该注意什么。\"}]\n\nt = time.time()\nans = chat(Q, use_cache=False)\nprint(f\"一次交完：首字与全文字均在 {time.time() - t:.2f} 秒出现（共 {len(ans)} 字）\\n\")\n\nt, first, pieces = time.time(), None, []\nfor piece in stream(Q):\n    if first is None:\n        first = time.time() - t\n    pieces.append(piece)\n    print(piece, end=\"\", flush=True)\nprint(f\"\\n\\n流式输出：首字在 {first:.2f} 秒出现，全部写完在 {time.time() - t:.2f} 秒（共 {len(pieces)} 小段）\")\n"
+  },
+  "sourceFile": "下册/下册第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本.md"
+}

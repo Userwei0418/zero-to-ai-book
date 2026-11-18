@@ -1,0 +1,96 @@
+{
+  "id": "lower-overview",
+  "title": "下册｜实践册：亲手搭一个问得动的 AI 知识库",
+  "shortTitle": "实践册：亲手搭一个问得动的 AI 知识库",
+  "volume": "lower",
+  "group": "下册 · 动手实践",
+  "order": 25,
+  "kind": "intro",
+  "minutes": 5,
+  "summary": "上册十四章，你一直站在历史现场里看：当年卡在哪儿，后来的人怎么翻过去。看懂了，不等于会做。",
+  "text": "# 下册｜实践册：亲手搭一个问得动的 AI 知识库\n\n上册十四章，你一直站在历史现场里看：当年卡在哪儿，后来的人怎么翻过去。看懂了，不等于会做。\n\n下册换个姿势。你手头刚好躺着你在《上册》读过的二十五篇正文、番外和教学视频——我们就**直接把《上册》当成第一批真实语料**，从一个空文件夹开始，一行一行敲，亲手搭出一个真正能天天用的 AI 知识库助手 **`mykb`**。\n\n做完以后，你可以直接向它提问：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会用混合检索翻遍你的 Markdown、PDF 和视频逐字稿，给出带 `[文件名:行号]` 出处的回答；你还可以把文件夹路径一键换成你自己的 Obsidian 笔记库。\n\n---\n\n## 做完以后，它会是什么样\n\n- **吃得进多种格式**：不仅读 Markdown，还能把 PDF、Word 以及教学音视频统一转成纯文本并感知代码块边界切块。\n- **找得准、答得稳**：默认接入商汤 **Token Plan** 的对话、向量（Embedding）与重排（Rerank）模型，配合手写 BM25 + RRF 融合；没有向量/重排接口时，自动降级为纯本地 BM25 + 字符二元组（Bigram）余弦相似度，零外部依赖照样能跑。\n- **省钱、可复现**：从第 1 章起内置**本地响应缓存**与**单次预算保险丝**，调试不烧冤枉钱。\n- **有手、有刹车、能断点续传**：开放最小权限沙箱工具，支持多步自主检索与断线恢复，并封装成标准 **MCP 服务**，直接接进 Claude Code、Cursor 等日常终端/IDE 助手。\n- **记性有谱系、不乱写**：借鉴企业级记忆引擎，实现 **L0 原始流水账 → L1 原子记忆（带版本与来源锚点）→ L2/L3 场景与核心归纳**，配合单写者锁与请求幂等键，多助手并发也不写乱。\n- **能验收、交得出去**：配套自动化回归评测集（`eval.py`）和可一键安装的 `mykb` 命令行包，所有代码均以**可独立运行的课件**形式交付。\n\n---\n\n## 十二章路线图\n\n| 篇 | 章目 | 对应上册 | 本章交付的可用成果 |\n|-|-|-|-|\n| **一、地基** | 第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本 | 第 00 章 | `llm.py`：Token Plan 统一接入、流式输出、本地缓存、预算保险丝与“成/败/未知”三分法 |\n| | 第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片 | 第 05 章番外 | `cards.py`：Schema 严格校验，批量把上册笔记提炼成结构化摘要与标签卡片 |\n| **二、解析与检索** | 第 03 章｜先解析再切块：把 Markdown、PDF 和音视频变成纯文本 | 第 07 章 | `ingest.py`：多格式解析（含阿里文档/音视频转写与本地 Whisper/字幕兜底）+ 代码块感知切块 |\n| | 第 04 章｜读懂了再找：BM25 + 向量混合检索、Rerank 与行级溯源 | 第 07 章 | `search.py` & `ask.py`：Token Plan 向量/重排 + 本地 Bigram 兜底 + `[文件名:行号]` 溯源问答 |\n| **三、手与圈** | 第 05 章｜给它一双手：Tool Calling 与最小权限沙箱 | 第 08 章 | `toolbox.py`：读写分离与路径白名单沙箱，先递纸条再安全执行 |\n| | 第 06 章｜让它自己接着干：自主循环、刹车与断点续传 | 第 09 章+番外 | `loop.py`：多步检索-推理-核对闭环、最大步数刹车与断线接续 |\n| | 第 07 章｜接进日常工具：把知识库做成标准 MCP 服务 | 第 10 章 | `mcp_server.py`：标准 JSON-RPC MCP 服务，直接接进 Claude Code / Cursor |\n| **四、规矩与记忆** | 第 08 章｜按需加载的做法包：三层 Skill 引擎 | 第 10 章 | `skills.py`：目录常驻、正文按需取、脚本本地跑 |\n| | 第 09 章｜跨天还记得你：L0–L3 分层记忆与版本谱系 | 第 11 章 | `memory.py`：L0 流水账 → L1 原子版本谱系 → L2/L3 归纳，支持来源回查与过时失效 |\n| | 第 10 章｜多助手不写乱：分工、写锁与请求幂等键 | 第 12 章 | `worker.py`：搜集与整理分离，单写者锁防并发写坏，幂等键防重复跑 |\n| **五、验收与交付** | 第 11 章｜怎么证明改好了：自动化考卷与回归评测 | 第 13/14 章 | `eval.py`：拿《上册》经典问题做固定考卷，量化命中率、溯源准确度与 Token 成本 |\n| | 第 12 章｜毕业交付：打包一个朋友也能装的 `mykb` | 尾声 | 可一键安装的 `mykb` CLI 与完整课件包，接上你自己的 Obsidian 库天天用 |\n\n---\n\n## 开工之前\n\n- **Python 3.9+**（核心主线尽量只用标准库，PDF/音视频等可选增强能力提供清晰的可选依赖与零依赖兜底）。\n- **商汤 Token Plan 接口**（兼容 OpenAI 协议，含对话、Embedding 与 Rerank 模型；无向量/重排权限时自动降级到本地兜底）。\n- **语料**：默认直接指向本库的 `零基础学AI/上册/`，随时可换成你自己的 Obsidian 笔记目录。\n- **配套代码与课件**：完整打包与逐章运行指南见 [[附录｜下册配套代码与课件总览]]。\n",
+  "codeCount": 0,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "下册｜实践册：亲手搭一个问得动的 AI 知识库",
+      "id": "lower-overview-7a06e69edb19"
+    },
+    {
+      "type": "prose",
+      "text": "上册十四章，你一直站在历史现场里看：当年卡在哪儿，后来的人怎么翻过去。看懂了，不等于会做。",
+      "html": "<p>上册十四章，你一直站在历史现场里看：当年卡在哪儿，后来的人怎么翻过去。看懂了，不等于会做。</p>\n",
+      "id": "lower-overview-782ed769300f"
+    },
+    {
+      "type": "prose",
+      "text": "下册换个姿势。你手头刚好躺着你在《上册》读过的二十五篇正文、番外和教学视频——我们就直接把《上册》当成第一批真实语料，从一个空文件夹开始，一行一行敲，亲手搭出一个真正能天天用的 AI 知识库助手 mykb。",
+      "html": "<p>下册换个姿势。你手头刚好躺着你在《上册》读过的二十五篇正文、番外和教学视频——我们就<strong>直接把《上册》当成第一批真实语料</strong>，从一个空文件夹开始，一行一行敲，亲手搭出一个真正能天天用的 AI 知识库助手 <strong><code>mykb</code></strong>。</p>\n",
+      "id": "lower-overview-6ed6d7163780"
+    },
+    {
+      "type": "prose",
+      "text": "做完以后，你可以直接向它提问：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会用混合检索翻遍你的 Markdown、PDF 和视频逐字稿，给出带 [文件名:行号] 出处的回答；你还可以把文件夹路径一键换成你自己的 Obsidian 笔记库。",
+      "html": "<p>做完以后，你可以直接向它提问：“第 02 章里感知机为什么卡在楼梯灯？”“第 07 章的一刀切教训是什么？”它会用混合检索翻遍你的 Markdown、PDF 和视频逐字稿，给出带 <code>[文件名:行号]</code> 出处的回答；你还可以把文件夹路径一键换成你自己的 Obsidian 笔记库。</p>\n",
+      "id": "lower-overview-cfcac87fe6dd"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-overview-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "做完以后，它会是什么样",
+      "id": "lower-overview-0b9aae5b985a"
+    },
+    {
+      "type": "prose",
+      "text": "吃得进多种格式：不仅读 Markdown，还能把 PDF、Word 以及教学音视频统一转成纯文本并感知代码块边界切块。\n找得准、答得稳：默认接入商汤 Token Plan 的对话、向量（Embedding）与重排（Rerank）模型，配合手写 BM25 + RRF 融合；没有向量/重排接口时，自动降级为纯本地 BM25 + 字符二元组（Bigram）余弦相似度，零外部依赖照样能跑。\n省钱、可复现：从第 1 章起内置本地响应缓存与单次预算保险丝，调试不烧冤枉钱。\n有手、有刹车、能断点续传：开放最小权限沙箱工具，支持多步自主检索与断线恢复，并封装成标准 MCP 服务，直接接进 Claude Code、Cursor 等日常终端/IDE 助手。\n记性有谱系、不乱写：借鉴企业级记忆引擎，实现 L0 原始流水账 → L1 原子记忆（带版本与来源锚点）→ L2/L3 场景与核心归纳，配合单写者锁与请求幂等键，多助手并发也不写乱。\n能验收、交得出去：配套自动化回归评测集（eval.py）和可一键安装的 mykb 命令行包，所有代码均以可独立运行的课件形式交付。",
+      "html": "<ul>\n<li><strong>吃得进多种格式</strong>：不仅读 Markdown，还能把 PDF、Word 以及教学音视频统一转成纯文本并感知代码块边界切块。</li>\n<li><strong>找得准、答得稳</strong>：默认接入商汤 <strong>Token Plan</strong> 的对话、向量（Embedding）与重排（Rerank）模型，配合手写 BM25 + RRF 融合；没有向量/重排接口时，自动降级为纯本地 BM25 + 字符二元组（Bigram）余弦相似度，零外部依赖照样能跑。</li>\n<li><strong>省钱、可复现</strong>：从第 1 章起内置<strong>本地响应缓存</strong>与<strong>单次预算保险丝</strong>，调试不烧冤枉钱。</li>\n<li><strong>有手、有刹车、能断点续传</strong>：开放最小权限沙箱工具，支持多步自主检索与断线恢复，并封装成标准 <strong>MCP 服务</strong>，直接接进 Claude Code、Cursor 等日常终端/IDE 助手。</li>\n<li><strong>记性有谱系、不乱写</strong>：借鉴企业级记忆引擎，实现 <strong>L0 原始流水账 → L1 原子记忆（带版本与来源锚点）→ L2/L3 场景与核心归纳</strong>，配合单写者锁与请求幂等键，多助手并发也不写乱。</li>\n<li><strong>能验收、交得出去</strong>：配套自动化回归评测集（<code>eval.py</code>）和可一键安装的 <code>mykb</code> 命令行包，所有代码均以<strong>可独立运行的课件</strong>形式交付。</li>\n</ul>\n",
+      "id": "lower-overview-463c7646456b"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-overview-a3583fe48122-2"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "十二章路线图",
+      "id": "lower-overview-c5d2f3c7fbe8"
+    },
+    {
+      "type": "prose",
+      "text": "篇\n章目\n对应上册\n本章交付的可用成果\n一、地基\n第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本\n第 00 章\nllm.py：Token Plan 统一接入、流式输出、本地缓存、预算保险丝与“成/败/未知”三分法\n\n第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片\n第 05 章番外\ncards.py：Schema 严格校验，批量把上册笔记提炼成结构化摘要与标签卡片\n二、解析与检索\n第 03 章｜先解析再切块：把 Markdown、PDF 和音视频变成纯文本\n第 07 章\ningest.py：多格式解析（含阿里文档/音视频转写与本地 Whisper/字幕兜底）+ 代码块感知切块\n\n第 04 章｜读懂了再找：BM25 + 向量混合检索、Rerank 与行级溯源\n第 07 章\nsearch.py & ask.py：Token Plan 向量/重排 + 本地 Bigram 兜底 + [文件名:行号] 溯源问答\n三、手与圈\n第 05 章｜给它一双手：Tool Calling 与最小权限沙箱\n第 08 章\ntoolbox.py：读写分离与路径白名单沙箱，先递纸条再安全执行\n\n第 06 章｜让它自己接着干：自主循环、刹车与断点续传\n第 09 章+番外\nloop.py：多步检索-推理-核对闭环、最大步数刹车与断线接续\n\n第 07 章｜接进日常工具：把知识库做成标准 MCP 服务\n第 10 章\nmcp_server.py：标准 JSON-RPC MCP 服务，直接接进 Claude Code / Cursor\n四、规矩与记忆\n第 08 章｜按需加载的做法包：三层 Skill 引擎\n第 10 章\nskills.py：目录常驻、正文按需取、脚本本地跑\n\n第 09 章｜跨天还记得你：L0–L3 分层记忆与版本谱系\n第 11 章\nmemory.py：L0 流水账 → L1 原子版本谱系 → L2/L3 归纳，支持来源回查与过时失效\n\n第 10 章｜多助手不写乱：分工、写锁与请求幂等键\n第 12 章\nworker.py：搜集与整理分离，单写者锁防并发写坏，幂等键防重复跑\n五、验收与交付\n第 11 章｜怎么证明改好了：自动化考卷与回归评测\n第 13/14 章\neval.py：拿《上册》经典问题做固定考卷，量化命中率、溯源准确度与 Token 成本\n\n第 12 章｜毕业交付：打包一个朋友也能装的 mykb\n尾声\n可一键安装的 mykb CLI 与完整课件包，接上你自己的 Obsidian 库天天用",
+      "html": "<table>\n<thead>\n<tr>\n  <th>篇</th>\n  <th>章目</th>\n  <th>对应上册</th>\n  <th>本章交付的可用成果</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td><strong>一、地基</strong></td>\n  <td>第 01 章｜和模型说上话：Token Plan、流式输出、缓存与账本</td>\n  <td>第 00 章</td>\n  <td><code>llm.py</code>：Token Plan 统一接入、流式输出、本地缓存、预算保险丝与“成/败/未知”三分法</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片</td>\n  <td>第 05 章番外</td>\n  <td><code>cards.py</code>：Schema 严格校验，批量把上册笔记提炼成结构化摘要与标签卡片</td>\n</tr>\n<tr>\n  <td><strong>二、解析与检索</strong></td>\n  <td>第 03 章｜先解析再切块：把 Markdown、PDF 和音视频变成纯文本</td>\n  <td>第 07 章</td>\n  <td><code>ingest.py</code>：多格式解析（含阿里文档/音视频转写与本地 Whisper/字幕兜底）+ 代码块感知切块</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 04 章｜读懂了再找：BM25 + 向量混合检索、Rerank 与行级溯源</td>\n  <td>第 07 章</td>\n  <td><code>search.py</code> &amp; <code>ask.py</code>：Token Plan 向量/重排 + 本地 Bigram 兜底 + <code>[文件名:行号]</code> 溯源问答</td>\n</tr>\n<tr>\n  <td><strong>三、手与圈</strong></td>\n  <td>第 05 章｜给它一双手：Tool Calling 与最小权限沙箱</td>\n  <td>第 08 章</td>\n  <td><code>toolbox.py</code>：读写分离与路径白名单沙箱，先递纸条再安全执行</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 06 章｜让它自己接着干：自主循环、刹车与断点续传</td>\n  <td>第 09 章+番外</td>\n  <td><code>loop.py</code>：多步检索-推理-核对闭环、最大步数刹车与断线接续</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 07 章｜接进日常工具：把知识库做成标准 MCP 服务</td>\n  <td>第 10 章</td>\n  <td><code>mcp_server.py</code>：标准 JSON-RPC MCP 服务，直接接进 Claude Code / Cursor</td>\n</tr>\n<tr>\n  <td><strong>四、规矩与记忆</strong></td>\n  <td>第 08 章｜按需加载的做法包：三层 Skill 引擎</td>\n  <td>第 10 章</td>\n  <td><code>skills.py</code>：目录常驻、正文按需取、脚本本地跑</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 09 章｜跨天还记得你：L0–L3 分层记忆与版本谱系</td>\n  <td>第 11 章</td>\n  <td><code>memory.py</code>：L0 流水账 → L1 原子版本谱系 → L2/L3 归纳，支持来源回查与过时失效</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 10 章｜多助手不写乱：分工、写锁与请求幂等键</td>\n  <td>第 12 章</td>\n  <td><code>worker.py</code>：搜集与整理分离，单写者锁防并发写坏，幂等键防重复跑</td>\n</tr>\n<tr>\n  <td><strong>五、验收与交付</strong></td>\n  <td>第 11 章｜怎么证明改好了：自动化考卷与回归评测</td>\n  <td>第 13/14 章</td>\n  <td><code>eval.py</code>：拿《上册》经典问题做固定考卷，量化命中率、溯源准确度与 Token 成本</td>\n</tr>\n<tr>\n  <td></td>\n  <td>第 12 章｜毕业交付：打包一个朋友也能装的 <code>mykb</code></td>\n  <td>尾声</td>\n  <td>可一键安装的 <code>mykb</code> CLI 与完整课件包，接上你自己的 Obsidian 库天天用</td>\n</tr>\n</tbody>\n</table>\n",
+      "id": "lower-overview-9f774d493fd9"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-overview-a3583fe48122-3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "开工之前",
+      "id": "lower-overview-500805f4c4fd"
+    },
+    {
+      "type": "prose",
+      "text": "Python 3.9+（核心主线尽量只用标准库，PDF/音视频等可选增强能力提供清晰的可选依赖与零依赖兜底）。\n商汤 Token Plan 接口（兼容 OpenAI 协议，含对话、Embedding 与 Rerank 模型；无向量/重排权限时自动降级到本地兜底）。\n语料：默认直接指向本库的 零基础学AI/上册/，随时可换成你自己的 Obsidian 笔记目录。\n配套代码与课件：完整打包与逐章运行指南见 附录｜下册配套代码与课件总览。",
+      "html": "<ul>\n<li><strong>Python 3.9+</strong>（核心主线尽量只用标准库，PDF/音视频等可选增强能力提供清晰的可选依赖与零依赖兜底）。</li>\n<li><strong>商汤 Token Plan 接口</strong>（兼容 OpenAI 协议，含对话、Embedding 与 Rerank 模型；无向量/重排权限时自动降级到本地兜底）。</li>\n<li><strong>语料</strong>：默认直接指向本库的 <code>零基础学AI/上册/</code>，随时可换成你自己的 Obsidian 笔记目录。</li>\n<li><strong>配套代码与课件</strong>：完整打包与逐章运行指南见 <a href=\"/?chapter=lower-appendix\">附录｜下册配套代码与课件总览</a>。</li>\n</ul>\n",
+      "id": "lower-overview-1259c9ab4516"
+    }
+  ],
+  "files": {},
+  "sourceFile": "下册/下册｜实践册：一点一点搭一个你自己的知识库.md"
+}

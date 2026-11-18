@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460">
+  <rect x="0" y="0" width="1200" height="460" rx="14" fill="#f7f0e2"/>
+  <g fill="#dfb66b">
+    <circle cx="1050" cy="44" r="4"/><circle cx="1066" cy="36" r="4"/>
+    <circle cx="1058" cy="60" r="4"/><circle cx="1076" cy="52" r="4"/>
+  </g>
+  <g fill="#739c8e">
+    <path d="M 1104 78 Q 1122 46 1142 18" stroke="#739c8e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    <ellipse cx="1132" cy="24" rx="10" ry="4.5" transform="rotate(-35 1132 24)"/>
+    <ellipse cx="1146" cy="36" rx="10" ry="4.5" transform="rotate(20 1146 36)"/>
+    <ellipse cx="1118" cy="48" rx="10" ry="4.5" transform="rotate(-40 1118 48)"/>
+  </g>
+
+  <text x="56" y="60" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="30" font-weight="700" fill="#233c63">同样一张海报：压平的成品图 vs 可继续改的结构</text>
+  <text x="56" y="92" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#6b6457">想把 14:00 改成 15:00，交回来的东西决定了明天好不好改</text>
+
+  <!-- Left panel: PNG -->
+  <rect x="56" y="122" width="510" height="296" rx="18" fill="#f2e6cf" stroke="#b59d79" stroke-width="2"/>
+  <text x="86" y="160" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#233c63">1. 一整张图（PNG）</text>
+  <text x="86" y="188" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#6b6457">文字和背景压成同一层像素点，没法双击单改一行字</text>
+
+  <rect x="96" y="212" width="430" height="172" rx="14" fill="#faebc3" stroke="#ca9b37" stroke-width="2"/>
+  <text x="311" y="256" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="24" font-weight="700" fill="#2d2922">旧物交换日</text>
+  <text x="311" y="294" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#4f493e">11 月 20 日 · 14:00 · 三楼活动室</text>
+  <rect x="176" y="324" width="270" height="36" rx="18" fill="#e5d4b0"/>
+  <text x="311" y="348" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#6b6457">焊死在一张图里：改时间 = 重新生成</text>
+
+  <!-- Right panel: SVG -->
+  <rect x="614" y="122" width="530" height="296" rx="18" fill="#e5ebf6" stroke="#2c4975" stroke-width="2"/>
+  <text x="644" y="160" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#233c63">2. 分层结构（SVG / 模板）</text>
+  <text x="644" y="188" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#4f493e">装饰归底图，关键字段独立存放，改一处同步变</text>
+
+  <rect x="650" y="212" width="458" height="48" rx="10" fill="#e0ece6" stroke="#4f8b75" stroke-width="1.8"/>
+  <text x="670" y="242" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#2d2922">背景与插画层：AI 生成的装饰图（不动）</text>
+
+  <rect x="650" y="274" width="458" height="48" rx="10" fill="#ffffff" stroke="#2c4975" stroke-width="1.8"/>
+  <text x="670" y="304" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#2d2922">标题与地点：旧物交换日 · 三楼活动室（不动）</text>
+
+  <rect x="650" y="336" width="458" height="52" rx="10" fill="#faebc3" stroke="#ca9b37" stroke-width="2.2"/>
+  <text x="670" y="368" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" font-weight="700" fill="#233c63">独立字段 time："14:00" → "15:00"（只改这一行）</text>
+</svg>

@@ -1,0 +1,30 @@
+[Unit]
+Description=AI Book isolated Linux execution gateway
+Requires=docker.service
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=sandbox-gateway
+Group=sandbox-gateway
+SupplementaryGroups=docker
+WorkingDirectory=/opt/ai-book-sandbox
+EnvironmentFile=/etc/ai-book-sandbox/sandbox.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/ai-book-sandbox/gateway.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

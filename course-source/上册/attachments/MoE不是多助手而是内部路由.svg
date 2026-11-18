@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#233c63"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1200" height="420" rx="14" fill="#f7f0e2"/>
+  <text x="56" y="58" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="30" font-weight="700" fill="#233c63">MoE 里的“专家”，不是好几个会开会的助手</text>
+  <text x="56" y="90" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#6b6457">它是同一个模型内部的计算模块：每次只唤醒其中一小部分，省算力不省总显存</text>
+
+  <!-- Left: Misconception -->
+  <rect x="56" y="122" width="490" height="256" rx="18" fill="#f2e6cf" stroke="#b59d79" stroke-width="2"/>
+  <text x="86" y="160" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" font-weight="700" fill="#8b453a">✗ 常见误解：多个独立助手分工</text>
+  <rect x="92" y="190" width="124" height="72" rx="12" fill="#ffffff" stroke="#b59d79" stroke-width="1.5"/>
+  <text x="154" y="232" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#4f493e">看图助手</text>
+  <rect x="238" y="190" width="124" height="72" rx="12" fill="#ffffff" stroke="#b59d79" stroke-width="1.5"/>
+  <text x="300" y="232" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#4f493e">画画助手</text>
+  <rect x="384" y="190" width="124" height="72" rx="12" fill="#ffffff" stroke="#b59d79" stroke-width="1.5"/>
+  <text x="446" y="232" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#4f493e">订场地助手</text>
+  <text x="300" y="316" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#6b6457">不是几个能互相聊天的人格，也不会自动带出多模态能力</text>
+
+  <!-- Right: Reality -->
+  <rect x="576" y="122" width="568" height="256" rx="18" fill="#e5ebf6" stroke="#2c4975" stroke-width="2"/>
+  <text x="606" y="160" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" font-weight="700" fill="#233c63">✓ 真实结构：单层内部按需挑模块算</text>
+
+  <rect x="608" y="220" width="110" height="58" rx="12" fill="#faebc3" stroke="#ca9b37" stroke-width="2"/>
+  <text x="663" y="255" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" font-weight="700" fill="#2d2922">当前词</text>
+
+  <line x1="726" y1="249" x2="770" y2="249" stroke="#233c63" stroke-width="2.5" marker-end="url(#arr3)"/>
+
+  <rect x="778" y="216" width="106" height="66" rx="12" fill="#ffffff" stroke="#2c4975" stroke-width="2"/>
+  <text x="831" y="255" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" font-weight="700" fill="#233c63">路由器</text>
+
+  <line x1="892" y1="234" x2="942" y2="206" stroke="#233c63" stroke-width="2.2" marker-end="url(#arr3)"/>
+  <line x1="892" y1="262" x2="942" y2="288" stroke="#233c63" stroke-width="2.2" marker-end="url(#arr3)"/>
+
+  <rect x="950" y="180" width="160" height="42" rx="10" fill="#e0ece6" stroke="#4f8b75" stroke-width="2"/>
+  <text x="1030" y="206" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" font-weight="700" fill="#2d2922">模块 1（激活）</text>
+
+  <rect x="950" y="230" width="160" height="36" rx="10" fill="#dfe4ee" stroke="#9aa3b2" stroke-width="1.2"/>
+  <text x="1030" y="253" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#6b6457">模块 2（歇着）</text>
+
+  <rect x="950" y="274" width="160" height="42" rx="10" fill="#e0ece6" stroke="#4f8b75" stroke-width="2"/>
+  <text x="1030" y="300" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" font-weight="700" fill="#2d2922">模块 3（激活）</text>
+
+  <rect x="950" y="324" width="160" height="36" rx="10" fill="#dfe4ee" stroke="#9aa3b2" stroke-width="1.2"/>
+  <text x="1030" y="347" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#6b6457">模块 4（歇着）</text>
+</svg>

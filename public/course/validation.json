@@ -1,0 +1,281 @@
+{
+  "checkedAt": "2026-11-18",
+  "engine": "CPython 3.12.14",
+  "scope": "每个 browser+runnable 块，在独立工作目录载入本章 files 后实际执行。不是 Pyodide 浏览器验证，也未执行联网、系统服务或 GPU 实验。",
+  "total": 34,
+  "passed": 34,
+  "results": [
+    {
+      "chapterId": "upper-00",
+      "blockId": "upper-00-47d5a65e136a",
+      "filename": "peek.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-9a1121eb5379",
+      "filename": "router.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-a4b857d7c325",
+      "filename": "exam.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-f99898cb545d",
+      "filename": "patch1.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-9cd05d4468bb",
+      "filename": "patch2.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-9151db83faf0",
+      "filename": "eliza.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-e36450f1f587",
+      "filename": "cut.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-01",
+      "blockId": "upper-01-4550cae17594",
+      "filename": "expert.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-7f6d22678a18",
+      "filename": "perceptron.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-7769527b5812",
+      "filename": "three_tasks.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-db1e8cf68913",
+      "filename": "by_hand.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-4f7bf7b9c3dc",
+      "filename": "xor_mlp.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 4.21
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-b99c3d86f82f",
+      "filename": "value.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.56
+    },
+    {
+      "chapterId": "upper-02",
+      "blockId": "upper-02-bdbce4a02d55",
+      "filename": "classifier.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.05
+    },
+    {
+      "chapterId": "upper-03",
+      "blockId": "upper-03-8a9f3b4bc986",
+      "filename": "lunch.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 1.37
+    },
+    {
+      "chapterId": "upper-03",
+      "blockId": "upper-03-73948cd6d02a",
+      "filename": "reinforce.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-03",
+      "blockId": "upper-03-833d70184d44",
+      "filename": "maze.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.15
+    },
+    {
+      "chapterId": "upper-03",
+      "blockId": "upper-03-e656523bdc05",
+      "filename": "reward.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.09
+    },
+    {
+      "chapterId": "upper-03",
+      "blockId": "upper-03-1c44d3774d9d",
+      "filename": "babble.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.06
+    },
+    {
+      "chapterId": "upper-04a",
+      "blockId": "upper-04a-4d7734c8207b",
+      "filename": "bigram.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-04a",
+      "blockId": "upper-04a-c587b120b3fc",
+      "filename": "vectors.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-04a",
+      "blockId": "upper-04a-65196bbcdb73",
+      "filename": "attention.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-04a",
+      "blockId": "upper-04a-850afa370760",
+      "filename": "mini_gpt.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 5.38
+    },
+    {
+      "chapterId": "upper-05",
+      "blockId": "upper-05-4a2b435bd289",
+      "filename": "sft_dpo.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-06",
+      "blockId": "upper-06-479c2a321499",
+      "filename": "puzzle.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.04
+    },
+    {
+      "chapterId": "upper-06",
+      "blockId": "upper-06-89b4d8034d1a",
+      "filename": "verify.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.03
+    },
+    {
+      "chapterId": "upper-07",
+      "blockId": "upper-07-d6aaac9e4a0d",
+      "filename": "docs.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-07",
+      "blockId": "upper-07-e7639cc1f655",
+      "filename": "quiz.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-12",
+      "blockId": "upper-12-e3bfa49bbc71",
+      "filename": "cases.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-13",
+      "blockId": "upper-13-4302446cf890",
+      "filename": "postman.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.02
+    },
+    {
+      "chapterId": "upper-14",
+      "blockId": "upper-14-185ea0ddf640",
+      "filename": "accept_v1.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.04
+    },
+    {
+      "chapterId": "upper-14",
+      "blockId": "upper-14-8982aabd168b",
+      "filename": "accept.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.07
+    },
+    {
+      "chapterId": "upper-14",
+      "blockId": "upper-14-3ff385c76538",
+      "filename": "card.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.06
+    },
+    {
+      "chapterId": "lower-09",
+      "blockId": "lower-09-e94f91199b0d",
+      "filename": "memory.py",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": 0.05
+    }
+  ]
+}
