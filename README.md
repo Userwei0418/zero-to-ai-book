@@ -4,6 +4,8 @@
 
 上册第一章给问答助手加了一条看起来很合理的规则。读者先猜六句话能答对几句，再运行 `patch1.py`。原始实验仍是 **3/6**。第五句改对了，第六句却被分错。两句话都出现“账号”和“安装”，真正要办的事刚好相反。读者可以改一行代码再试，亲眼看见规则在哪一句失效。[直接体验这道题](https://ai-book-laboratory.lucien-alvarez748774.chatgpt.site/?chapter=upper-01#upper-01-predict-first-patch)
 
+**第一次接手项目，先读[开发与部署交接](docs/HANDOFF.md)。** 里面记录了线上版本、验收用例、待办和发布条件；[设计决策记录](docs/DESIGN-HISTORY.md)解释每项选择的原因。
+
 ## 从哪里开始
 
 | 你想做什么 | 从这里开始 |

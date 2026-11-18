@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" width="1200" height="540">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#233c63"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#d8ccb4" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="1200" height="540" rx="14" fill="#f7f0e2"/>
+
+  <!-- Decorative dots and leaves -->
+  <g fill="#dfb66b">
+    <circle cx="1028" cy="48" r="4"/>
+    <circle cx="1044" cy="40" r="4"/>
+    <circle cx="1036" cy="64" r="4"/>
+    <circle cx="1054" cy="56" r="4"/>
+    <circle cx="1046" cy="76" r="4"/>
+    <circle cx="1062" cy="68" r="4"/>
+    <circle cx="1056" cy="84" r="4"/>
+  </g>
+  <g fill="#739c8e">
+    <path d="M 1088 86 Q 1106 54 1126 24" stroke="#739c8e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    <ellipse cx="1116" cy="28" rx="11" ry="5" transform="rotate(-35 1116 28)"/>
+    <ellipse cx="1132" cy="38" rx="11" ry="5" transform="rotate(20 1132 38)"/>
+    <ellipse cx="1106" cy="48" rx="11" ry="5" transform="rotate(-40 1106 48)"/>
+    <ellipse cx="1122" cy="58" rx="11" ry="5" transform="rotate(15 1122 58)"/>
+    <ellipse cx="1096" cy="72" rx="10" ry="5" transform="rotate(-45 1096 72)"/>
+  </g>
+
+  <!-- Title & Subtitle -->
+  <text x="58" y="64" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="34" font-weight="700" fill="#233c63">注意力是怎么分的</text>
+  <text x="58" y="100" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#6b6457">“实习生同事使用独立入口，这位同事该怎么申请”，算到“申请”这一步</text>
+
+  <!-- Left 3 boxes -->
+  <g filter="url(#shadow)">
+    <rect x="58" y="144" width="298" height="104" rx="16" fill="#faebc3" stroke="#ca9b37" stroke-width="2.2"/>
+    <text x="207" y="186" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#2d2922">“申请”发出的提问</text>
+    <text x="207" y="220" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#4f493e">谁？哪个入口？</text>
+
+    <rect x="58" y="278" width="298" height="104" rx="16" fill="#e5ebf6" stroke="#2c4975" stroke-width="2.2"/>
+    <text x="207" y="320" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#2d2922">每个词举的牌子</text>
+    <text x="207" y="354" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#4f493e">我是关于什么的</text>
+
+    <rect x="58" y="408" width="298" height="92" rx="16" fill="#e0ece6" stroke="#4f8b75" stroke-width="2.2"/>
+    <text x="207" y="446" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#2d2922">每个词带的内容</text>
+    <text x="207" y="478" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="18" fill="#4f493e">被取走的东西</text>
+  </g>
+
+  <!-- Arrows -->
+  <line x1="364" y1="196" x2="416" y2="256" stroke="#233c63" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="364" y1="330" x2="416" y2="278" stroke="#233c63" stroke-width="2.8" marker-end="url(#arrow)"/>
+
+  <!-- Right chart heading -->
+  <text x="424" y="178" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="21" font-weight="700" fill="#233c63">提问和牌子越对得上，分到的注意力越多（合计为 1）</text>
+
+  <!-- Bars -->
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#3a352c">
+    <text x="424" y="228">实习生</text>
+    <rect x="560" y="206" width="448" height="28" rx="6" fill="#233c63"/>
+    <text x="1020" y="228">0.25</text>
+
+    <text x="424" y="274">入口</text>
+    <rect x="560" y="252" width="448" height="28" rx="6" fill="#233c63"/>
+    <text x="1020" y="274">0.25</text>
+
+    <text x="424" y="320">同事</text>
+    <rect x="560" y="298" width="197" height="28" rx="6" fill="#c9ba9b"/>
+    <text x="770" y="320">0.11</text>
+
+    <text x="424" y="366">独立</text>
+    <rect x="560" y="344" width="197" height="28" rx="6" fill="#c9ba9b"/>
+    <text x="770" y="366">0.11</text>
+
+    <text x="424" y="412">同事</text>
+    <rect x="560" y="390" width="197" height="28" rx="6" fill="#c9ba9b"/>
+    <text x="770" y="412">0.11</text>
+
+    <text x="424" y="458">其余五个词</text>
+    <rect x="560" y="436" width="305" height="28" rx="6" fill="#c9ba9b"/>
+    <text x="878" y="458">0.17</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="424" y="502" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#6b6457">提问叫 Query，牌子叫 Key，内容叫 Value。数字来自本章的真实运行，向量是人手设的。</text>
+</svg>

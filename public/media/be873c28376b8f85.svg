@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 580" width="100%" height="auto">
+  <rect width="1280" height="580" rx="16" fill="#F6EFE2"/>
+
+  <!-- 顶部右上角装饰叶子与点 -->
+  <g transform="translate(1065, 36)" fill="#DDA653" opacity="0.85">
+    <circle cx="14" cy="24" r="4"/>
+    <circle cx="32" cy="18" r="4"/>
+    <circle cx="24" cy="38" r="4"/>
+    <circle cx="44" cy="34" r="4"/>
+    <circle cx="16" cy="54" r="4"/>
+    <circle cx="36" cy="52" r="4"/>
+  </g>
+  <g transform="translate(1145, 22)" fill="#79A395" opacity="0.85">
+    <path d="M12,72 C22,50 32,32 48,12" stroke="#79A395" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <ellipse cx="42" cy="18" rx="12" ry="6" transform="rotate(-25 42 18)"/>
+    <ellipse cx="28" cy="36" rx="11" ry="5.5" transform="rotate(-35 28 36)"/>
+    <ellipse cx="44" cy="34" rx="11" ry="5.5" transform="rotate(20 44 34)"/>
+    <ellipse cx="18" cy="56" rx="11" ry="5.5" transform="rotate(-30 18 56)"/>
+  </g>
+
+  <!-- 标题与副标题 -->
+  <text x="60" y="72" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="38" font-weight="700" fill="#1F3B5C">一刀切在了“除外”前面</text>
+  <text x="60" y="112" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="22" fill="#6F6B64">资料太长要切块。切的位置，决定了它能看到什么</text>
+
+  <!-- 切刀标注 -->
+  <text x="735" y="142" text-anchor="middle" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#B64935">每 40 个字，在这儿切一刀</text>
+
+  <!-- 主文本框阴影与外框 -->
+  <rect x="64" y="164" width="1152" height="96" rx="16" fill="#E3DACB"/>
+  <rect x="60" y="160" width="1152" height="96" rx="16" fill="#FAF6EE" stroke="#2B486B" stroke-width="2.5"/>
+
+  <!-- 文本内容 -->
+  <text x="96" y="198" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" fill="#3D3A36">自 2026 年 11 月 5 日起，账号审批时限由 30 分钟调整为 45 分</text>
+  <text x="742" y="198" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" fill="#8C877E">钟。本规定适用于全体新入职员工。</text>
+  <text x="96" y="236" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#B64935">实习生除外，其账号审批时限为 2 个工作日。</text>
+
+  <!-- 红色虚线切口 -->
+  <line x1="735" y1="152" x2="735" y2="220" stroke="#B64935" stroke-width="4" stroke-dasharray="8 7"/>
+
+  <!-- 向下箭头 -->
+  <line x1="350" y1="256" x2="350" y2="316" stroke="#2B486B" stroke-width="2.5"/>
+  <polygon points="350,326 342,312 358,312" fill="#2B486B"/>
+
+  <!-- 左下卡片：交给它的只有前半块 -->
+  <rect x="64" y="334" width="596" height="58" rx="14" fill="#E3DACB"/>
+  <rect x="60" y="330" width="596" height="58" rx="14" fill="#DEE5EE" stroke="#2B486B" stroke-width="2.5"/>
+  <text x="358" y="366" text-anchor="middle" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" fill="#2B486B">交给它的只有前半块</text>
+
+  <!-- 向右箭头 -->
+  <line x1="656" y1="359" x2="726" y2="359" stroke="#2B486B" stroke-width="2.5"/>
+  <polygon points="738,359 724,351 724,367" fill="#2B486B"/>
+
+  <!-- 右下卡片：错误回答 -->
+  <rect x="744" y="334" width="472" height="58" rx="14" fill="#E3DACB"/>
+  <rect x="740" y="330" width="472" height="58" rx="14" fill="#F8DDD4" stroke="#C55B45" stroke-width="2.5"/>
+  <text x="976" y="366" text-anchor="middle" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" fill="#B64935">“实习生的审批时限为 45 分钟。”</text>
+
+  <!-- 底部总结 -->
+  <text x="60" y="454" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F3B5C">它没有胡编。它看到的那一块里，确实只写着 45 分钟。</text>
+  <text x="60" y="494" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" fill="#4E4A44">例外条款被切到了另一块里，而那一块没被找回来。</text>
+  <text x="60" y="544" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="20" fill="#7A756D">切资料的时候，一条规定和它的“但是”“除外”，要留在同一块里。</text>
+</svg>

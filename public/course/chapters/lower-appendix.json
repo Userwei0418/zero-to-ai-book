@@ -1,0 +1,125 @@
+{
+  "id": "lower-appendix",
+  "title": "附录｜下册配套代码与课件总览",
+  "shortTitle": "下册配套代码与课件总览",
+  "volume": "lower",
+  "group": "下册 · 动手实践",
+  "order": 38,
+  "kind": "appendix",
+  "minutes": 5,
+  "summary": "本附录收录《从零开始学 AI（下册）》全部 12 章的可运行 Python 配套代码与毕业项目 mykb。所有脚本均已在真实《上册》语料（25 篇 Markdown + 6 集教学视频，共 746 个语义切块）上实跑验证通过。",
+  "text": "# 附录｜下册配套代码与课件总览\n\n本附录收录《从零开始学 AI（下册）》全部 12 章的可运行 Python 配套代码与毕业项目 `mykb`。所有脚本均已在真实《上册》语料（25 篇 Markdown + 6 集教学视频，共 746 个语义切块）上实跑验证通过。\n\n## 打包下载\n\n[[零基础学AI/下册/attachments/从零开始学AI-下册配套课件.zip|从零开始学AI-下册配套课件.zip]]\n\n也可以直接在本地的 `下册/课件/` 目录中逐章运行。\n\n---\n\n## 环境准备（商汤 Token Plan / 兼容接口）\n\n核心主线（第 03–12 章的本地检索、MCP、Skill、L0–L3 记忆、并发锁与回归评测）**仅依赖 Python 3.9+ 标准库**；需要调用云端大模型或向量/重排能力时，配置以下环境变量：\n\n```bash\nexport LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"\n\n# 可选：Token Plan 向量与重排模型（未配置时自动降级为纯本地 Bigram 混合检索）\nexport EMBED_MODEL=\"你的Embedding模型名\"\nexport RERANK_MODEL=\"你的Rerank模型名\"\n\n# 可选：阿里云百炼/通义听悟语音转写密钥（未配置时优先读 .srt 字幕或本地 whisper）\nexport DASHSCOPE_API_KEY=\"[已脱敏]\"\n```\n\n---\n\n## 目录结构（`ch01` – `ch12`）\n\n```text\n课件/\n├── README.md\n├── ch01/\n│   ├── raw.py                  # 第01章：无封装原始 HTTP 请求\n│   ├── llm.py                  # 第01章：Token Plan 入口 + 流式 + 本地缓存 + 预算保险丝 + 三分法\n│   ├── oops.py                 # 第01章：401/400/404/超时常见报错脸谱\n│   ├── streaming.py            # 第01章：流式输出首字延迟对比\n│   └── index_kb.py             # 第01章：批量生成《上册知识库目录.md》\n├── ch02/\n│   ├── llm.py                  # 第02章：新增 ask_json() 与带错因重试\n│   └── cards.py                # 第02章：封闭词表校验，批量提炼结构化知识卡片 cards.jsonl\n├── ch03/\n│   ├── ingest.py               # 第03章：Markdown/PDF/音视频统一解析 + 代码块感知切块\n│   └── chunks.jsonl            # 第03章：《上册》实跑产出的 746 个切块\n├── ch04/\n│   ├── search.py               # 第04章：BM25 + 向量/Bigram 混合检索 + RRF + Rerank\n│   └── ask.py                  # 第04章：带 [文件名:行号] 严格溯源的问答机\n├── ch05/\n│   ├── toolbox.py              # 第05章：Tool Calling 注册表 + 路径逃逸沙箱 safe_path()\n│   └── agent_tools.py          # 第05章：模型递纸条、程序沙箱执行的多步工具调用\n├── ch06/\n│   └── loop.py                 # 第06章：checkpoints 断点续传 + 重复调用拦截 + 步数刹车\n├── ch07/\n│   ├── mcp_server.py           # 第07章：零依赖标准库 MCP (stdio JSON-RPC 2.0) 服务\n│   └── mcp_client_demo.py      # 第07章：子进程握手与 kb_search 联调脚本\n├── ch08/\n│   ├── skills.py               # 第08章：三层渐进式 Skill 加载与脚本沙箱引擎\n│   └── skills/                 # 示例做法包：kb-stats (含 count_kb.py) 与 study-card\n├── ch09/\n│   └── memory.py               # 第09章：L0 流水账 → L1 不可变版本谱系 → L2/L3 归纳与锚点回查\n├── ch10/\n│   └── worker.py               # 第10章：fcntl.flock 单写者锁 + request_id 幂等 + 出处核对\n├── ch11/\n│   ├── eval_set.json           # 第11章：横跨《上册》的 6 道固定回归考题\n│   └── eval.py                 # 第11章：Hit@3 召回率与 MRR 自动化评测\n└── ch12/\n    └── mykb_pkg/               # 第12章：可 pip install -e . 安装的毕业项目 mykb CLI\n        ├── pyproject.toml\n        └── mykb/\n            ├── __init__.py\n            └── cli.py\n```\n\n---\n\n## 快速自检命令\n\n不用配置任何外部密钥，即可先用离线模式跑通解析、检索、MCP、Skill、记忆、并发锁、回归评测与 CLI：\n\n```bash\n# 1. 解析《上册》语料（产出 746 块）\npython3 课件/ch03/ingest.py\n\n# 2. 混合检索（本地 Bigram 兜底通道）\npython3 课件/ch04/search.py \"第 02 章里感知机为什么卡在楼梯灯？\"\n\n# 3. MCP 标准协议联调\npython3 课件/ch07/mcp_client_demo.py\n\n# 4. 三层 Skill 与确定性统计\npython3 课件/ch08/skills.py\n\n# 5. L0–L3 分层记忆与并发锁\npython3 课件/ch09/memory.py\npython3 课件/ch10/worker.py\n\n# 6. 回归评测（Hit@3 与 MRR）\npython3 课件/ch11/eval.py\n\n# 7. 安装毕业项目 mykb CLI\npip install -e 课件/ch12/mykb_pkg\nmykb stats\n```\n",
+  "codeCount": 3,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "附录｜下册配套代码与课件总览",
+      "id": "lower-appendix-101d8dd01143"
+    },
+    {
+      "type": "prose",
+      "text": "本附录收录《从零开始学 AI（下册）》全部 12 章的可运行 Python 配套代码与毕业项目 mykb。所有脚本均已在真实《上册》语料（25 篇 Markdown + 6 集教学视频，共 746 个语义切块）上实跑验证通过。",
+      "html": "<p>本附录收录《从零开始学 AI（下册）》全部 12 章的可运行 Python 配套代码与毕业项目 <code>mykb</code>。所有脚本均已在真实《上册》语料（25 篇 Markdown + 6 集教学视频，共 746 个语义切块）上实跑验证通过。</p>\n",
+      "id": "lower-appendix-183b41234cda"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "打包下载",
+      "id": "lower-appendix-3c088d2be22a"
+    },
+    {
+      "type": "prose",
+      "text": "从零开始学AI-下册配套课件.zip",
+      "html": "<p>从零开始学AI-下册配套课件.zip <span>（原始资料包不公开；本章代码见实验区文件）</span></p>\n",
+      "id": "lower-appendix-258eaa77db86"
+    },
+    {
+      "type": "prose",
+      "text": "也可以直接在本地的 下册/课件/ 目录中逐章运行。",
+      "html": "<p>也可以直接在本地的 <code>下册/课件/</code> 目录中逐章运行。</p>\n",
+      "id": "lower-appendix-f3ff408ed4c7"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-appendix-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "环境准备（商汤 Token Plan / 兼容接口）",
+      "id": "lower-appendix-5144bf9aaa7b"
+    },
+    {
+      "type": "prose",
+      "text": "核心主线（第 03–12 章的本地检索、MCP、Skill、L0–L3 记忆、并发锁与回归评测）仅依赖 Python 3.9+ 标准库；需要调用云端大模型或向量/重排能力时，配置以下环境变量：",
+      "html": "<p>核心主线（第 03–12 章的本地检索、MCP、Skill、L0–L3 记忆、并发锁与回归评测）<strong>仅依赖 Python 3.9+ 标准库</strong>；需要调用云端大模型或向量/重排能力时，配置以下环境变量：</p>\n",
+      "id": "lower-appendix-ba034922b6ee"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"\n\n# 可选：Token Plan 向量与重排模型（未配置时自动降级为纯本地 Bigram 混合检索）\nexport EMBED_MODEL=\"你的Embedding模型名\"\nexport RERANK_MODEL=\"你的Rerank模型名\"\n\n# 可选：阿里云百炼/通义听悟语音转写密钥（未配置时优先读 .srt 字幕或本地 whisper）\nexport DASHSCOPE_API_KEY=\"[已脱敏]\"",
+      "text": "export LLM_BASE_URL=\"https://token.sensetime.com/api/v1\"\nexport LLM_API_KEY=\"[已脱敏]\"\nexport LLM_MODEL=\"sensenova-6.8-flash\"\n\n# 可选：Token Plan 向量与重排模型（未配置时自动降级为纯本地 Bigram 混合检索）\nexport EMBED_MODEL=\"你的Embedding模型名\"\nexport RERANK_MODEL=\"你的Rerank模型名\"\n\n# 可选：阿里云百炼/通义听悟语音转写密钥（未配置时优先读 .srt 字幕或本地 whisper）\nexport DASHSCOPE_API_KEY=\"[已脱敏]\"",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "lower-appendix-6277adfeb70b"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-appendix-a3583fe48122-2"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "目录结构（ch01 – ch12）",
+      "id": "lower-appendix-2d288593767d"
+    },
+    {
+      "type": "code",
+      "language": "text",
+      "code": "课件/\n├── README.md\n├── ch01/\n│   ├── raw.py                  # 第01章：无封装原始 HTTP 请求\n│   ├── llm.py                  # 第01章：Token Plan 入口 + 流式 + 本地缓存 + 预算保险丝 + 三分法\n│   ├── oops.py                 # 第01章：401/400/404/超时常见报错脸谱\n│   ├── streaming.py            # 第01章：流式输出首字延迟对比\n│   └── index_kb.py             # 第01章：批量生成《上册知识库目录.md》\n├── ch02/\n│   ├── llm.py                  # 第02章：新增 ask_json() 与带错因重试\n│   └── cards.py                # 第02章：封闭词表校验，批量提炼结构化知识卡片 cards.jsonl\n├── ch03/\n│   ├── ingest.py               # 第03章：Markdown/PDF/音视频统一解析 + 代码块感知切块\n│   └── chunks.jsonl            # 第03章：《上册》实跑产出的 746 个切块\n├── ch04/\n│   ├── search.py               # 第04章：BM25 + 向量/Bigram 混合检索 + RRF + Rerank\n│   └── ask.py                  # 第04章：带 [文件名:行号] 严格溯源的问答机\n├── ch05/\n│   ├── toolbox.py              # 第05章：Tool Calling 注册表 + 路径逃逸沙箱 safe_path()\n│   └── agent_tools.py          # 第05章：模型递纸条、程序沙箱执行的多步工具调用\n├── ch06/\n│   └── loop.py                 # 第06章：checkpoints 断点续传 + 重复调用拦截 + 步数刹车\n├── ch07/\n│   ├── mcp_server.py           # 第07章：零依赖标准库 MCP (stdio JSON-RPC 2.0) 服务\n│   └── mcp_client_demo.py      # 第07章：子进程握手与 kb_search 联调脚本\n├── ch08/\n│   ├── skills.py               # 第08章：三层渐进式 Skill 加载与脚本沙箱引擎\n│   └── skills/                 # 示例做法包：kb-stats (含 count_kb.py) 与 study-card\n├── ch09/\n│   └── memory.py               # 第09章：L0 流水账 → L1 不可变版本谱系 → L2/L3 归纳与锚点回查\n├── ch10/\n│   └── worker.py               # 第10章：fcntl.flock 单写者锁 + request_id 幂等 + 出处核对\n├── ch11/\n│   ├── eval_set.json           # 第11章：横跨《上册》的 6 道固定回归考题\n│   └── eval.py                 # 第11章：Hit@3 召回率与 MRR 自动化评测\n└── ch12/\n    └── mykb_pkg/               # 第12章：可 pip install -e . 安装的毕业项目 mykb CLI\n        ├── pyproject.toml\n        └── mykb/\n            ├── __init__.py\n            └── cli.py",
+      "text": "课件/\n├── README.md\n├── ch01/\n│   ├── raw.py                  # 第01章：无封装原始 HTTP 请求\n│   ├── llm.py                  # 第01章：Token Plan 入口 + 流式 + 本地缓存 + 预算保险丝 + 三分法\n│   ├── oops.py                 # 第01章：401/400/404/超时常见报错脸谱\n│   ├── streaming.py            # 第01章：流式输出首字延迟对比\n│   └── index_kb.py             # 第01章：批量生成《上册知识库目录.md》\n├── ch02/\n│   ├── llm.py                  # 第02章：新增 ask_json() 与带错因重试\n│   └── cards.py                # 第02章：封闭词表校验，批量提炼结构化知识卡片 cards.jsonl\n├── ch03/\n│   ├── ingest.py               # 第03章：Markdown/PDF/音视频统一解析 + 代码块感知切块\n│   └── chunks.jsonl            # 第03章：《上册》实跑产出的 746 个切块\n├── ch04/\n│   ├── search.py               # 第04章：BM25 + 向量/Bigram 混合检索 + RRF + Rerank\n│   └── ask.py                  # 第04章：带 [文件名:行号] 严格溯源的问答机\n├── ch05/\n│   ├── toolbox.py              # 第05章：Tool Calling 注册表 + 路径逃逸沙箱 safe_path()\n│   └── agent_tools.py          # 第05章：模型递纸条、程序沙箱执行的多步工具调用\n├── ch06/\n│   └── loop.py                 # 第06章：checkpoints 断点续传 + 重复调用拦截 + 步数刹车\n├── ch07/\n│   ├── mcp_server.py           # 第07章：零依赖标准库 MCP (stdio JSON-RPC 2.0) 服务\n│   └── mcp_client_demo.py      # 第07章：子进程握手与 kb_search 联调脚本\n├── ch08/\n│   ├── skills.py               # 第08章：三层渐进式 Skill 加载与脚本沙箱引擎\n│   └── skills/                 # 示例做法包：kb-stats (含 count_kb.py) 与 study-card\n├── ch09/\n│   └── memory.py               # 第09章：L0 流水账 → L1 不可变版本谱系 → L2/L3 归纳与锚点回查\n├── ch10/\n│   └── worker.py               # 第10章：fcntl.flock 单写者锁 + request_id 幂等 + 出处核对\n├── ch11/\n│   ├── eval_set.json           # 第11章：横跨《上册》的 6 道固定回归考题\n│   └── eval.py                 # 第11章：Hit@3 召回率与 MRR 自动化评测\n└── ch12/\n    └── mykb_pkg/               # 第12章：可 pip install -e . 安装的毕业项目 mykb CLI\n        ├── pyproject.toml\n        └── mykb/\n            ├── __init__.py\n            └── cli.py",
+      "runnable": false,
+      "reason": "格式／配置／伪代码示例，不作为 Python 执行。",
+      "id": "lower-appendix-8bd6ddcb21ae"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-appendix-a3583fe48122-3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "快速自检命令",
+      "id": "lower-appendix-01d4509f6183"
+    },
+    {
+      "type": "prose",
+      "text": "不用配置任何外部密钥，即可先用离线模式跑通解析、检索、MCP、Skill、记忆、并发锁、回归评测与 CLI：",
+      "html": "<p>不用配置任何外部密钥，即可先用离线模式跑通解析、检索、MCP、Skill、记忆、并发锁、回归评测与 CLI：</p>\n",
+      "id": "lower-appendix-facb77daaae0"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "# 1. 解析《上册》语料（产出 746 块）\npython3 课件/ch03/ingest.py\n\n# 2. 混合检索（本地 Bigram 兜底通道）\npython3 课件/ch04/search.py \"第 02 章里感知机为什么卡在楼梯灯？\"\n\n# 3. MCP 标准协议联调\npython3 课件/ch07/mcp_client_demo.py\n\n# 4. 三层 Skill 与确定性统计\npython3 课件/ch08/skills.py\n\n# 5. L0–L3 分层记忆与并发锁\npython3 课件/ch09/memory.py\npython3 课件/ch10/worker.py\n\n# 6. 回归评测（Hit@3 与 MRR）\npython3 课件/ch11/eval.py\n\n# 7. 安装毕业项目 mykb CLI\npip install -e 课件/ch12/mykb_pkg\nmykb stats",
+      "text": "# 1. 解析《上册》语料（产出 746 块）\npython3 课件/ch03/ingest.py\n\n# 2. 混合检索（本地 Bigram 兜底通道）\npython3 课件/ch04/search.py \"第 02 章里感知机为什么卡在楼梯灯？\"\n\n# 3. MCP 标准协议联调\npython3 课件/ch07/mcp_client_demo.py\n\n# 4. 三层 Skill 与确定性统计\npython3 课件/ch08/skills.py\n\n# 5. L0–L3 分层记忆与并发锁\npython3 课件/ch09/memory.py\npython3 课件/ch10/worker.py\n\n# 6. 回归评测（Hit@3 与 MRR）\npython3 课件/ch11/eval.py\n\n# 7. 安装毕业项目 mykb CLI\npip install -e 课件/ch12/mykb_pkg\nmykb stats",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "lower-appendix-4dbe0d75820d"
+    }
+  ],
+  "files": {},
+  "sourceFile": "下册/附录｜下册配套代码与课件总览.md"
+}

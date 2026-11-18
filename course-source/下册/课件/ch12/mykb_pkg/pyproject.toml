@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mykb"
+version = "0.1.0"
+description = "《从零开始学 AI》下册毕业项目：可本地检索、溯源问答、MCP 接入与自我评测的知识库助手"
+requires-python = ">=3.9"
+
+[project.scripts]
+mykb = "mykb.cli:main"

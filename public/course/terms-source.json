@@ -1,0 +1,311 @@
+[
+  {
+    "label": "符号主义",
+    "aliases": [
+      "symbolism"
+    ],
+    "definition": "把知识表示成机器能操作的符号和规则，由人逐条写明“如果……那么……”，机器照规则办理。",
+    "sourceFile": "上册/第 01 章｜规则总也写不完.md"
+  },
+  {
+    "label": "机器学习",
+    "aliases": [
+      "训练",
+      "machine learning"
+    ],
+    "definition": "给机器带答案的例子，让它从例子中调整内部的数、找出规律，减少逐条手写规则的工作。",
+    "sourceFile": "上册/第 02 章｜给它例子，它就能学会吗？.md"
+  },
+  {
+    "label": "泛化",
+    "aliases": [
+      "generalization"
+    ],
+    "definition": "面对训练时没有见过的新题，仍然能够答对的本事；课程用事先留出的考卷来检查它。",
+    "sourceFile": "上册/第 02 章｜给它例子，它就能学会吗？.md"
+  },
+  {
+    "label": "过拟合",
+    "aliases": [
+      "overfitting"
+    ],
+    "definition": "把练习题背得很熟，换成没见过的题却不会；训练题满分不能证明已经学会。",
+    "sourceFile": "上册/第 02 章｜给它例子，它就能学会吗？.md"
+  },
+  {
+    "label": "反向传播",
+    "aliases": [
+      "backpropagation"
+    ],
+    "definition": "用链式法则从输出向前逐层计算，让每个参数得到自己对误差的责任和调整方向；课程把它解释为计算图上的反向动态规划。",
+    "sourceFile": "上册/第 02 章｜给它例子，它就能学会吗？.md"
+  },
+  {
+    "label": "强化学习",
+    "aliases": [
+      "RL",
+      "reinforcement learning"
+    ],
+    "definition": "没有每一步的标准答案，做出动作后由环境给分，再依据结果的好坏调整下一次怎么做。",
+    "sourceFile": "上册/第 03 章｜没有标准答案，怎样越练越强？.md"
+  },
+  {
+    "label": "Token",
+    "aliases": [
+      "token",
+      "词元"
+    ],
+    "definition": "分词器把文本切出的读写小碎片，可能是一个字、半个词或一个标点；模型先把这些碎片变成编号。",
+    "sourceFile": "上册/第 04 章（上）｜学着接下一句：从字模到迷你大脑.md"
+  },
+  {
+    "label": "向量",
+    "aliases": [
+      "Embedding",
+      "embedding",
+      "词向量"
+    ],
+    "definition": "把词或一段话变成一串数，使意思接近的内容在数值空间里也相近；可据此比较问题与资料。",
+    "sourceFile": "上册/第 07 章｜它很聪明，却不知道我们的事.md"
+  },
+  {
+    "label": "注意力",
+    "aliases": [
+      "Attention",
+      "attention"
+    ],
+    "definition": "生成或处理一个词时，回头查看其他词，算出当前最应关注哪些位置，再按权重取回信息。",
+    "sourceFile": "上册/第 04 章（上）｜学着接下一句：从字模到迷你大脑.md"
+  },
+  {
+    "label": "Transformer",
+    "aliases": [],
+    "definition": "让每个词直接向其他词取回信息，并把注意力等运算叠成多层的模型结构；它还需要位置表示来区分词序。",
+    "sourceFile": "上册/第 04 章（上）｜学着接下一句：从字模到迷你大脑.md"
+  },
+  {
+    "label": "预训练",
+    "aliases": [
+      "pretraining"
+    ],
+    "definition": "先在大量文本上练出通用能力，再拿去处理具体任务；课程对照了猜下一个词和根据上下文补词的练法。",
+    "sourceFile": "上册/第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习.md"
+  },
+  {
+    "label": "上下文学习",
+    "aliases": [
+      "ICL",
+      "in-context learning",
+      "few-shot"
+    ],
+    "definition": "把任务要求和例子写进前文，让模型照着它们调整这一次的回答；这时没有修改模型参数。",
+    "sourceFile": "上册/第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习.md"
+  },
+  {
+    "label": "幻觉",
+    "aliases": [
+      "hallucination"
+    ],
+    "definition": "生成了通顺、像真的、却没有查证或并不存在的内容；能接出一个像样的网址并不表示它查过。",
+    "sourceFile": "上册/第 04 章（下）｜读遍互联网之后：MiniMind 预训练与上下文学习.md"
+  },
+  {
+    "label": "监督微调",
+    "aliases": [
+      "SFT",
+      "supervised fine-tuning"
+    ],
+    "definition": "用人写好的“请求—理想回答”示范继续训练模型参数，让只会续写的基座模型学会按要求回答。",
+    "sourceFile": "上册/第 05 章｜它终于接住了我的一句话.md"
+  },
+  {
+    "label": "人类反馈强化学习",
+    "aliases": [
+      "RLHF"
+    ],
+    "definition": "先用人的回答偏好训练一个奖励模型，再用强化学习让回答模型朝着较高评价练习。",
+    "sourceFile": "上册/第 05 章｜它终于接住了我的一句话.md"
+  },
+  {
+    "label": "直接偏好优化",
+    "aliases": [
+      "DPO"
+    ],
+    "definition": "直接使用“更好回答／更差回答”的偏好对比，把前者的倾向推高、后者压低，省去独立奖励模型。",
+    "sourceFile": "上册/第 05 章｜它终于接住了我的一句话.md"
+  },
+  {
+    "label": "提示词",
+    "aliases": [
+      "Prompt",
+      "prompt"
+    ],
+    "definition": "交给模型的任务说明；课程把好的提示词比作写清目的、材料、要求和交付形式的任务卡。",
+    "sourceFile": "上册/术语对照｜你在别处听到的词，在这本书的哪一章.md"
+  },
+  {
+    "label": "上下文",
+    "aliases": [
+      "上下文窗口",
+      "context"
+    ],
+    "definition": "模型这一次能看见的全部内容，容量有上限；以前说过的话只有重新放进这次输入，才在它眼前。",
+    "sourceFile": "上册/术语对照｜你在别处听到的词，在这本书的哪一章.md"
+  },
+  {
+    "label": "思维链",
+    "aliases": [
+      "CoT",
+      "chain of thought"
+    ],
+    "definition": "让模型先写出中间步骤或草稿再回答；课程从提供带步骤的例题和要求逐步思考来解释这个办法。",
+    "sourceFile": "上册/第 06 章｜回答太快，那就多想一会儿？.md"
+  },
+  {
+    "label": "检索增强生成",
+    "aliases": [
+      "RAG",
+      "retrieval-augmented generation"
+    ],
+    "definition": "先到资料中找到与问题有关的依据，再把依据交给模型回答，尤其适合经常变化且需要出处的事实。",
+    "sourceFile": "上册/第 07 章｜它很聪明，却不知道我们的事.md"
+  },
+  {
+    "label": "向量检索",
+    "aliases": [
+      "semantic search"
+    ],
+    "definition": "把问题与资料分别变成向量，再比较相似度，找出意思最接近的资料，不要求字面用词完全相同。",
+    "sourceFile": "上册/第 07 章｜它很聪明，却不知道我们的事.md"
+  },
+  {
+    "label": "重排",
+    "aliases": [
+      "Rerank",
+      "reranking"
+    ],
+    "definition": "在初步检索粗筛之后、生成回答之前，对少量候选重新打分排序，选出更贴近问题的依据。",
+    "sourceFile": "上册/第 07 章｜它很聪明，却不知道我们的事.md"
+  },
+  {
+    "label": "提示注入",
+    "aliases": [
+      "Prompt Injection"
+    ],
+    "definition": "把指令藏进资料或消息，让模型误把外部内容当成应该执行的命令；接上工具后，它还可能影响真实动作。",
+    "sourceFile": "上册/第 07 章｜它很聪明，却不知道我们的事.md"
+  },
+  {
+    "label": "工具调用",
+    "aliases": [
+      "Tool Calling",
+      "function calling"
+    ],
+    "definition": "模型返回一张结构化的动作请求，由外面的程序验证并执行；工具清单规定它能请求哪些动作。",
+    "sourceFile": "上册/第 08 章｜让一句话真的改变一点东西.md"
+  },
+  {
+    "label": "最小权限",
+    "aliases": [
+      "least privilege"
+    ],
+    "definition": "只授予完成当前任务实际需要的权限；课程用只能进入指定工作目录的保存工具来说明这个原则。",
+    "sourceFile": "上册/第 08 章｜让一句话真的改变一点东西.md"
+  },
+  {
+    "label": "沙箱",
+    "aliases": [
+      "sandbox"
+    ],
+    "definition": "把可执行动作限制在一块受控范围中，让程序不能随意碰到范围以外的文件和资源。",
+    "sourceFile": "上册/第 08 章｜让一句话真的改变一点东西.md"
+  },
+  {
+    "label": "智能体",
+    "aliases": [
+      "Agent",
+      "agent"
+    ],
+    "definition": "模型自己决定下一步和要用的工具，反复经历思考、行动、观察结果的循环，直到完成或触发停止条件。",
+    "sourceFile": "上册/第 09 章｜我不再每一步都替它接着想.md"
+  },
+  {
+    "label": "Harness",
+    "aliases": [
+      "harness"
+    ],
+    "definition": "套在模型外面的执行层，包括循环、工具、停止限制和审批；同一个模型配上不同的这一层，会表现成不同的系统。",
+    "sourceFile": "上册/第 09 章｜我不再每一步都替它接着想.md"
+  },
+  {
+    "label": "预写日志",
+    "aliases": [
+      "WAL",
+      "Write-Ahead Logging",
+      "断点续跑"
+    ],
+    "definition": "动作前留下意图，完成后留下结果；中断恢复时检查两者之间的空白和实际状态，避免误判或重复执行。",
+    "sourceFile": "上册/第 09 章（番外）｜干到一半断了，怎么接回来？.md"
+  },
+  {
+    "label": "模型上下文协议",
+    "aliases": [
+      "MCP",
+      "Model Context Protocol"
+    ],
+    "definition": "让助手和工具服务按统一约定连接的接口，减少每个助手与每种工具都单独接线的重复工作。",
+    "sourceFile": "上册/第 10 章｜每换一个助手，都要重新接线、重新教吗？.md"
+  },
+  {
+    "label": "技能包",
+    "aliases": [
+      "Skill",
+      "skill"
+    ],
+    "definition": "一份可复用的做法卡片：平时展示名称和简介，任务需要时才加载详细步骤，照着规定的做法办事。",
+    "sourceFile": "上册/第 10 章｜每换一个助手，都要重新接线、重新教吗？.md"
+  },
+  {
+    "label": "记忆",
+    "aliases": [
+      "Memory",
+      "memory"
+    ],
+    "definition": "把以后还需要的事实和状态写到模型外部，下次开工再检索和读回；不能把保存全部聊天等同于有效记忆。",
+    "sourceFile": "上册/第 11 章｜明天再见，它还接得上吗？.md"
+  },
+  {
+    "label": "上下文工程",
+    "aliases": [
+      "context engineering"
+    ],
+    "definition": "安排每次开工应让模型看到什么、怎样组织这些内容，以及哪些内容不应该放进来。",
+    "sourceFile": "上册/第 11 章｜明天再见，它还接得上吗？.md"
+  },
+  {
+    "label": "BM25",
+    "aliases": [
+      "关键词检索"
+    ],
+    "definition": "按查询词与文本的字面匹配情况为候选资料评分的检索方法；课程把它与向量召回融合，兼顾具体词和相近意思。",
+    "sourceFile": "下册/下册第 04 章｜读懂了再找：BM25 + 向量混合检索、Rerank 与行级溯源.md"
+  },
+  {
+    "label": "幂等键",
+    "aliases": [
+      "Idempotency Key",
+      "request_id"
+    ],
+    "definition": "给每个写请求分配唯一标识，执行前查它是否已经完成，让重试或重复提交不会把同一件事再做一次。",
+    "sourceFile": "下册/下册第 10 章｜多助手不写乱：分工、写锁与请求幂等键.md"
+  },
+  {
+    "label": "回归评测",
+    "aliases": [
+      "regression evaluation",
+      "评测"
+    ],
+    "definition": "用固定考题和自动化评分反复检查改动后的系统；课程用 Hit@3 和 MRR 检查检索，防止一处改善却让别处退步。",
+    "sourceFile": "下册/下册第 11 章｜怎么证明改好了：自动化考卷与回归评测.md"
+  }
+]

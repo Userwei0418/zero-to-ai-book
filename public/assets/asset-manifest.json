@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "method": "Original 1024x1536 dimensions; WebP quality 94; no crop or semantic change.",
+  "source": {
+    "src": "/assets/book-cover.png",
+    "gitRevision": "7df6181e0a6ecdf2ac90f0f0e4a0aac4e5c2ffe7",
+    "bytes": 2759663,
+    "sha256": "a67600a6705266e86a673336ce5abf50e57a53429ed1a79ee1df5ed2b0f06f3f"
+  },
+  "cover": {
+    "src": "/assets/book-cover-c2964faebc49af48.webp",
+    "bytes": 485438,
+    "sha256": "c2964faebc49af486febdf5fcaf3259bacce663c58b332ebb0f8d07d4147abbf",
+    "width": 1024,
+    "height": 1536
+  }
+}

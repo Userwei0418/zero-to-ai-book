@@ -1,0 +1,374 @@
+{
+  "id": "lower-02",
+  "title": "下册第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片",
+  "shortTitle": "让它照格式交卷：批量提炼《上册》知识卡片",
+  "volume": "lower",
+  "group": "下册 · 动手实践",
+  "order": 27,
+  "kind": "chapter",
+  "minutes": 15,
+  "summary": "这一章做完：你不再靠“求求你只输出一行”碰运气，而是给 llm.py 装上 ask_json()——接口层约束 JSON、Python 代码做严格 Schema 与封闭词表校验、不合规时把具体错因递回去自动纠错重试。最后把《上册》全部 25 篇笔记批量提炼成可直接被程序检索的结构化知识卡片 card",
+  "text": "# 下册第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片\n\n*这一章做完：你不再靠“求求你只输出一行”碰运气，而是给 `llm.py` 装上 `ask_json()`——接口层约束 JSON、Python 代码做严格 Schema 与封闭词表校验、不合规时把具体错因递回去自动纠错重试。最后把《上册》全部 25 篇笔记批量提炼成可直接被程序检索的结构化知识卡片 `cards.jsonl`。对应上册第 05 章番外。*\n\n## 上一章留下的定时炸弹\n\n上一章的 `index_kb.py` 虽然跑出了《上册知识库目录.md》，但只要下游程序想干两件稍微正经点的事——比如“统计哪个主题的笔记最多”或者“按标签把笔记分组”——立刻就会发现它根本没法直接用：\n\n- 有的标签用英文 `,` 隔开，有的用中文 `，` 隔开，甚至还有带 `#` 号的；\n- 同样讲检索增强生成，这篇写 `RAG`，那篇写 `检索增强`，程序统计时会被当成两个毫不相干的词；\n- 模型一旦在前面多客气了一句“以下是为您整理的摘要：”，`line.count(\"｜\") != 1` 直接把整篇跳过。\n\n自然语言是给人看的，程序要吃的是**结构化数据**。今天这一章，我们要把模型从“自由发挥写一段话”，驯服成“严格按 Schema 交卷”。\n\n![[零基础学AI/attachments/下册第 2 章｜让它按格式回答：一张卡片，一张词表/OBqqboqIMoOg4axdMlucmVAtnYf.png|从自由文本到结构化卡片：字段、类型和词表必须卡死。]]\n\n---\n\n## 光写“请输出 JSON”为什么一定会翻车？\n\n几乎所有初学者写的第一版提示词都长这样：“请只输出合法的 JSON，不要任何多余文字。”\n\n真跑上二十几次，你会见识到模型花样百出的翻车方式：\n\n1. **外面套一层 Markdown 代码围栏**：嘴上答应只输出 JSON，手却很诚实地给你包了一层 ```` ```json ... ``` ````，直接 `json.loads()` 当场 `JSONDecodeError`；\n2. **字段名悄悄改写或漏掉**：你要 `core_question`，它有时给你 `summary`；你要 2–3 条 `takeaways`，它有时只给 1 条，或者干脆塞给你一段长字符串而不是数组；\n3. **分类标签天马行空**：你让它归类，它这篇写 `机器学习`，下一篇写 `AI基础`，再下一篇写 `大模型原理`——25 篇文章能给你造出 18 个分类名，聚合统计彻底作废。\n\n![[零基础学AI/attachments/下册第 2 章｜让它按格式回答：一张卡片，一张词表/Wzs9bezVwo3uXsxxUtacJ9MznKf.png|光靠提示词求它守规矩，总会有漏网之鱼。]]\n\n---\n\n## 三道防线：接口约束 + 边界校验 + 带错因重试\n\n要让外部模型稳定交出合规数据，必须在 `课件/ch02/llm.py` 里同时上三道防线：\n\n### 第一道防线：接口层 `response_format` + 剥离代码围栏 `extract_json()`\n\n调用 Chat Completions 时在请求体里加上 `response_format={\"type\": \"json_object\"}`，告诉服务端约束输出为合法 JSON；同时在本地写一个 `extract_json()` 兜底，万一某些兼容平台还是包了 ```` ```json ````，先用正则剥干净再 `json.loads()`。\n\n### 第二道防线：代码层 Schema 校验 + 封闭词表（`validate_card`）\n\nJSON 语法合法，不代表业务字段合法。我们专门定义一个 `SchemaError` 异常，在 `validate_card()` 里把四条死规矩写进 Python 代码：\n\n- 必填 5 个字段（`title`、`topic`、`core_question`、`takeaways`、`terms`）一个不能少；\n- **`topic` 必须落在封闭词表 `ALLOWED_TOPICS` 里**（`[\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]`），不许模型自己发明第 8 个分类；\n- `takeaways` 必须是包含 2–3 条字符串的数组，`terms` 必须是包含 1–5 个术语的数组；\n- 每个字符串字段都必须非空。\n\n### 第三道防线：把具体错因递回去纠错（`ask_json`）\n\n以前校验失败，很多人第一反应是 `for _ in range(3): chat(...)` 重试三遍。但在 `temperature=0` 且开启缓存的情况下，原封不动重问一百遍，回来的还是同一份错卷。\n\n正确的做法是**把模型刚才交上来的错卷和具体的 `SchemaError` 报错信息一起塞回对话里**，让它像订正错题一样只改错的那一处，最多重试 1 次：\n\n![[零基础学AI/attachments/下册第 2 章｜让它按格式回答：一张卡片，一张词表/QE5kb6fFUo77xyxKN4Yc79LDnod.png|校验失败时把错因递回去，而不是盲目重跑。]]\n\n下面是 `课件/ch02/llm.py` 在第 01 章基础上新增的核心代码：\n\n```python\n# llm.py（第 02 章新增部分）\nclass SchemaError(LLMError):\n    \"\"\"模型回来的 JSON 虽然语法对，但缺字段、类型不对或超出约定词表。\"\"\"\n\n\ndef extract_json(text):\n    \"\"\"从可能包了 ```json ... ``` 的回复里剥出 JSON 对象。\"\"\"\n    s = text.strip()\n    if s.startswith(\"```\"):\n        s = re.sub(r\"^```[a-zA-Z]*\\n?\", \"\", s)\n        s = re.sub(r\"\\n?```$\", \"\", s.strip())\n    return json.loads(s)\n\n\ndef ask_json(messages, validator, model=None, use_cache=None):\n    \"\"\"要求模型交出严格合规的 JSON；若校验失败，把具体错因递回去最多重试 1 次。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    msgs = list(messages)\n    last_err = None\n    for attempt in range(2):\n        raw = chat(\n            msgs,\n            model=model,\n            temperature=0,\n            use_cache=use_cache,\n            response_format={\"type\": \"json_object\"},\n        )\n        try:\n            obj = extract_json(raw)\n            return validator(obj)\n        except (ValueError, SchemaError) as e:\n            last_err = e\n            if attempt == 0:\n                msgs = msgs + [\n                    {\"role\": \"assistant\", \"content\": raw},\n                    {\n                        \"role\": \"user\",\n                        \"content\": f\"格式校验未通过：{e}。请只输出修正后的合法 JSON，不要任何解释。\",\n                    },\n                ]\n    raise SchemaError(f\"连续两次未通过格式校验：{last_err}\")\n```\n\n> **老办法，新地方**\n>\n> “外部输入进门前先过严格 Schema 校验，不合法就拒绝入库并给出明确错误原因”，这在传统后端开发里叫**边界校验（Boundary Validation）**。无论模型多聪明，在你的 Python 程序眼里，它发回来的字符串和网页表单提交的数据一样属于**不可信输入**——永远不要把未经 `validator()` 检查的内容直接写入知识库。\n\n---\n\n## 故意弄坏它：测一测三道防线能不能拦住脏数据\n\n在批量跑全书 25 篇之前，我们先写几行测试故意喂两份“看似像样、其实不合格”的假回复给 `extract_json()` 和 `validate_card()`，确认防线真的有效：\n\n1. 外面套着 ```` ```json ... ``` ```` 的正常卡片 → `extract_json()` 应当成功剥离并返回合规字典；\n2. 把 `topic` 改成词表之外的 `\"随便编的分类\"` → `validate_card()` 应当立刻抛出 `SchemaError` 拦在门外，绝不放进 `cards.jsonl`。\n\n跑一遍验证：\n\n```bash\npython3 -c '\nimport sys\nsys.path.insert(0, \"课件/ch02\")\nimport llm, cards\n\nraw = \"```json\\n{\\\"title\\\":\\\"第 01 章\\\",\\\"topic\\\":\\\"机器学习基础\\\",\\\"core_question\\\":\\\"规则为什么写不完\\\",\\\"takeaways\\\":[\\\"a\\\",\\\"b\\\"],\\\"terms\\\":[\\\"规则\\\",\\\"ELIZA\\\"]}\\n```\"\nobj = llm.extract_json(raw)\nassert cards.validate_card(obj)[\"topic\"] == \"机器学习基础\"\n\ntry:\n    cards.validate_card({**obj, \"topic\": \"随便编的分类\"})\n    assert False\nexcept llm.SchemaError as e:\n    print(\"成功拦截非法词表：\", e)\n'\n```\n\n```\n成功拦截非法词表： topic='随便编的分类' 不在允许词表 ['导论与总览', '机器学习基础', '大语言模型', '检索与RAG', 'Agent与工具', '记忆与协作', '工程交付'] 中\n```\n\n---\n\n## 本章实战成品：批量提炼《上册》知识卡片\n\n现在把整套机制跑在 `零基础学AI/上册/` 全部 25 篇笔记上。完整代码见 `课件/ch02/cards.py`：\n\n```python\n# cards.py：第 02 章实战成品——批量把《上册》笔记提炼成严格 Schema 的结构化知识卡片（JSONL + 词表对齐）\nimport json\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nALLOWED_TOPICS = [\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]\n\nPROMPT = f\"\"\"请阅读下面这篇《从零开始学 AI》笔记节选，严格输出一个 JSON 对象，包含且仅包含以下 5 个字段：\n- \"title\": 字符串，章节标题\n- \"topic\": 字符串，必须从这个词表里选一个：{json.dumps(ALLOWED_TOPICS, ensure_ascii=False)}\n- \"core_question\": 字符串，这一章解决的核心问题（不超过 30 字）\n- \"takeaways\": 字符串数组，2 到 3 条核心结论，每条不超过 35 字\n- \"terms\": 字符串数组，2 到 4 个关键术语\n\n笔记内容：\n\"\"\"\n\n\ndef validate_card(obj):\n    if not isinstance(obj, dict):\n        raise llm.SchemaError(\"顶层必须是 JSON 对象\")\n    required = (\"title\", \"topic\", \"core_question\", \"takeaways\", \"terms\")\n    for k in required:\n        if k not in obj:\n            raise llm.SchemaError(f\"缺少必填字段：{k}\")\n    if obj[\"topic\"] not in ALLOWED_TOPICS:\n        raise llm.SchemaError(f\"topic={obj['topic']!r} 不在允许词表 {ALLOWED_TOPICS} 中\")\n    if not isinstance(obj[\"takeaways\"], list) or not (2 <= len(obj[\"takeaways\"]) <= 3):\n        raise llm.SchemaError(\"takeaways 必须是包含 2–3 条字符串的数组\")\n    if not isinstance(obj[\"terms\"], list) or not (1 <= len(obj[\"terms\"]) <= 5):\n        raise llm.SchemaError(\"terms 必须是包含 1–5 个术语的数组\")\n    return obj\n\n\ndef clean_preview(raw_text, limit=1800):\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = [ln for ln in lines if not ln.strip().startswith((\"![[\", \"> 🎬\"))]\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    out_path = os.path.join(os.path.dirname(__file__), \"cards.jsonl\")\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n\n    cards, failed = [], []\n    for name in md_files:\n        preview = clean_preview(open(os.path.join(folder, name), encoding=\"utf-8\").read())\n        try:\n            card = llm.ask_json(PROMPT + preview, validator=validate_card)\n            card[\"file\"] = name\n            cards.append(card)\n        except llm.LLMError as e:\n            failed.append((name, str(e)))\n\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        for c in cards:\n            f.write(json.dumps(c, ensure_ascii=False) + \"\\n\")\n\n    print(f\"生成完成：{len(cards)} 张卡片写入 {out_path}，失败 {len(failed)} 篇\")\n    for name, err in failed:\n        print(f\"  失败 {name}：{err}\")\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()\n```\n\n跑完 `python3 课件/ch02/cards.py`，你会得到一个干净利落的 `cards.jsonl`（JSON Lines 格式，每行一条完整 JSON，方便逐行追加和流式读取）。挑其中一条看一眼：\n\n```json\n{\"title\": \"第 01 章｜规则总也写不完\", \"topic\": \"机器学习基础\", \"core_question\": \"为什么靠人工写规则无法穷尽自然语言里的各种问法？\", \"takeaways\": [\"同一意思有无数种表达，规则一多就会互相打架\", \"答对了不等于弄懂了，必须守住未见过的考卷\", \"必须说一不二的底线交给规则，会变通的交给学习\"], \"terms\": [\"符号主义\", \"ELIZA\", \"专家系统\", \"cut.py\"], \"file\": \"第 01 章｜规则总也写不完.md\"}\n```\n\n![[零基础学AI/attachments/下册第 2 章｜让它按格式回答：一张卡片，一张词表/E4HobQsDjo5O7UxHlC5c2weCn6f.png|每篇笔记一张严丝合缝的卡片，下游程序终于能直接消费了。]]\n\n现在，你的知识库已经能按这 7 个封闭主题精确聚合。但卡片只是一篇笔记的“封面摘要”——真要问它“第 02 章里楼梯灯练了 1000 轮为什么还是错 4 题？”，光看 30 字摘要远远不够；而且你的知识库里除了 Markdown，还有 PDF 手册，甚至《上册》`videos/` 目录里那 6 集教学视频。\n\n**第 03 章**，我们先把这些五花八门的文件统一洗成带行号的纯文本，再做不伤代码的切块。\n\n---\n\n## 这一章你留下了什么\n\n```text\n课件/ch02/\n  llm.py     新增 SchemaError、extract_json() 与带错因递回的 ask_json()\n  cards.py   封闭词表 ALLOWED_TOPICS + 边界校验 validate_card()，产出 cards.jsonl\n```\n\n## 改一改\n\n1. 给 `validate_card()` 再加一条校验：`core_question` 必须以问号 `？` 结尾，且长度不超过 35 个字。故意去掉提示词里的“不超过 30 字”要求，看看 `ask_json()` 的第二次纠错重试能不能自己把超长问题改短。\n2. 写一个 10 行的小脚本读取 `cards.jsonl`，按 `topic` 统计《上册》25 篇笔记在 7 个主题里各自占了几篇，输出一份主题分布表。\n3. 把 `ALLOWED_TOPICS` 换成你自己日常工作笔记的 5 个分类（如 `[\"项目\", \"周报\", \"技术沉淀\", \"读书\", \"生活\"]`），拿你自己的笔记目录跑一遍 `cards.py`，看看有没有哪篇怎么也归不进去——那往往说明你的分类词表还缺一个真实存在的类别。\n4. 试着把 `cards.py` 里的 `clean_preview(..., limit=1800)` 放大到 `4000`，对比一下账单里 `prompt_tokens` 的变化和提炼质量值不值得多花这笔钱。\n",
+  "codeCount": 6,
+  "videoCount": 0,
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "下册第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片",
+      "id": "lower-02-c2206593808f"
+    },
+    {
+      "type": "prose",
+      "text": "这一章做完：你不再靠“求求你只输出一行”碰运气，而是给 llm.py 装上 ask_json()——接口层约束 JSON、Python 代码做严格 Schema 与封闭词表校验、不合规时把具体错因递回去自动纠错重试。最后把《上册》全部 25 篇笔记批量提炼成可直接被程序检索的结构化知识卡片 cards.jsonl。对应上册第 05 章番外。",
+      "html": "<p><em>这一章做完：你不再靠“求求你只输出一行”碰运气，而是给 <code>llm.py</code> 装上 <code>ask_json()</code>——接口层约束 JSON、Python 代码做严格 Schema 与封闭词表校验、不合规时把具体错因递回去自动纠错重试。最后把《上册》全部 25 篇笔记批量提炼成可直接被程序检索的结构化知识卡片 <code>cards.jsonl</code>。对应上册第 05 章番外。</em></p>\n",
+      "id": "lower-02-be41a542e3f7"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "上一章留下的定时炸弹",
+      "id": "lower-02-923b791ea4a8"
+    },
+    {
+      "type": "prose",
+      "text": "上一章的 index_kb.py 虽然跑出了《上册知识库目录.md》，但只要下游程序想干两件稍微正经点的事——比如“统计哪个主题的笔记最多”或者“按标签把笔记分组”——立刻就会发现它根本没法直接用：",
+      "html": "<p>上一章的 <code>index_kb.py</code> 虽然跑出了《上册知识库目录.md》，但只要下游程序想干两件稍微正经点的事——比如“统计哪个主题的笔记最多”或者“按标签把笔记分组”——立刻就会发现它根本没法直接用：</p>\n",
+      "id": "lower-02-7760d0aed885"
+    },
+    {
+      "type": "prose",
+      "text": "有的标签用英文 , 隔开，有的用中文 ， 隔开，甚至还有带 # 号的；\n同样讲检索增强生成，这篇写 RAG，那篇写 检索增强，程序统计时会被当成两个毫不相干的词；\n模型一旦在前面多客气了一句“以下是为您整理的摘要：”，line.count(\"｜\") != 1 直接把整篇跳过。",
+      "html": "<ul>\n<li>有的标签用英文 <code>,</code> 隔开，有的用中文 <code>，</code> 隔开，甚至还有带 <code>#</code> 号的；</li>\n<li>同样讲检索增强生成，这篇写 <code>RAG</code>，那篇写 <code>检索增强</code>，程序统计时会被当成两个毫不相干的词；</li>\n<li>模型一旦在前面多客气了一句“以下是为您整理的摘要：”，<code>line.count(&quot;｜&quot;) != 1</code> 直接把整篇跳过。</li>\n</ul>\n",
+      "id": "lower-02-e500feee14e4"
+    },
+    {
+      "type": "prose",
+      "text": "自然语言是给人看的，程序要吃的是结构化数据。今天这一章，我们要把模型从“自由发挥写一段话”，驯服成“严格按 Schema 交卷”。",
+      "html": "<p>自然语言是给人看的，程序要吃的是<strong>结构化数据</strong>。今天这一章，我们要把模型从“自由发挥写一段话”，驯服成“严格按 Schema 交卷”。</p>\n",
+      "id": "lower-02-b2c112f0ded5"
+    },
+    {
+      "type": "image",
+      "alt": "从自由文本到结构化卡片：字段、类型和词表必须卡死。",
+      "caption": "从自由文本到结构化卡片：字段、类型和词表必须卡死。",
+      "available": true,
+      "src": "/media/acdaadd506bd086dee318d58.webp",
+      "id": "lower-02-9d03a7579384",
+      "previewWidth": 960,
+      "previewSrc": "/media/9e5babc13d07728d12cbc61a.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/9e5babc13d07728d12cbc61a.webp 960w, /media/acdaadd506bd086dee318d58.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-02-a3583fe48122"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "光写“请输出 JSON”为什么一定会翻车？",
+      "id": "lower-02-97c497f6d58b"
+    },
+    {
+      "type": "prose",
+      "text": "几乎所有初学者写的第一版提示词都长这样：“请只输出合法的 JSON，不要任何多余文字。”",
+      "html": "<p>几乎所有初学者写的第一版提示词都长这样：“请只输出合法的 JSON，不要任何多余文字。”</p>\n",
+      "id": "lower-02-083fd38988e0"
+    },
+    {
+      "type": "prose",
+      "text": "真跑上二十几次，你会见识到模型花样百出的翻车方式：",
+      "html": "<p>真跑上二十几次，你会见识到模型花样百出的翻车方式：</p>\n",
+      "id": "lower-02-9e51b4314581"
+    },
+    {
+      "type": "prose",
+      "text": "外面套一层 Markdown 代码围栏：嘴上答应只输出 JSON，手却很诚实地给你包了一层 ```json ... ```，直接 json.loads() 当场 JSONDecodeError；\n字段名悄悄改写或漏掉：你要 core_question，它有时给你 summary；你要 2–3 条 takeaways，它有时只给 1 条，或者干脆塞给你一段长字符串而不是数组；\n分类标签天马行空：你让它归类，它这篇写 机器学习，下一篇写 AI基础，再下一篇写 大模型原理——25 篇文章能给你造出 18 个分类名，聚合统计彻底作废。",
+      "html": "<ol>\n<li><strong>外面套一层 Markdown 代码围栏</strong>：嘴上答应只输出 JSON，手却很诚实地给你包了一层 <code>```json ... ```</code>，直接 <code>json.loads()</code> 当场 <code>JSONDecodeError</code>；</li>\n<li><strong>字段名悄悄改写或漏掉</strong>：你要 <code>core_question</code>，它有时给你 <code>summary</code>；你要 2–3 条 <code>takeaways</code>，它有时只给 1 条，或者干脆塞给你一段长字符串而不是数组；</li>\n<li><strong>分类标签天马行空</strong>：你让它归类，它这篇写 <code>机器学习</code>，下一篇写 <code>AI基础</code>，再下一篇写 <code>大模型原理</code>——25 篇文章能给你造出 18 个分类名，聚合统计彻底作废。</li>\n</ol>\n",
+      "id": "lower-02-9a2f31234ffc"
+    },
+    {
+      "type": "image",
+      "alt": "光靠提示词求它守规矩，总会有漏网之鱼。",
+      "caption": "光靠提示词求它守规矩，总会有漏网之鱼。",
+      "available": true,
+      "src": "/media/9e430009879d28d3.png",
+      "id": "lower-02-23ef800d6a89",
+      "previewWidth": 960,
+      "previewSrc": "/media/744aed6bd5075fa2ca3e170e.webp",
+      "height": 1050,
+      "previewHeight": 560,
+      "srcSet": "/media/744aed6bd5075fa2ca3e170e.webp 960w, /media/9e430009879d28d3.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-02-a3583fe48122-2"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "三道防线：接口约束 + 边界校验 + 带错因重试",
+      "id": "lower-02-dc22dc9127f0"
+    },
+    {
+      "type": "prose",
+      "text": "要让外部模型稳定交出合规数据，必须在 课件/ch02/llm.py 里同时上三道防线：",
+      "html": "<p>要让外部模型稳定交出合规数据，必须在 <code>课件/ch02/llm.py</code> 里同时上三道防线：</p>\n",
+      "id": "lower-02-e1755abf24d0"
+    },
+    {
+      "type": "heading",
+      "level": 3,
+      "text": "第一道防线：接口层 response_format + 剥离代码围栏 extract_json()",
+      "id": "lower-02-be2ce7b8e9b8"
+    },
+    {
+      "type": "prose",
+      "text": "调用 Chat Completions 时在请求体里加上 response_format={\"type\": \"json_object\"}，告诉服务端约束输出为合法 JSON；同时在本地写一个 extract_json() 兜底，万一某些兼容平台还是包了 ```json，先用正则剥干净再 json.loads()。",
+      "html": "<p>调用 Chat Completions 时在请求体里加上 <code>response_format={&quot;type&quot;: &quot;json_object&quot;}</code>，告诉服务端约束输出为合法 JSON；同时在本地写一个 <code>extract_json()</code> 兜底，万一某些兼容平台还是包了 <code>```json</code>，先用正则剥干净再 <code>json.loads()</code>。</p>\n",
+      "id": "lower-02-e4900603f6e2"
+    },
+    {
+      "type": "heading",
+      "level": 3,
+      "text": "第二道防线：代码层 Schema 校验 + 封闭词表（validate_card）",
+      "id": "lower-02-e6f64db117e8"
+    },
+    {
+      "type": "prose",
+      "text": "JSON 语法合法，不代表业务字段合法。我们专门定义一个 SchemaError 异常，在 validate_card() 里把四条死规矩写进 Python 代码：",
+      "html": "<p>JSON 语法合法，不代表业务字段合法。我们专门定义一个 <code>SchemaError</code> 异常，在 <code>validate_card()</code> 里把四条死规矩写进 Python 代码：</p>\n",
+      "id": "lower-02-22054deea2e2"
+    },
+    {
+      "type": "prose",
+      "text": "必填 5 个字段（title、topic、core_question、takeaways、terms）一个不能少；\ntopic 必须落在封闭词表 ALLOWED_TOPICS 里（[\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]），不许模型自己发明第 8 个分类；\ntakeaways 必须是包含 2–3 条字符串的数组，terms 必须是包含 1–5 个术语的数组；\n每个字符串字段都必须非空。",
+      "html": "<ul>\n<li>必填 5 个字段（<code>title</code>、<code>topic</code>、<code>core_question</code>、<code>takeaways</code>、<code>terms</code>）一个不能少；</li>\n<li><strong><code>topic</code> 必须落在封闭词表 <code>ALLOWED_TOPICS</code> 里</strong>（<code>[&quot;导论与总览&quot;, &quot;机器学习基础&quot;, &quot;大语言模型&quot;, &quot;检索与RAG&quot;, &quot;Agent与工具&quot;, &quot;记忆与协作&quot;, &quot;工程交付&quot;]</code>），不许模型自己发明第 8 个分类；</li>\n<li><code>takeaways</code> 必须是包含 2–3 条字符串的数组，<code>terms</code> 必须是包含 1–5 个术语的数组；</li>\n<li>每个字符串字段都必须非空。</li>\n</ul>\n",
+      "id": "lower-02-a4c8a695316c"
+    },
+    {
+      "type": "heading",
+      "level": 3,
+      "text": "第三道防线：把具体错因递回去纠错（ask_json）",
+      "id": "lower-02-32a9310d85ed"
+    },
+    {
+      "type": "prose",
+      "text": "以前校验失败，很多人第一反应是 for _ in range(3): chat(...) 重试三遍。但在 temperature=0 且开启缓存的情况下，原封不动重问一百遍，回来的还是同一份错卷。",
+      "html": "<p>以前校验失败，很多人第一反应是 <code>for _ in range(3): chat(...)</code> 重试三遍。但在 <code>temperature=0</code> 且开启缓存的情况下，原封不动重问一百遍，回来的还是同一份错卷。</p>\n",
+      "id": "lower-02-32400014c476"
+    },
+    {
+      "type": "prose",
+      "text": "正确的做法是把模型刚才交上来的错卷和具体的 SchemaError 报错信息一起塞回对话里，让它像订正错题一样只改错的那一处，最多重试 1 次：",
+      "html": "<p>正确的做法是<strong>把模型刚才交上来的错卷和具体的 <code>SchemaError</code> 报错信息一起塞回对话里</strong>，让它像订正错题一样只改错的那一处，最多重试 1 次：</p>\n",
+      "id": "lower-02-cd6caf0396dc"
+    },
+    {
+      "type": "image",
+      "alt": "校验失败时把错因递回去，而不是盲目重跑。",
+      "caption": "校验失败时把错因递回去，而不是盲目重跑。",
+      "available": true,
+      "src": "/media/65406997445409b8.png",
+      "id": "lower-02-af2a1da83522",
+      "previewWidth": 960,
+      "previewSrc": "/media/ea20cb4936530d1c6e9937e4.webp",
+      "height": 780,
+      "previewHeight": 416,
+      "srcSet": "/media/ea20cb4936530d1c6e9937e4.webp 960w, /media/65406997445409b8.png 1800w",
+      "width": 1800
+    },
+    {
+      "type": "prose",
+      "text": "下面是 课件/ch02/llm.py 在第 01 章基础上新增的核心代码：",
+      "html": "<p>下面是 <code>课件/ch02/llm.py</code> 在第 01 章基础上新增的核心代码：</p>\n",
+      "id": "lower-02-c13844ffd593"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# llm.py（第 02 章新增部分）\nclass SchemaError(LLMError):\n    \"\"\"模型回来的 JSON 虽然语法对，但缺字段、类型不对或超出约定词表。\"\"\"\n\n\ndef extract_json(text):\n    \"\"\"从可能包了 ```json ... ``` 的回复里剥出 JSON 对象。\"\"\"\n    s = text.strip()\n    if s.startswith(\"```\"):\n        s = re.sub(r\"^```[a-zA-Z]*\\n?\", \"\", s)\n        s = re.sub(r\"\\n?```$\", \"\", s.strip())\n    return json.loads(s)\n\n\ndef ask_json(messages, validator, model=None, use_cache=None):\n    \"\"\"要求模型交出严格合规的 JSON；若校验失败，把具体错因递回去最多重试 1 次。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    msgs = list(messages)\n    last_err = None\n    for attempt in range(2):\n        raw = chat(\n            msgs,\n            model=model,\n            temperature=0,\n            use_cache=use_cache,\n            response_format={\"type\": \"json_object\"},\n        )\n        try:\n            obj = extract_json(raw)\n            return validator(obj)\n        except (ValueError, SchemaError) as e:\n            last_err = e\n            if attempt == 0:\n                msgs = msgs + [\n                    {\"role\": \"assistant\", \"content\": raw},\n                    {\n                        \"role\": \"user\",\n                        \"content\": f\"格式校验未通过：{e}。请只输出修正后的合法 JSON，不要任何解释。\",\n                    },\n                ]\n    raise SchemaError(f\"连续两次未通过格式校验：{last_err}\")",
+      "text": "# llm.py（第 02 章新增部分）\nclass SchemaError(LLMError):\n    \"\"\"模型回来的 JSON 虽然语法对，但缺字段、类型不对或超出约定词表。\"\"\"\n\n\ndef extract_json(text):\n    \"\"\"从可能包了 ```json ... ``` 的回复里剥出 JSON 对象。\"\"\"\n    s = text.strip()\n    if s.startswith(\"```\"):\n        s = re.sub(r\"^```[a-zA-Z]*\\n?\", \"\", s)\n        s = re.sub(r\"\\n?```$\", \"\", s.strip())\n    return json.loads(s)\n\n\ndef ask_json(messages, validator, model=None, use_cache=None):\n    \"\"\"要求模型交出严格合规的 JSON；若校验失败，把具体错因递回去最多重试 1 次。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    msgs = list(messages)\n    last_err = None\n    for attempt in range(2):\n        raw = chat(\n            msgs,\n            model=model,\n            temperature=0,\n            use_cache=use_cache,\n            response_format={\"type\": \"json_object\"},\n        )\n        try:\n            obj = extract_json(raw)\n            return validator(obj)\n        except (ValueError, SchemaError) as e:\n            last_err = e\n            if attempt == 0:\n                msgs = msgs + [\n                    {\"role\": \"assistant\", \"content\": raw},\n                    {\n                        \"role\": \"user\",\n                        \"content\": f\"格式校验未通过：{e}。请只输出修正后的合法 JSON，不要任何解释。\",\n                    },\n                ]\n    raise SchemaError(f\"连续两次未通过格式校验：{last_err}\")",
+      "runnable": false,
+      "filename": "llm.py",
+      "runtime": "browser",
+      "reason": "教学节选／增量片段：需结合前文定义或完整文件后运行。",
+      "id": "lower-02-6b10a4cbfadc"
+    },
+    {
+      "type": "prose",
+      "text": "老办法，新地方\n\n“外部输入进门前先过严格 Schema 校验，不合法就拒绝入库并给出明确错误原因”，这在传统后端开发里叫边界校验（Boundary Validation）。无论模型多聪明，在你的 Python 程序眼里，它发回来的字符串和网页表单提交的数据一样属于不可信输入——永远不要把未经 validator() 检查的内容直接写入知识库。",
+      "html": "<blockquote>\n<p><strong>老办法，新地方</strong></p>\n<p>“外部输入进门前先过严格 Schema 校验，不合法就拒绝入库并给出明确错误原因”，这在传统后端开发里叫<strong>边界校验（Boundary Validation）</strong>。无论模型多聪明，在你的 Python 程序眼里，它发回来的字符串和网页表单提交的数据一样属于<strong>不可信输入</strong>——永远不要把未经 <code>validator()</code> 检查的内容直接写入知识库。</p>\n</blockquote>\n",
+      "id": "lower-02-66ef13ec5665"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-02-a3583fe48122-3"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "故意弄坏它：测一测三道防线能不能拦住脏数据",
+      "id": "lower-02-1ae736b7ece8"
+    },
+    {
+      "type": "prose",
+      "text": "在批量跑全书 25 篇之前，我们先写几行测试故意喂两份“看似像样、其实不合格”的假回复给 extract_json() 和 validate_card()，确认防线真的有效：",
+      "html": "<p>在批量跑全书 25 篇之前，我们先写几行测试故意喂两份“看似像样、其实不合格”的假回复给 <code>extract_json()</code> 和 <code>validate_card()</code>，确认防线真的有效：</p>\n",
+      "id": "lower-02-9f88009b9323"
+    },
+    {
+      "type": "prose",
+      "text": "外面套着 ```json ... ``` 的正常卡片 → extract_json() 应当成功剥离并返回合规字典；\n把 topic 改成词表之外的 \"随便编的分类\" → validate_card() 应当立刻抛出 SchemaError 拦在门外，绝不放进 cards.jsonl。",
+      "html": "<ol>\n<li>外面套着 <code>```json ... ```</code> 的正常卡片 → <code>extract_json()</code> 应当成功剥离并返回合规字典；</li>\n<li>把 <code>topic</code> 改成词表之外的 <code>&quot;随便编的分类&quot;</code> → <code>validate_card()</code> 应当立刻抛出 <code>SchemaError</code> 拦在门外，绝不放进 <code>cards.jsonl</code>。</li>\n</ol>\n",
+      "id": "lower-02-ad17e5eaf197"
+    },
+    {
+      "type": "prose",
+      "text": "跑一遍验证：",
+      "html": "<p>跑一遍验证：</p>\n",
+      "id": "lower-02-7682c4a180a4"
+    },
+    {
+      "type": "code",
+      "language": "bash",
+      "code": "python3 -c '\nimport sys\nsys.path.insert(0, \"课件/ch02\")\nimport llm, cards\n\nraw = \"```json\\n{\\\"title\\\":\\\"第 01 章\\\",\\\"topic\\\":\\\"机器学习基础\\\",\\\"core_question\\\":\\\"规则为什么写不完\\\",\\\"takeaways\\\":[\\\"a\\\",\\\"b\\\"],\\\"terms\\\":[\\\"规则\\\",\\\"ELIZA\\\"]}\\n```\"\nobj = llm.extract_json(raw)\nassert cards.validate_card(obj)[\"topic\"] == \"机器学习基础\"\n\ntry:\n    cards.validate_card({**obj, \"topic\": \"随便编的分类\"})\n    assert False\nexcept llm.SchemaError as e:\n    print(\"成功拦截非法词表：\", e)\n'",
+      "text": "python3 -c '\nimport sys\nsys.path.insert(0, \"课件/ch02\")\nimport llm, cards\n\nraw = \"```json\\n{\\\"title\\\":\\\"第 01 章\\\",\\\"topic\\\":\\\"机器学习基础\\\",\\\"core_question\\\":\\\"规则为什么写不完\\\",\\\"takeaways\\\":[\\\"a\\\",\\\"b\\\"],\\\"terms\\\":[\\\"规则\\\",\\\"ELIZA\\\"]}\\n```\"\nobj = llm.extract_json(raw)\nassert cards.validate_card(obj)[\"topic\"] == \"机器学习基础\"\n\ntry:\n    cards.validate_card({**obj, \"topic\": \"随便编的分类\"})\n    assert False\nexcept llm.SchemaError as e:\n    print(\"成功拦截非法词表：\", e)\n'",
+      "runnable": false,
+      "runtime": "linux",
+      "reason": "终端命令：请在本机环境执行。",
+      "id": "lower-02-e00cf9943c96"
+    },
+    {
+      "type": "code",
+      "language": "output",
+      "code": "成功拦截非法词表： topic='随便编的分类' 不在允许词表 ['导论与总览', '机器学习基础', '大语言模型', '检索与RAG', 'Agent与工具', '记忆与协作', '工程交付'] 中",
+      "text": "成功拦截非法词表： topic='随便编的分类' 不在允许词表 ['导论与总览', '机器学习基础', '大语言模型', '检索与RAG', 'Agent与工具', '记忆与协作', '工程交付'] 中",
+      "runnable": false,
+      "reason": "原文示例输出，用于对照实验结果。",
+      "id": "lower-02-e5beaa6e92c5"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-02-a3583fe48122-4"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "本章实战成品：批量提炼《上册》知识卡片",
+      "id": "lower-02-1b8bac1976e7"
+    },
+    {
+      "type": "prose",
+      "text": "现在把整套机制跑在 零基础学AI/上册/ 全部 25 篇笔记上。完整代码见 课件/ch02/cards.py：",
+      "html": "<p>现在把整套机制跑在 <code>零基础学AI/上册/</code> 全部 25 篇笔记上。完整代码见 <code>课件/ch02/cards.py</code>：</p>\n",
+      "id": "lower-02-796ca29e0237"
+    },
+    {
+      "type": "code",
+      "language": "python",
+      "code": "# cards.py：第 02 章实战成品——批量把《上册》笔记提炼成严格 Schema 的结构化知识卡片（JSONL + 词表对齐）\nimport json\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nALLOWED_TOPICS = [\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]\n\nPROMPT = f\"\"\"请阅读下面这篇《从零开始学 AI》笔记节选，严格输出一个 JSON 对象，包含且仅包含以下 5 个字段：\n- \"title\": 字符串，章节标题\n- \"topic\": 字符串，必须从这个词表里选一个：{json.dumps(ALLOWED_TOPICS, ensure_ascii=False)}\n- \"core_question\": 字符串，这一章解决的核心问题（不超过 30 字）\n- \"takeaways\": 字符串数组，2 到 3 条核心结论，每条不超过 35 字\n- \"terms\": 字符串数组，2 到 4 个关键术语\n\n笔记内容：\n\"\"\"\n\n\ndef validate_card(obj):\n    if not isinstance(obj, dict):\n        raise llm.SchemaError(\"顶层必须是 JSON 对象\")\n    required = (\"title\", \"topic\", \"core_question\", \"takeaways\", \"terms\")\n    for k in required:\n        if k not in obj:\n            raise llm.SchemaError(f\"缺少必填字段：{k}\")\n    if obj[\"topic\"] not in ALLOWED_TOPICS:\n        raise llm.SchemaError(f\"topic={obj['topic']!r} 不在允许词表 {ALLOWED_TOPICS} 中\")\n    if not isinstance(obj[\"takeaways\"], list) or not (2 <= len(obj[\"takeaways\"]) <= 3):\n        raise llm.SchemaError(\"takeaways 必须是包含 2–3 条字符串的数组\")\n    if not isinstance(obj[\"terms\"], list) or not (1 <= len(obj[\"terms\"]) <= 5):\n        raise llm.SchemaError(\"terms 必须是包含 1–5 个术语的数组\")\n    return obj\n\n\ndef clean_preview(raw_text, limit=1800):\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = [ln for ln in lines if not ln.strip().startswith((\"![[\", \"> 🎬\"))]\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    out_path = os.path.join(os.path.dirname(__file__), \"cards.jsonl\")\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n\n    cards, failed = [], []\n    for name in md_files:\n        preview = clean_preview(open(os.path.join(folder, name), encoding=\"utf-8\").read())\n        try:\n            card = llm.ask_json(PROMPT + preview, validator=validate_card)\n            card[\"file\"] = name\n            cards.append(card)\n        except llm.LLMError as e:\n            failed.append((name, str(e)))\n\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        for c in cards:\n            f.write(json.dumps(c, ensure_ascii=False) + \"\\n\")\n\n    print(f\"生成完成：{len(cards)} 张卡片写入 {out_path}，失败 {len(failed)} 篇\")\n    for name, err in failed:\n        print(f\"  失败 {name}：{err}\")\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()",
+      "text": "# cards.py：第 02 章实战成品——批量把《上册》笔记提炼成严格 Schema 的结构化知识卡片（JSONL + 词表对齐）\nimport json\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nALLOWED_TOPICS = [\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]\n\nPROMPT = f\"\"\"请阅读下面这篇《从零开始学 AI》笔记节选，严格输出一个 JSON 对象，包含且仅包含以下 5 个字段：\n- \"title\": 字符串，章节标题\n- \"topic\": 字符串，必须从这个词表里选一个：{json.dumps(ALLOWED_TOPICS, ensure_ascii=False)}\n- \"core_question\": 字符串，这一章解决的核心问题（不超过 30 字）\n- \"takeaways\": 字符串数组，2 到 3 条核心结论，每条不超过 35 字\n- \"terms\": 字符串数组，2 到 4 个关键术语\n\n笔记内容：\n\"\"\"\n\n\ndef validate_card(obj):\n    if not isinstance(obj, dict):\n        raise llm.SchemaError(\"顶层必须是 JSON 对象\")\n    required = (\"title\", \"topic\", \"core_question\", \"takeaways\", \"terms\")\n    for k in required:\n        if k not in obj:\n            raise llm.SchemaError(f\"缺少必填字段：{k}\")\n    if obj[\"topic\"] not in ALLOWED_TOPICS:\n        raise llm.SchemaError(f\"topic={obj['topic']!r} 不在允许词表 {ALLOWED_TOPICS} 中\")\n    if not isinstance(obj[\"takeaways\"], list) or not (2 <= len(obj[\"takeaways\"]) <= 3):\n        raise llm.SchemaError(\"takeaways 必须是包含 2–3 条字符串的数组\")\n    if not isinstance(obj[\"terms\"], list) or not (1 <= len(obj[\"terms\"]) <= 5):\n        raise llm.SchemaError(\"terms 必须是包含 1–5 个术语的数组\")\n    return obj\n\n\ndef clean_preview(raw_text, limit=1800):\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = [ln for ln in lines if not ln.strip().startswith((\"![[\", \"> 🎬\"))]\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    out_path = os.path.join(os.path.dirname(__file__), \"cards.jsonl\")\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n\n    cards, failed = [], []\n    for name in md_files:\n        preview = clean_preview(open(os.path.join(folder, name), encoding=\"utf-8\").read())\n        try:\n            card = llm.ask_json(PROMPT + preview, validator=validate_card)\n            card[\"file\"] = name\n            cards.append(card)\n        except llm.LLMError as e:\n            failed.append((name, str(e)))\n\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        for c in cards:\n            f.write(json.dumps(c, ensure_ascii=False) + \"\\n\")\n\n    print(f\"生成完成：{len(cards)} 张卡片写入 {out_path}，失败 {len(failed)} 篇\")\n    for name, err in failed:\n        print(f\"  失败 {name}：{err}\")\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()",
+      "runnable": true,
+      "filename": "cards.py",
+      "runtime": "linux",
+      "reason": "依赖进程、终端输入、操作系统服务或本地文件环境。",
+      "id": "lower-02-80602abfc8b2"
+    },
+    {
+      "type": "prose",
+      "text": "跑完 python3 课件/ch02/cards.py，你会得到一个干净利落的 cards.jsonl（JSON Lines 格式，每行一条完整 JSON，方便逐行追加和流式读取）。挑其中一条看一眼：",
+      "html": "<p>跑完 <code>python3 课件/ch02/cards.py</code>，你会得到一个干净利落的 <code>cards.jsonl</code>（JSON Lines 格式，每行一条完整 JSON，方便逐行追加和流式读取）。挑其中一条看一眼：</p>\n",
+      "id": "lower-02-659abb4d8b98"
+    },
+    {
+      "type": "code",
+      "language": "json",
+      "code": "{\"title\": \"第 01 章｜规则总也写不完\", \"topic\": \"机器学习基础\", \"core_question\": \"为什么靠人工写规则无法穷尽自然语言里的各种问法？\", \"takeaways\": [\"同一意思有无数种表达，规则一多就会互相打架\", \"答对了不等于弄懂了，必须守住未见过的考卷\", \"必须说一不二的底线交给规则，会变通的交给学习\"], \"terms\": [\"符号主义\", \"ELIZA\", \"专家系统\", \"cut.py\"], \"file\": \"第 01 章｜规则总也写不完.md\"}",
+      "text": "{\"title\": \"第 01 章｜规则总也写不完\", \"topic\": \"机器学习基础\", \"core_question\": \"为什么靠人工写规则无法穷尽自然语言里的各种问法？\", \"takeaways\": [\"同一意思有无数种表达，规则一多就会互相打架\", \"答对了不等于弄懂了，必须守住未见过的考卷\", \"必须说一不二的底线交给规则，会变通的交给学习\"], \"terms\": [\"符号主义\", \"ELIZA\", \"专家系统\", \"cut.py\"], \"file\": \"第 01 章｜规则总也写不完.md\"}",
+      "runnable": false,
+      "reason": "格式／配置／伪代码示例，不作为 Python 执行。",
+      "id": "lower-02-7e8b0730a4aa"
+    },
+    {
+      "type": "image",
+      "alt": "每篇笔记一张严丝合缝的卡片，下游程序终于能直接消费了。",
+      "caption": "每篇笔记一张严丝合缝的卡片，下游程序终于能直接消费了。",
+      "available": true,
+      "src": "/media/c528e8938cab6b0d977d66c2.webp",
+      "id": "lower-02-80746fd66bd5",
+      "previewWidth": 960,
+      "previewSrc": "/media/51f0431698abde63468f7c23.webp",
+      "height": 1024,
+      "previewHeight": 640,
+      "srcSet": "/media/51f0431698abde63468f7c23.webp 960w, /media/c528e8938cab6b0d977d66c2.webp 1536w",
+      "width": 1536
+    },
+    {
+      "type": "prose",
+      "text": "现在，你的知识库已经能按这 7 个封闭主题精确聚合。但卡片只是一篇笔记的“封面摘要”——真要问它“第 02 章里楼梯灯练了 1000 轮为什么还是错 4 题？”，光看 30 字摘要远远不够；而且你的知识库里除了 Markdown，还有 PDF 手册，甚至《上册》videos/ 目录里那 6 集教学视频。",
+      "html": "<p>现在，你的知识库已经能按这 7 个封闭主题精确聚合。但卡片只是一篇笔记的“封面摘要”——真要问它“第 02 章里楼梯灯练了 1000 轮为什么还是错 4 题？”，光看 30 字摘要远远不够；而且你的知识库里除了 Markdown，还有 PDF 手册，甚至《上册》<code>videos/</code> 目录里那 6 集教学视频。</p>\n",
+      "id": "lower-02-b1266bb53079"
+    },
+    {
+      "type": "prose",
+      "text": "第 03 章，我们先把这些五花八门的文件统一洗成带行号的纯文本，再做不伤代码的切块。",
+      "html": "<p><strong>第 03 章</strong>，我们先把这些五花八门的文件统一洗成带行号的纯文本，再做不伤代码的切块。</p>\n",
+      "id": "lower-02-8912876e5e19"
+    },
+    {
+      "type": "prose",
+      "text": "",
+      "html": "<hr>\n",
+      "id": "lower-02-a3583fe48122-5"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "这一章你留下了什么",
+      "id": "lower-02-17912e889c19"
+    },
+    {
+      "type": "code",
+      "language": "text",
+      "code": "课件/ch02/\n  llm.py     新增 SchemaError、extract_json() 与带错因递回的 ask_json()\n  cards.py   封闭词表 ALLOWED_TOPICS + 边界校验 validate_card()，产出 cards.jsonl",
+      "text": "课件/ch02/\n  llm.py     新增 SchemaError、extract_json() 与带错因递回的 ask_json()\n  cards.py   封闭词表 ALLOWED_TOPICS + 边界校验 validate_card()，产出 cards.jsonl",
+      "runnable": false,
+      "reason": "格式／配置／伪代码示例，不作为 Python 执行。",
+      "id": "lower-02-b60aa71a9f79"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "改一改",
+      "id": "lower-02-0c6165168e6a"
+    },
+    {
+      "type": "prose",
+      "text": "给 validate_card() 再加一条校验：core_question 必须以问号 ？ 结尾，且长度不超过 35 个字。故意去掉提示词里的“不超过 30 字”要求，看看 ask_json() 的第二次纠错重试能不能自己把超长问题改短。\n写一个 10 行的小脚本读取 cards.jsonl，按 topic 统计《上册》25 篇笔记在 7 个主题里各自占了几篇，输出一份主题分布表。\n把 ALLOWED_TOPICS 换成你自己日常工作笔记的 5 个分类（如 [\"项目\", \"周报\", \"技术沉淀\", \"读书\", \"生活\"]），拿你自己的笔记目录跑一遍 cards.py，看看有没有哪篇怎么也归不进去——那往往说明你的分类词表还缺一个真实存在的类别。\n试着把 cards.py 里的 clean_preview(..., limit=1800) 放大到 4000，对比一下账单里 prompt_tokens 的变化和提炼质量值不值得多花这笔钱。",
+      "html": "<ol>\n<li>给 <code>validate_card()</code> 再加一条校验：<code>core_question</code> 必须以问号 <code>？</code> 结尾，且长度不超过 35 个字。故意去掉提示词里的“不超过 30 字”要求，看看 <code>ask_json()</code> 的第二次纠错重试能不能自己把超长问题改短。</li>\n<li>写一个 10 行的小脚本读取 <code>cards.jsonl</code>，按 <code>topic</code> 统计《上册》25 篇笔记在 7 个主题里各自占了几篇，输出一份主题分布表。</li>\n<li>把 <code>ALLOWED_TOPICS</code> 换成你自己日常工作笔记的 5 个分类（如 <code>[&quot;项目&quot;, &quot;周报&quot;, &quot;技术沉淀&quot;, &quot;读书&quot;, &quot;生活&quot;]</code>），拿你自己的笔记目录跑一遍 <code>cards.py</code>，看看有没有哪篇怎么也归不进去——那往往说明你的分类词表还缺一个真实存在的类别。</li>\n<li>试着把 <code>cards.py</code> 里的 <code>clean_preview(..., limit=1800)</code> 放大到 <code>4000</code>，对比一下账单里 <code>prompt_tokens</code> 的变化和提炼质量值不值得多花这笔钱。</li>\n</ol>\n",
+      "id": "lower-02-8103fd6fb3cb"
+    }
+  ],
+  "files": {
+    "cards.py": "# cards.py：第 02 章实战成品——批量把《上册》笔记提炼成严格 Schema 的结构化知识卡片（JSONL + 词表对齐）\nimport json\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nALLOWED_TOPICS = [\"导论与总览\", \"机器学习基础\", \"大语言模型\", \"检索与RAG\", \"Agent与工具\", \"记忆与协作\", \"工程交付\"]\n\nPROMPT = f\"\"\"请阅读下面这篇《从零开始学 AI》笔记节选，严格输出一个 JSON 对象，包含且仅包含以下 5 个字段：\n- \"title\": 字符串，章节标题\n- \"topic\": 字符串，必须从这个词表里选一个：{json.dumps(ALLOWED_TOPICS, ensure_ascii=False)}\n- \"core_question\": 字符串，这一章解决的核心问题（不超过 30 字）\n- \"takeaways\": 字符串数组，2 到 3 条核心结论，每条不超过 35 字\n- \"terms\": 字符串数组，2 到 4 个关键术语\n\n笔记内容：\n\"\"\"\n\n\ndef validate_card(obj):\n    if not isinstance(obj, dict):\n        raise llm.SchemaError(\"顶层必须是 JSON 对象\")\n    required = (\"title\", \"topic\", \"core_question\", \"takeaways\", \"terms\")\n    for k in required:\n        if k not in obj:\n            raise llm.SchemaError(f\"缺少必填字段：{k}\")\n    if obj[\"topic\"] not in ALLOWED_TOPICS:\n        raise llm.SchemaError(f\"topic={obj['topic']!r} 不在允许词表 {ALLOWED_TOPICS} 中\")\n    if not isinstance(obj[\"takeaways\"], list) or not (2 <= len(obj[\"takeaways\"]) <= 3):\n        raise llm.SchemaError(\"takeaways 必须是包含 2–3 条字符串的数组\")\n    if not isinstance(obj[\"terms\"], list) or not (1 <= len(obj[\"terms\"]) <= 5):\n        raise llm.SchemaError(\"terms 必须是包含 1–5 个术语的数组\")\n    return obj\n\n\ndef clean_preview(raw_text, limit=1800):\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = [ln for ln in lines if not ln.strip().startswith((\"![[\", \"> 🎬\"))]\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    out_path = os.path.join(os.path.dirname(__file__), \"cards.jsonl\")\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n\n    cards, failed = [], []\n    for name in md_files:\n        preview = clean_preview(open(os.path.join(folder, name), encoding=\"utf-8\").read())\n        try:\n            card = llm.ask_json(PROMPT + preview, validator=validate_card)\n            card[\"file\"] = name\n            cards.append(card)\n        except llm.LLMError as e:\n            failed.append((name, str(e)))\n\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        for c in cards:\n            f.write(json.dumps(c, ensure_ascii=False) + \"\\n\")\n\n    print(f\"生成完成：{len(cards)} 张卡片写入 {out_path}，失败 {len(failed)} 篇\")\n    for name, err in failed:\n        print(f\"  失败 {name}：{err}\")\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()\n",
+    "llm.py": "# llm.py：整本下册和模型说话的唯一入口（Token Plan 统一接入 + 流式 + 缓存 + 预算保险丝 + 三分法）\nimport hashlib\nimport json\nimport os\nimport re\nimport time\nimport urllib.error\nimport urllib.request\n\nDEFAULT_BASE_URL = \"https://token.sensetime.com/api/v1\"\nDEFAULT_MODEL = \"sensenova-6.8-flash\"\nCACHE_DIR = os.environ.get(\"MYKB_CACHE_DIR\", os.path.join(os.path.dirname(__file__), \".cache\"))\n\nLEDGER = {\n    \"calls\": 0,\n    \"cache_hits\": 0,\n    \"prompt\": 0,\n    \"completion\": 0,\n    \"seconds\": 0.0,\n    \"unknown\": 0,\n}\n\nRETRY_CODES = {429, 500, 502, 503, 504}\n\n\nclass LLMError(Exception):\n    \"\"\"明确失败：密钥错、地址错、参数错，或者重试多次依然连不上。\"\"\"\n\n\nclass NotDone(LLMError):\n    \"\"\"它回了话，但这次不能算完成（写到一半被掐断、被拦截、或递来工具纸条）。\"\"\"\n\n\nclass BudgetExceeded(LLMError):\n    \"\"\"触发单次运行预算保险丝，防止死循环或批量脚本跑飞。\"\"\"\n\n\ndef _cfg():\n    base = os.environ.get(\"LLM_BASE_URL\", DEFAULT_BASE_URL).rstrip(\"/\")\n    key = os.environ.get(\"LLM_API_KEY\", \"\")\n    model = os.environ.get(\"LLM_MODEL\", DEFAULT_MODEL)\n    if not key:\n        raise LLMError(\"未设置环境变量 LLM_API_KEY，请先 export LLM_API_KEY=你的密钥\")\n    return base, key, model\n\n\ndef _check_budget():\n    max_calls = int(os.environ.get(\"MYKB_MAX_CALLS\", \"50\"))\n    if LEDGER[\"calls\"] >= max_calls:\n        raise BudgetExceeded(f\"本次真实调用已达上限 {max_calls} 次（可用 MYKB_MAX_CALLS 调高）\")\n\n\ndef _post(body, timeout=120):\n    base, key, _ = _cfg()\n    req = urllib.request.Request(\n        f\"{base}/chat/completions\",\n        data=json.dumps(body).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {key}\"},\n    )\n    for attempt in range(4):\n        try:\n            return urllib.request.urlopen(req, timeout=timeout)\n        except urllib.error.HTTPError as e:\n            detail = e.read().decode(\"utf-8\", \"replace\")[:200]\n            if e.code not in RETRY_CODES or attempt == 3:\n                raise LLMError(f\"HTTP {e.code}：{detail}\") from None\n        except (urllib.error.URLError, TimeoutError) as e:\n            if attempt == 3:\n                raise LLMError(f\"连不上（状态未知，请勿盲目重发写操作）：{e}\") from None\n        time.sleep(2 ** attempt)\n\n\ndef _book(usage, began):\n    LEDGER[\"calls\"] += 1\n    if not usage or \"completion_tokens\" not in usage:\n        LEDGER[\"unknown\"] += 1\n    else:\n        LEDGER[\"prompt\"] += usage.get(\"prompt_tokens\", 0)\n        LEDGER[\"completion\"] += usage.get(\"completion_tokens\", 0)\n    LEDGER[\"seconds\"] += time.time() - began\n\n\ndef _parse(raw):\n    \"\"\"正常情况直接 json.loads；若平台偶尔把末尾 usage 截断而 content 完整，则先把回答抠出来。\"\"\"\n    try:\n        return json.loads(raw)\n    except ValueError:\n        if '\"content\":' not in raw:\n            raise LLMError(f\"回来的内容不完整：{raw[-80:]!r}\") from None\n        start = raw.index('\"content\":') + len('\"content\":')\n        content, _ = json.JSONDecoder().raw_decode(raw, start)\n        usage = {\n            k: int(m.group(1))\n            for k in (\"prompt_tokens\", \"completion_tokens\")\n            for m in [re.search(f'\"{k}\":(\\\\d+)', raw)]\n            if m\n        }\n        return {\"choices\": [{\"message\": {\"content\": content}, \"finish_reason\": \"stop\"}], \"usage\": usage or None}\n\n\ndef done(choice):\n    \"\"\"成了、没成、还是半截：只认 stop 且有正文。\"\"\"\n    why = choice.get(\"finish_reason\")\n    text = (choice.get(\"message\") or {}).get(\"content\") or \"\"\n    if why == \"stop\" and text.strip():\n        return\n    reasons = {\n        \"length\": f\"写到上限被掐断了，只有前半截：{text[-30:]!r}\",\n        \"content_filter\": \"被平台的内容过滤拦下了\",\n        \"tool_calls\": \"它没说话，递来了一张要用工具的纸条\",\n    }\n    raise NotDone(reasons.get(why, f\"停下的原因是 {why!r}，内容{'为空' if not text.strip() else '不完整'}\"))\n\n\ndef _cache_key(model, messages, temperature, extra):\n    payload = json.dumps({\"model\": model, \"messages\": messages, \"temperature\": temperature, \"extra\": extra}, sort_keys=True, ensure_ascii=False)\n    return hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:24]\n\n\ndef chat(messages, model=None, temperature=0, use_cache=None, **extra):\n    \"\"\"交出一串对话，拿回它的回答。默认开启本地缓存（MYKB_CACHE=0 可关闭）。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    m = model or default_model\n    cache_on = (os.environ.get(\"MYKB_CACHE\", \"1\") != \"0\") if use_cache is None else use_cache\n\n    key = _cache_key(m, messages, temperature, extra)\n    cache_path = os.path.join(CACHE_DIR, f\"{key}.json\")\n    if cache_on and temperature == 0 and os.path.exists(cache_path):\n        LEDGER[\"cache_hits\"] += 1\n        return json.load(open(cache_path, encoding=\"utf-8\"))[\"content\"]\n\n    _check_budget()\n    began = time.time()\n    body = {\"model\": m, \"messages\": messages, \"temperature\": temperature, **extra}\n    with _post(body) as resp:\n        raw = resp.read().decode(\"utf-8\", \"replace\")\n    data = _parse(raw)\n    _book(data.get(\"usage\"), began)\n    choice = data[\"choices\"][0]\n    done(choice)\n    content = choice[\"message\"][\"content\"]\n\n    if cache_on and temperature == 0:\n        os.makedirs(CACHE_DIR, exist_ok=True)\n        with open(cache_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"model\": m, \"content\": content}, f, ensure_ascii=False, indent=2)\n    return content\n\n\ndef stream(messages, model=None, temperature=0):\n    \"\"\"一边写一边交，降低首字等待。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    _, _, default_model = _cfg()\n    _check_budget()\n    began = time.time()\n    body = {\n        \"model\": model or default_model,\n        \"messages\": messages,\n        \"temperature\": temperature,\n        \"stream\": True,\n        \"stream_options\": {\"include_usage\": True},\n    }\n    usage = None\n    with _post(body) as resp:\n        for raw in resp:\n            line = raw.decode(\"utf-8\", \"replace\").strip()\n            if not line.startswith(\"data:\") or line == \"data: [DONE]\":\n                continue\n            chunk = json.loads(line[5:])\n            usage = chunk.get(\"usage\") or usage\n            for choice in chunk.get(\"choices\", []):\n                piece = (choice.get(\"delta\") or {}).get(\"content\")\n                if piece:\n                    yield piece\n    _book(usage, began)\n\n\ndef bill(price_in=None, price_out=None):\n    unknown = f\"（含 {LEDGER['unknown']} 次账不全）\" if LEDGER[\"unknown\"] else \"\"\n    line = (\n        f\"真实调用 {LEDGER['calls']} 次，命中缓存 {LEDGER['cache_hits']} 次，\"\n        f\"读 {LEDGER['prompt']} / 写 {LEDGER['completion']} token，\"\n        f\"耗时 {LEDGER['seconds']:.1f} 秒{unknown}\"\n    )\n    if price_in is not None and price_out is not None:\n        cost = LEDGER[\"prompt\"] / 1e6 * price_in + LEDGER[\"completion\"] / 1e6 * price_out\n        line += f\"，约 {cost:.4f} 元\"\n    return line\n\n# llm.py（第 02 章新增部分）\nclass SchemaError(LLMError):\n    \"\"\"模型回来的 JSON 虽然语法对，但缺字段、类型不对或超出约定词表。\"\"\"\n\n\ndef extract_json(text):\n    \"\"\"从可能包了 ```json ... ``` 的回复里剥出 JSON 对象。\"\"\"\n    s = text.strip()\n    if s.startswith(\"```\"):\n        s = re.sub(r\"^```[a-zA-Z]*\\n?\", \"\", s)\n        s = re.sub(r\"\\n?```$\", \"\", s.strip())\n    return json.loads(s)\n\n\ndef ask_json(messages, validator, model=None, use_cache=None):\n    \"\"\"要求模型交出严格合规的 JSON；若校验失败，把具体错因递回去最多重试 1 次。\"\"\"\n    if isinstance(messages, str):\n        messages = [{\"role\": \"user\", \"content\": messages}]\n    msgs = list(messages)\n    last_err = None\n    for attempt in range(2):\n        raw = chat(\n            msgs,\n            model=model,\n            temperature=0,\n            use_cache=use_cache,\n            response_format={\"type\": \"json_object\"},\n        )\n        try:\n            obj = extract_json(raw)\n            return validator(obj)\n        except (ValueError, SchemaError) as e:\n            last_err = e\n            if attempt == 0:\n                msgs = msgs + [\n                    {\"role\": \"assistant\", \"content\": raw},\n                    {\n                        \"role\": \"user\",\n                        \"content\": f\"格式校验未通过：{e}。请只输出修正后的合法 JSON，不要任何解释。\",\n                    },\n                ]\n    raise SchemaError(f\"连续两次未通过格式校验：{last_err}\")\n",
+    "raw.py": "# raw.py：不用任何封装，亲手向 Token Plan 寄出第一封信，把请求和完整回执原样印出来\nimport json\nimport os\nimport urllib.request\n\nBASE_URL = os.environ.get(\"LLM_BASE_URL\", \"https://token.sensetime.com/api/v1\").rstrip(\"/\")\nAPI_KEY = os.environ[\"LLM_API_KEY\"]\nMODEL = os.environ.get(\"LLM_MODEL\", \"sensenova-6.8-flash\")\n\nbody = {\n    \"model\": MODEL,\n    \"messages\": [{\"role\": \"user\", \"content\": \"用一句话说说，把《上册》笔记装进个人知识库有什么用？\"}],\n}\nprint(\"寄出去的：\")\nprint(json.dumps(body, ensure_ascii=False, indent=2))\n\nreq = urllib.request.Request(\n    BASE_URL + \"/chat/completions\",\n    data=json.dumps(body).encode(\"utf-8\"),\n    headers={\"Content-Type\": \"application/json\", \"Authorization\": f\"Bearer {API_KEY}\"},\n)\nwith urllib.request.urlopen(req, timeout=60) as resp:\n    data = json.loads(resp.read().decode(\"utf-8\"))\n\nif \"id\" in data:\n    data[\"id\"] = data[\"id\"][:14] + \"…\"\nprint(\"\\n收回来的：\")\nprint(json.dumps(data, ensure_ascii=False, indent=2))\n",
+    "streaming.py": "# streaming.py：对比一次交完与流式输出的首字等待时间\nimport time\nfrom llm import chat, stream\n\nQ = [{\"role\": \"user\", \"content\": \"我想把《零基础学 AI》上册的笔记搭成一个能问答的知识库，请用三点说说第一步该注意什么。\"}]\n\nt = time.time()\nans = chat(Q, use_cache=False)\nprint(f\"一次交完：首字与全文字均在 {time.time() - t:.2f} 秒出现（共 {len(ans)} 字）\\n\")\n\nt, first, pieces = time.time(), None, []\nfor piece in stream(Q):\n    if first is None:\n        first = time.time() - t\n    pieces.append(piece)\n    print(piece, end=\"\", flush=True)\nprint(f\"\\n\\n流式输出：首字在 {first:.2f} 秒出现，全部写完在 {time.time() - t:.2f} 秒（共 {len(pieces)} 小段）\")\n",
+    "oops.py": "# oops.py：故意踩四种常见坑，把出错的脸认熟\nimport os\nimport llm\n\n\ndef attempt(label, **env):\n    saved = {k: os.environ.get(k) for k in env}\n    os.environ.update(env)\n    try:\n        llm.chat([{\"role\": \"user\", \"content\": \"你好\"}], use_cache=False)\n        print(f\"{label}：居然通了\")\n    except llm.LLMError as e:\n        print(f\"{label}：{e}\")\n    finally:\n        for k, v in saved.items():\n            if v is None:\n                os.environ.pop(k, None)\n            else:\n                os.environ[k] = v\n\n\nbase = os.environ.get(\"LLM_BASE_URL\", llm.DEFAULT_BASE_URL)\nkey = os.environ.get(\"LLM_API_KEY\", \"sk-placeholder\")\n\nattempt(\"密钥错了一位\", LLM_API_KEY=key[:-1] + \"x\")\nattempt(\"模型名拼错\", LLM_MODEL=\"sensenova-not-exist\")\nattempt(\"地址少了 /v1\", LLM_BASE_URL=base.rstrip(\"/\").rsplit(\"/v1\", 1)[0])\nattempt(\"地址写错了域名\", LLM_BASE_URL=\"https://api.invalid.example/v1\")\n",
+    "index_kb.py": "# index_kb.py：第 01 章实战成品——扫描《上册》全部笔记，生成《上册知识库目录.md》\nimport os\nimport sys\nimport llm\n\nDEFAULT_KB = os.path.abspath(os.path.join(os.path.dirname(__file__), \"../../../上册\"))\nASK = (\n    \"下面是一篇技术教程笔记的开头节选。请只输出一行，严格使用以下格式：\\n\"\n    \"一句话摘要（不超过30字）｜标签1, 标签2, 标签3\\n\"\n    \"不要输出任何多余解释。\\n\\n\"\n)\n\n\ndef clean_preview(raw_text, limit=1200):\n    \"\"\"去掉 Obsidian YAML 头信息和图片/视频嵌入行，保留标题与核心正文前段。\"\"\"\n    lines = raw_text.splitlines()\n    if lines and lines[0].strip() == \"---\":\n        for i in range(1, len(lines)):\n            if lines[i].strip() == \"---\":\n                lines = lines[i + 1 :]\n                break\n    kept = []\n    for ln in lines:\n        s = ln.strip()\n        if s.startswith(\"![[\") or s.startswith(\"> 🎬\"):\n            continue\n        kept.append(ln)\n    return \"\\n\".join(kept).strip()[:limit]\n\n\ndef main():\n    folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_KB\n    if not os.path.isdir(folder):\n        sys.exit(f\"找不到目录：{folder}\")\n\n    rows, odd = [], []\n    md_files = sorted(f for f in os.listdir(folder) if f.endswith(\".md\") and f != \"上册知识库目录.md\")\n    for name in md_files:\n        raw = open(os.path.join(folder, name), encoding=\"utf-8\").read()\n        preview = clean_preview(raw)\n        title = next((l.lstrip(\"# \").strip() for l in preview.splitlines() if l.startswith(\"#\")), name[:-3])\n        line = llm.chat([{\"role\": \"user\", \"content\": ASK + preview}]).strip().splitlines()[0]\n        if line.count(\"｜\") != 1:\n            odd.append(f\"{name}：{line}\")\n            continue\n        summary, tags = (p.strip() for p in line.split(\"｜\"))\n        rows.append(f\"| [{title}]({name}) | {summary} | {tags} |\")\n\n    out_path = os.path.join(folder, \"上册知识库目录.md\")\n    with open(out_path, \"w\", encoding=\"utf-8\") as f:\n        f.write(\"# 上册知识库目录\\n\\n| 章节 | 一句话 | 标签 |\\n|-|-|-|\\n\" + \"\\n\".join(rows) + \"\\n\")\n\n    print(f\"已生成 {out_path}：收录 {len(rows)} 篇\" + (f\"，格式不符跳过 {len(odd)} 篇\" if odd else \"\"))\n    for o in odd:\n        print(\"  跳过：\", o)\n    print(llm.bill(price_in=1.0, price_out=4.0))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  "sourceFile": "下册/下册第 02 章｜让它照格式交卷：批量提炼《上册》知识卡片.md"
+}
