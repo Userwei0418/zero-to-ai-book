@@ -50,12 +50,28 @@ release_url="https://storage.googleapis.com/gvisor/releases/release/$release/x86
 # Keep its socket, data, PID and containerd paths separate; guests use network=none.
 sudo install -d -m 0755 /run/zero-ai-ci
 echo '{}' > "$work/daemon.json"
-sudo systemd-run --quiet --unit="$service" --property=Delegate=yes --property=PrivateNetwork=yes "$(command -v dockerd)" \
-  --config-file "$work/daemon.json" --host="unix://$LEARNER_DOCKER_SOCKET" --group=docker \
-  --exec-root=/run/zero-ai-ci/exec --pidfile=/run/zero-ai-ci/dockerd.pid --data-root="$work/engine" \
+# Both daemons need the same mount namespace: containerd must see the overlay
+# root mounted by this dockerd, even while the application's engine is separate.
+cat > "$work/learner-engine.sh" <<'ENGINE'
+set -euo pipefail
+engine_root=$1
+runtime_dir=/run/zero-ai-ci
+containerd --config "$engine_root/containerd.toml" --address "$runtime_dir/containerd.sock" \
+  --root "$engine_root/containerd" --state "$runtime_dir/containerd-state" &
+for attempt in {1..50}; do
+  [[ ! -S "$runtime_dir/containerd.sock" ]] || break
+  sleep 0.2
+done
+exec dockerd --config-file "$engine_root/daemon.json" --host="unix://$runtime_dir/docker.sock" \
+  --containerd="$runtime_dir/containerd.sock" --group=docker \
+  --exec-root="$runtime_dir/exec" --pidfile="$runtime_dir/dockerd.pid" --data-root="$engine_root/engine" \
   --containerd-namespace=zero-ai-ci --containerd-plugins-namespace=zero-ai-ci-plugins \
   --bridge=none --iptables=false --ip6tables=false --ip-masq=false --ip-forward=false \
   --add-runtime=runsc=/usr/local/bin/runsc
+ENGINE
+printf 'version = 2\n' > "$work/containerd.toml"
+sudo systemd-run --quiet --unit="$service" --property=Delegate=yes --property=PrivateNetwork=yes \
+  /bin/bash "$work/learner-engine.sh" "$work"
 for _ in {1..60}; do
   if "${learner[@]}" info >/dev/null 2>&1; then break; fi
   sleep 1
