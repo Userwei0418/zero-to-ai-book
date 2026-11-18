@@ -7,6 +7,10 @@ declare namespace Cloudflare {
     TOKENPLAN_BASE_URL?: string;
     TOKENPLAN_MODEL?: string;
     AI_DAILY_LIMIT?: string;
+    BOOK_GUEST_ACCESS?: string;
+    GUEST_AI_DAILY_LIMIT?: string;
+    GUEST_AI_SITE_DAILY_LIMIT?: string;
+    GUEST_RUNTIME_SITE_DAILY_LIMIT?: string;
     SELF_HOSTED_SANDBOX?: string;
     SANDBOX_API_URL?: string;
     SANDBOX_API_KEY?: string;

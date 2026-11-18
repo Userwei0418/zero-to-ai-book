@@ -9,7 +9,7 @@ import { browserRunnable, getNotebookKernel, type NotebookKernel, type Registere
 const NotebookContext = createContext<NotebookKernel | null>(null);
 const NotebookSaveContext = createContext<{ label?: string; issue?: boolean }>({});
 
-export function NotebookProvider({ chapterId, files, originalFiles, cells, cacheScope, remoteRuntimeConfigured, gpuConfigured, saveLabel, saveIssue, children }: {
+export function NotebookProvider({ chapterId, files, originalFiles, cells, cacheScope, remoteRuntimeConfigured, gpuConfigured, saveLabel, saveIssue, onIdentityChange, children }: {
   chapterId: string;
   files?: Record<string, string>;
   originalFiles?: Record<string, string>;
@@ -17,11 +17,16 @@ export function NotebookProvider({ chapterId, files, originalFiles, cells, cache
   cacheScope?: string;
   remoteRuntimeConfigured?: boolean;
   gpuConfigured?: boolean;
+  onIdentityChange?: () => void;
   saveLabel?: string;
   saveIssue?: boolean;
   children: ReactNode;
 }) {
   const kernel = useMemo(() => getNotebookKernel(chapterId, cacheScope), [chapterId, cacheScope]);
+  useEffect(() => {
+    kernel.setIdentityChangeHandler(onIdentityChange);
+    return () => { kernel.setIdentityChangeHandler(); };
+  }, [kernel, onIdentityChange]);
   useEffect(() => {
     kernel.setFiles(files);
     kernel.setExportOriginals(originalFiles);

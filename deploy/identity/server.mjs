@@ -2,12 +2,13 @@ import http from 'node:http';
 import { opendir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { initializeDirectory, openSession, readSession, sessionKey, sessionLifetime, validName, validPassword, verifyLogin } from './accounts.mjs';
+import { guestLifetime, guestRenewWindow, initializeDirectory, issueGuestToken, openSession, readGuestToken, readSession, sessionKey, sessionLifetime, validName, validPassword, verifyLogin } from './accounts.mjs';
 
 const login = '/signin-with-chatgpt';
 const logout = '/signout-with-chatgpt';
 const cookieName = '__Host-book_session';
-const cookie = (value, age) => `${cookieName}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;
+const guestCookie = '__Host-book_guest';
+const cookie = (name, value, age) => `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;
 const authHeaders = { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" };
 const hopByHop = 'connection keep-alive proxy-connection proxy-authenticate proxy-authorization te trailer transfer-encoding upgrade'.split(' ');
@@ -66,15 +67,23 @@ async function readForm(req) {
   return { fields };
 }
 
-function cookieParts(req) {
-  return (req.headers.cookie || '').split(';').map(c => c.trim()).filter(Boolean);
-}
-function sessionToken(req) {
-  const matches = cookieParts(req).filter(c => c.split('=', 1)[0] === cookieName);
-  return matches.length === 1 ? matches[0].slice(cookieName.length + 1) : null;
+function cookieValue(req, name) {
+  const prefix = name + '=';
+  const matches = (req.headers.cookie || '').split(';').map(c => c.trim()).filter(c => c.startsWith(prefix));
+  return matches.length === 1 ? matches[0].slice(prefix.length) : null;
 }
 
-function forward(req, res, upstream, origin, user, asset) {
+// The reader explicitly requests bootstrap from its own origin. Neither navigation
+// nor fetching scripts/media creates new identities, even before cookies are enabled.
+function guestBootstrap(req, url, origin) {
+  const { origin: source, 'sec-fetch-site': site, 'sec-fetch-dest': dest, 'sec-fetch-mode': mode } = req.headers;
+  return req.method === 'GET' && url.pathname === '/api/state'
+    && req.headers['x-book-visitor-bootstrap'] === '1' && (source === undefined || source === origin.origin)
+    && (site === undefined || site === 'same-origin') && (dest === undefined || dest === 'empty')
+    && (mode === undefined || mode === 'cors' || mode === 'same-origin');
+}
+
+function forward(req, res, upstream, origin, user, guest, asset) {
   const blocked = new Set((req.headers.connection || '').toLowerCase().split(',').map(s => s.trim()));
   const headers = {};
   for (const [name, value] of Object.entries(req.headers)) {
@@ -92,9 +101,11 @@ function forward(req, res, upstream, origin, user, asset) {
     headers['oai-authenticated-user-email'] = user.name + '@reader.invalid';
     headers['oai-authenticated-user-full-name'] = user.name;
     headers['oai-authenticated-user-full-name-encoding'] = 'percent-encoded-utf-8';
+  } else if (guest) {
+    headers['x-book-guest-id'] = 'guest:' + guest.id;
   }
   const outbound = http.request(upstream, { path: req.url, method: req.method, headers }, incoming => {
-    const denied = new Set([...hopByHop, 'set-cookie', ...(incoming.headers.connection || '').toLowerCase().split(',').map(s => s.trim())]);
+    const denied = new Set([...hopByHop, 'set-cookie', 'x-book-guest-bootstrap', ...(incoming.headers.connection || '').toLowerCase().split(',').map(s => s.trim())]);
     const outgoing = Object.fromEntries(Object.entries(incoming.headers).filter(([key]) => !denied.has(key)));
     if (!asset || (incoming.statusCode >= 300 && incoming.statusCode !== 304)) {
       // Private pages, redirects and API/guide streams must stay out of shared caches.
@@ -150,8 +161,21 @@ export async function createIdentityServer({ publicOrigin, upstream = 'http://we
     if ((auth || unsafe) && ((req.headers.origin && req.headers.origin !== origin.origin) || req.headers['sec-fetch-site'] === 'cross-site')) return send(res, 403);
     if (!auth) {
       const asset = publicAsset(req.method, url.pathname);
-      const user = asset ? null : await readSession(directory, key, sessionToken(req));
-      return forward(req, res, target, origin, user, asset);
+      if (asset) return forward(req, res, target, origin, null, null, true);
+      const user = await readSession(directory, key, cookieValue(req, cookieName));
+      const guest = readGuestToken(key, cookieValue(req, guestCookie));
+      if (guestBootstrap(req, url, origin)) {
+        const needsGuest = !guest && !user;
+        const renewGuest = guest && guest.expiresAt <= Math.floor(Date.now() / 1000) + guestRenewWindow;
+        if (needsGuest) res.setHeader('x-book-guest-bootstrap', '1');
+        if (needsGuest || renewGuest) {
+          res.setHeader('set-cookie', cookie(guestCookie, issueGuestToken(key, guest), guestLifetime));
+        }
+      }
+      if (!user && !guest && unsafe && /^\/api\/(state|guide|runtime)\/?$/.test(url.pathname)) {
+        return send(res, 401, JSON.stringify({ error: '请在此浏览器允许本站 Cookie 并重新打开书页。', code: 'reader_session_required' }), { 'content-type': 'application/json; charset=utf-8' });
+      }
+      return forward(req, res, target, origin, user, guest, false);
     }
     const signIn = url.pathname === login;
     if (req.method === 'GET' || req.method === 'HEAD') return send(res, 200, form(signIn, safeReturn(url.searchParams.get('return_to'), origin.origin)));
@@ -161,9 +185,9 @@ export async function createIdentityServer({ publicOrigin, upstream = 'http://we
     if (!fields) return send(res, status);
     const next = safeReturn(fields.get('return_to') ?? url.searchParams.get('return_to'), origin.origin);
     if (!signIn) {
-      const user = await readSession(directory, key, sessionToken(req));
+      const user = await readSession(directory, key, cookieValue(req, cookieName));
       if (user) await unlink(user.path).catch(err => { if (err.code !== 'ENOENT') throw err; });
-      return send(res, 303, '', { location: next, 'set-cookie': cookie('', 0) });
+      return send(res, 303, '', { location: next, 'set-cookie': cookie(cookieName, '', 0) });
     }
     const name = fields.get('username'), password = fields.get('password') || '';
     if (!validName(name) || !validPassword(password)) return send(res, 401, form(true, next, '账号或密码有误。'));
@@ -172,7 +196,7 @@ export async function createIdentityServer({ publicOrigin, upstream = 'http://we
     let user;
     try { user = await verifyLogin(directory, name, password); } finally { running--; }
     if (!user) return send(res, 401, form(true, next, '账号或密码有误。'));
-    return send(res, 303, '', { location: next, 'set-cookie': cookie(await openSession(directory, key, user), sessionLifetime) });
+    return send(res, 303, '', { location: next, 'set-cookie': cookie(cookieName, await openSession(directory, key, user), sessionLifetime) });
   }
   const server = http.createServer({ requestTimeout: 120000, headersTimeout: 15000, maxHeaderSize: 16384 }, (req, res) => {
     handle(req, res).catch(() => { if (res.headersSent) res.destroy(); else send(res, 500, '读者服务暂时未响应。'); });

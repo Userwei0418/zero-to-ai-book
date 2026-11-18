@@ -72,6 +72,23 @@ test('Notebook runtime account and remote-execution contracts', async (suite) =>
     assert.deepEqual(other.getSnapshot().results, {});
   });
 
+  await suite.test('a stale guest scope in a run or reset requests identity verification', async (t) => {
+    const scope = 'b'.repeat(32);
+    const kernel = new NotebookKernel('guest-switch', scope);
+    const sample = cell('guest-cell', 'linux');
+    kernel.setRemoteConfigured(true);
+    let rechecks = 0;
+    kernel.setIdentityChangeHandler(() => { rechecks++; });
+    t.mock.method(globalThis, 'fetch', async (_url, options) => {
+      assert.equal(JSON.parse(options.body).cacheScope, scope);
+      return Response.json({ code: 'identity_changed', error: '读者已变化' }, { status: 409 });
+    });
+    assert.equal((await kernel.execute(sample)).status, 'error');
+    assert.equal(rechecks, 1);
+    assert.equal(await kernel.reset(), false);
+    assert.equal(rechecks, 2);
+  });
+
   await suite.test('saved output hydrates only into its own account scope', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     t.mock.method(globalThis, 'fetch', async () => Response.json({

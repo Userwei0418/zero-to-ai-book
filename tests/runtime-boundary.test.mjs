@@ -91,3 +91,13 @@ test('identity check and stale guide request use the current account before touc
   }
   assert.equal(received.length,0);
 });
+
+test('hosted routes ignore the self-host guest header and a caller-supplied enable flag', async t => {
+  const {mf,received} = await setup(t);
+  const headers = {'x-book-guest-id':'guest:' + 'a'.repeat(48), 'book-guest-access':'1'};
+  const r = await mf.dispatchFetch('https://book.test/state?identity=1', {headers});
+  assert.deepEqual(await r.json(), {authenticated:false, cacheScope:'anonymous'});
+  const denied = await mf.dispatchFetch('https://book.test/guide', {method:'POST', headers});
+  assert.equal(denied.status, 401);
+  assert.equal(received.length, 0);
+});

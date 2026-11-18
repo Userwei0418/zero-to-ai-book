@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createReaderSession, READER_SCOPE_HINT, type ReaderSession } from '@/lib/learning-cache';
+import { createReaderSession, readReaderSnapshot, READER_SCOPE_HINT, type ReaderSession } from '@/lib/learning-cache';
 
 /** Remount the entire reader when identity changes, including its open drawers and code editors. */
 export function useReaderSession() {
@@ -10,13 +10,8 @@ export function useReaderSession() {
   const recheck = useCallback(() => { void check.current?.refresh(true); }, []);
   useEffect(() => {
     let lastScope: string | undefined;
-    const monitor = createReaderSession(async (identityOnly, signal) => {
-      const response = await fetch(identityOnly ? '/api/state?identity=1' : '/api/state', {
-        cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
-      });
-      if (!response.ok) throw new Error('暂时无法读取学习账号');
-      return response.json();
-    }, next => {
+    const monitor = createReaderSession((identityOnly, signal) =>
+      readReaderSnapshot(identityOnly, AbortSignal.any([signal, AbortSignal.timeout(10000)]), navigator.locks), next => {
       if (next) {
         if (lastScope && lastScope !== next.scope) {
           const url = new URL(window.location.href);

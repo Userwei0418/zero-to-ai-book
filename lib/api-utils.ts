@@ -3,7 +3,28 @@ import { env } from 'cloudflare:workers';
 export function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
-export function userId(request: Request) { return request.headers.get('oai-authenticated-user-id')?.slice(0, 200) || null; }
+type Reader = { id: string; kind: 'account' | 'guest' };
+export function readerIdentity(request: Request): Reader | null {
+  const account = request.headers.get('oai-authenticated-user-id')?.slice(0, 200);
+  if (account) return { id: account, kind: 'account' };
+  // Only the private Node adapter enables the ingress-verified guest header.
+  if (env.BOOK_GUEST_ACCESS !== '1') return null;
+  const guest = request.headers.get('x-book-guest-id');
+  return guest && /^guest:[0-9a-f]{48}$/.test(guest) ? { id: guest, kind: 'guest' } : null;
+}
+export function accessFlags(reader: Reader | null) {
+  const authenticated = reader?.kind === 'account';
+  return env.BOOK_GUEST_ACCESS === '1'
+    ? { authenticated, recognized: !!reader, identityKind: reader?.kind || 'anonymous' }
+    : { authenticated };
+}
+export async function readerScope(reader: Reader) {
+  return (await hash(reader.id)).slice(0, 32);
+}
+export function quotaLimit(setting: string | undefined, fallback: number, maximum: number) {
+  if (!setting || !/^\d+$/.test(setting)) return fallback;
+  return Math.min(Number(setting), maximum);
+}
 export function sameOrigin(request: Request) {
   const origin = request.headers.get('origin');
   return !!origin && origin === new URL(env.PUBLIC_ORIGIN || request.url).origin;
@@ -53,9 +74,11 @@ export async function reserveQuota(key: string, limit: number, seconds: number) 
     .bind(`${key}:${bucket}`, (bucket + 1) * seconds).first<{count: number}>();
   return !!row && row.count <= limit;
 }
-export function protectedPost(request: Request): { id: string } | Response {
-  const id = userId(request);
-  if (!id) return json({ error: '请登录后使用此功能。', code: 'sign_in_required' }, 401);
+export function protectedPost(request: Request): Reader | Response {
+  const reader = readerIdentity(request);
+  if (!reader) return env.BOOK_GUEST_ACCESS === '1'
+    ? json({ error: '请允许本站使用访客 Cookie，然后刷新书页。', code: 'reader_session_required' }, 401)
+    : json({ error: '请登录后使用此功能。', code: 'sign_in_required' }, 401);
   if (!sameOrigin(request)) return json({ error: '请求来源不匹配，请从书页重新操作。' }, 403);
-  return { id };
+  return reader;
 }

@@ -28,9 +28,10 @@ function fingerprint(text: string) {
 
 type AIGuideProps = {
   context: GuideContext;
-  authenticated: boolean;
+  canAsk: boolean;
   cacheScope: string;
   signInHref: string;
+  unavailableReason?: string;
   seenContextSignatures: Map<string, string>;
   onIdentityChange: () => void;
   history: GuideMessage[];
@@ -51,8 +52,8 @@ function readableError(status: number, payload: unknown) {
   const value = payload as { error?: string | { message?: string }; message?: string } | null;
   const detail = typeof value?.error === 'string' ? value.error : value?.error?.message || value?.message;
   const labels: Record<number, string> = {
-    401: '需要登录后才能使用 AI 导读',
-    403: '当前账号没有调用这个模型的权限',
+    401: '需要重新确认阅读身份',
+    403: '当前导读服务没有调用这个模型的权限',
     408: 'AI 请求超时',
     429: '请求过于频繁，或当前模型额度不足',
     502: '模型服务暂时没有正常响应',
@@ -86,7 +87,7 @@ function AnswerText({ text }: { text: string }) {
   })}</div>;
 }
 
-export function AIGuide({ context, authenticated, cacheScope, signInHref, seenContextSignatures, onIdentityChange, history, onHistory, onClose, onNavigate }: AIGuideProps) {
+export function AIGuide({ context, canAsk, cacheScope, signInHref, unavailableReason, seenContextSignatures, onIdentityChange, history, onHistory, onClose, onNavigate }: AIGuideProps) {
   const titleId = useId();
   const [messages, setMessages] = useState<GuideMessage[]>(history);
   const [input, setInput] = useState('');
@@ -143,7 +144,7 @@ export function AIGuide({ context, authenticated, cacheScope, signInHref, seenCo
 
   async function ask(question: string, retry = false) {
     const cleanQuestion = question.trim();
-    if (!cleanQuestion || !authenticated) return;
+    if (!cleanQuestion || !canAsk) return;
     stopRequest();
     const thisRequest = ++requestId.current;
     const controller = new AbortController();
@@ -243,13 +244,13 @@ export function AIGuide({ context, authenticated, cacheScope, signInHref, seenCo
     setInput('');
     setBusy(false);
     setLastQuestion(history.at(-1)?.role === 'user' ? history.at(-1)!.content : '');
-    if (authenticated && !contextRef.current.restore && (history.length === 0 || contextChanged)) {
+    if (canAsk && !contextRef.current.restore && (history.length === 0 || contextChanged)) {
       const timer = window.setTimeout(() => void ask(firstQuestion(contextRef.current)), 0);
       return () => window.clearTimeout(timer);
     }
     // History updates belong to this open conversation; only a new context starts a request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, authenticated]);
+  }, [signature, canAsk]);
 
   useEffect(() => {
     if (history === previousHistoryProp.current) return;
@@ -285,7 +286,7 @@ export function AIGuide({ context, authenticated, cacheScope, signInHref, seenCo
     inputRef.current?.focus();
   }
 
-  return <aside className={`guide-panel${authenticated ? '' : ' guide-panel--local'}${pinned ? ' guide-panel--pinned' : ''}${collapsed ? ' guide-panel--collapsed' : ''}`} role="dialog" aria-label={collapsed ? context.title : undefined} aria-labelledby={collapsed ? undefined : titleId} aria-modal="false">
+  return <aside className={`guide-panel${canAsk ? '' : ' guide-panel--local'}${pinned ? ' guide-panel--pinned' : ''}${collapsed ? ' guide-panel--collapsed' : ''}`} role="dialog" aria-label={collapsed ? context.title : undefined} aria-labelledby={collapsed ? undefined : titleId} aria-modal="false">
     <header className="guide-panel-header">
       <span className="guide-panel-eyebrow"><Sparkles size={15} strokeWidth={1.6} /> {collapsed ? context.title : '书旁导读'}</span>
       <div className="guide-header-actions">
@@ -308,17 +309,17 @@ export function AIGuide({ context, authenticated, cacheScope, signInHref, seenCo
         {busy && <div className="guide-loading" role="status"><LoaderCircle className="guide-spin" size={16} /><span>{draft ? '正在回答…' : '正在阅读本章…'}</span><button type="button" onClick={cancel}><Square size={11} /> 停止</button></div>}
         {error && <div className="guide-error" role="alert"><p>{error}</p><button type="button" onClick={() => void ask(lastQuestion || firstQuestion(context), true)}><RotateCcw size={13} /> 重新请求</button></div>}
         {notice && <div className="guide-notice" role="status"><Check size={13} /><span>{notice}</span></div>}
-        {authenticated && !busy && !error && !notice && messages.at(-1)?.role === 'user' && lastQuestion && <button className="guide-resume" type="button" onClick={() => void ask(lastQuestion, true)}><RotateCcw size={13} /> 继续上次提问</button>}
-        {authenticated && !messages.length && !busy && !error && <p className="guide-empty">从一个具体问题开始，也可以请我带你读这一章。</p>}
+        {canAsk && !busy && !error && !notice && messages.at(-1)?.role === 'user' && lastQuestion && <button className="guide-resume" type="button" onClick={() => void ask(lastQuestion, true)}><RotateCcw size={13} /> 继续上次提问</button>}
+        {canAsk && !messages.length && !busy && !error && <p className="guide-empty">从一个具体问题开始，也可以请我带你读这一章。</p>}
       </div>
     </div>
-    {authenticated ? <footer className="guide-panel-footer">
+    {canAsk ? <footer className="guide-panel-footer">
       <div className="guide-followups"><button type="button" disabled={busy} onClick={() => void ask('请说得更简单一些，尽量只用本章已经出现的概念。')}>说得更简单</button><button type="button" disabled={busy} onClick={() => void ask('请给我一个贴近生活的小例子，并联系当前章节说明。')}>举个例子</button>{context.code && <button type="button" disabled={busy} onClick={() => void ask('请结合我这段代码，具体说明这个概念。')}>结合代码</button>}</div>
       <form className="guide-input-wrap" onSubmit={event => { event.preventDefault(); if (!busy) void ask(input); }}>
         <textarea ref={inputRef} value={input} onChange={event => setInput(event.target.value)} rows={2} maxLength={1800} placeholder="还有哪里没想明白？" aria-label="向 AI 导读继续提问" onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!busy) void ask(input); } }} />
         <button className="guide-send" type="submit" disabled={busy || !input.trim()} aria-label="发送问题"><ArrowUp size={18} /></button>
       </form>
       <div className="guide-footer-note"><span>可对照书中原文核实</span>{messages.length > 0 && <button type="button" onClick={clearConversation} aria-label="清空当前导读对话" title="清空这段对话"><Trash2 size={12} /></button>}</div>
-    </footer> : <footer className="guide-panel-footer guide-local-note"><a href={signInHref}>登录后向 AI 提问</a></footer>}
+    </footer> : <footer className="guide-panel-footer guide-local-note">{unavailableReason ? <span>{unavailableReason}</span> : <a href={signInHref}>登录后向 AI 提问</a>}</footer>}
   </aside>;
 }

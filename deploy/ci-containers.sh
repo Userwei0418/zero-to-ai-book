@@ -121,6 +121,7 @@ printf '%s\n' "$BOOK_TEST_PASSWORD_A" | "${compose[@]}" exec -T identity node de
 printf '%s\n' "$BOOK_TEST_PASSWORD_B" | "${compose[@]}" exec -T identity node deploy/identity/provision.mjs "$BOOK_TEST_READER_B"
 export BOOK_TEST_PASSWORD_A BOOK_TEST_PASSWORD_B
 node deploy/verify-readers.mjs --sandbox
+node deploy/verify-readers.mjs --guests --sandbox
 "${compose[@]}" exec -T sandbox-gateway python /opt/gateway/smoke_test.py
 remaining=$("${learner[@]}" ps --all --quiet --filter label=ai-book.sandbox.managed=true)
 test -z "$remaining"

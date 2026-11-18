@@ -1,26 +1,25 @@
 import { env } from 'cloudflare:workers';
-import { boundedJson, hash, json, protectedPost, reserveQuota, userId } from '@/lib/api-utils';
+import { accessFlags, boundedJson, json, protectedPost, readerIdentity, readerScope, reserveQuota } from '@/lib/api-utils';
 import { validateLearningState } from '@/lib/learning-state-validation';
 import { ZodError } from 'zod';
 
 export async function GET(request: Request) {
-  const id = userId(request);
-  if (new URL(request.url).searchParams.get('identity') === '1') {
-    return json({ authenticated: !!id, cacheScope: id ? (await hash(id)).slice(0,32) : 'anonymous' });
-  }
-  if (!id) return json({ state: {}, revision: 0, authenticated: false, cacheScope: 'anonymous' });
-  const cacheScope = (await hash(id)).slice(0,32);
-  if (!env.DB) return json({ error: '云端保存暂不可用，当前修改请保留在此设备。', authenticated: true, cacheScope }, 503);
-  const row = await env.DB.prepare('SELECT state, revision, updated_at FROM learning_state WHERE user_id = ?').bind(id).first<{state: string; revision: number; updated_at: number}>();
-  return json({ state: row ? JSON.parse(row.state) : {}, revision: row?.revision ?? 0, updatedAt: row?.updated_at ?? null, authenticated: true, cacheScope });
+  const reader = readerIdentity(request);
+  const flags = accessFlags(reader);
+  const cacheScope = reader ? await readerScope(reader) : 'anonymous';
+  if (new URL(request.url).searchParams.get('identity') === '1') return json({ ...flags, cacheScope });
+  if (!reader) return json({ state: {}, revision: 0, ...flags, cacheScope });
+  if (!env.DB) return json({ error: '云端保存暂不可用，当前修改请保留在此设备。', ...flags, cacheScope }, 503);
+  const row = await env.DB.prepare('SELECT state, revision, updated_at FROM learning_state WHERE user_id = ?').bind(reader.id).first<{state: string; revision: number; updated_at: number}>();
+  return json({ state: row ? JSON.parse(row.state) : {}, revision: row?.revision ?? 0, updatedAt: row?.updated_at ?? null, ...flags, cacheScope });
 }
 export async function PUT(request: Request) {
   const access = protectedPost(request); if (access instanceof Response) return access;
   if (!env.DB) return json({ error: '云端保存暂不可用，请保留本地修改。' }, 503);
   try {
     const body = await boundedJson(request, 2 * 1024 * 1024);
-    const expectedScope = (await hash(access.id)).slice(0,32);
-    if (body.cacheScope !== expectedScope) return json({error:'登录账号已变化，请重新载入当前账号的学习记录。',code:'identity_changed'},409);
+    const expectedScope = await readerScope(access);
+    if (body.cacheScope !== expectedScope) return json({error:'当前读者已变化，请重新载入学习记录。',code:'identity_changed'},409);
     const revision = body.revision;
     if (!Number.isSafeInteger(revision) || Number(revision) < 0 || !body.state || typeof body.state !== 'object' || Array.isArray(body.state)) return json({ error: '学习记录格式不正确。' }, 400);
     if (!(await reserveQuota(`save:${access.id}`, 120, 60))) return json({error:'保存较为频繁，请稍后重试。'},429);
@@ -43,7 +42,7 @@ export async function PUT(request: Request) {
 }
 export async function DELETE(request: Request) {
   const access = protectedPost(request); if (access instanceof Response) return access;
-  if(request.headers.get('x-learning-scope') !== (await hash(access.id)).slice(0,32)) return json({error:'登录账号已变化，请刷新后再删除记录。',code:'identity_changed'},409);
+  if(request.headers.get('x-learning-scope') !== await readerScope(access)) return json({error:'当前读者已变化，请刷新后再删除记录。',code:'identity_changed'},409);
   if (!env.DB) return json({error:'云端保存暂不可用。'},503);
   await env.DB.prepare('DELETE FROM learning_state WHERE user_id = ?').bind(access.id).run();
   await env.DB.prepare('DELETE FROM guide_cache WHERE user_id = ?').bind(access.id).run();

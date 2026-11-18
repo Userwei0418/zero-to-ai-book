@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createReaderSession, saveLearningCache, selectLearningSnapshot } from '../lib/learning-cache.ts';
+import { createReaderSession, readReaderSnapshot, saveLearningCache, selectLearningSnapshot } from '../lib/learning-cache.ts';
 
 test('edited code, predictions and reading position survive an anonymous reload', () => {
   const stored = new Map();
@@ -86,4 +86,93 @@ test('a late private snapshot cannot replace the session after another tab signs
   resolveLate(snapshot(accountA));
   await oldRequest;
   assert.deepEqual(shown, [accountA, undefined, 'anonymous']);
+});
+
+
+const selfHostedAnonymous = { authenticated: false, identityKind: 'anonymous', recognized: false, cacheScope: 'anonymous', revision: 0 };
+const guest = scope => ({ authenticated: false, identityKind: 'guest', recognized: true, cacheScope: scope, revision: 3, state: { anchor: 'guest-page' } });
+
+test('guest records use their own revision, restore edits and surface sync conflicts', () => {
+  const server = guest(accountB);
+  const draft = { revision: 3, dirty: true, state: { codes: { cell: 'mine' } }, savedAt: 'now' };
+  assert.deepEqual(selectLearningSnapshot(server, null), { state: server.state, revision: 3, mode: 'cloud' });
+  assert.equal(selectLearningSnapshot(server, draft).mode, 'pending');
+  assert.equal(selectLearningSnapshot(server, { ...draft, revision: 2 }).mode, 'conflict');
+});
+
+test('malformed guest scopes and unrecognized private responses cannot open cached records', async () => {
+  const rejected = [
+    { ...guest(accountA), recognized: false },
+    { ...guest(accountA), cacheScope: 'anonymous' },
+    { ...guest(accountA), cacheScope: 'not-a-scope' },
+    { ...guest(accountA), authenticated: true },
+    { ...selfHostedAnonymous, cacheScope: accountA },
+  ];
+  for (const response of rejected) {
+    let shown;
+    const tracker = createReaderSession(async () => response, session => { shown = session; }, () => {});
+    await tracker.refresh();
+    assert.equal(shown.scope, 'anonymous');
+    assert.equal(shown.verified, false);
+    assert.equal(shown.snapshot.state, undefined);
+  }
+});
+
+test('only the credentialed confirmation opens a new guest, including concurrent first visits', async () => {
+  let cookie = false, queued = Promise.resolve();
+  const calls = [];
+  const locks = { request(name, {signal}, work) {
+    assert.equal(name, 'ai-book-reader-bootstrap');
+    signal.throwIfAborted();
+    const next = queued.then(work);
+    queued = next.catch(() => {});
+    return next;
+  }};
+  const request = async (url, options) => {
+    assert.equal(url, '/api/state');
+    assert.equal(options.credentials, 'same-origin');
+    const bootstrap = !!options.headers?.['X-Book-Visitor-Bootstrap'];
+    calls.push(bootstrap);
+    if (!cookie) {
+      assert.equal(bootstrap, true);
+      await new Promise(resolve => setImmediate(resolve));
+      cookie = true;
+      return Response.json(selfHostedAnonymous, { headers: { 'X-Book-Guest-Bootstrap': '1' } });
+    }
+    return Response.json(guest(accountB));
+  };
+  const read = () => readReaderSnapshot(false, new AbortController().signal, locks, request);
+  const result = await Promise.all([read(), read()]);
+  assert.deepEqual(calls, [true, false, true]);
+  assert.deepEqual(result, [guest(accountB), guest(accountB)]);
+});
+
+test('blocked cookies get one read-only retry then local reading, hosted readers get just one request', async () => {
+  for (const issued of [true, false]) {
+    const calls = [];
+    const request = async (_, options) => {
+      const bootstrap = !!options.headers?.['X-Book-Visitor-Bootstrap'];
+      calls.push(bootstrap);
+      return Response.json(issued ? selfHostedAnonymous : snapshot('anonymous'), {
+        headers: issued && bootstrap ? { 'X-Book-Guest-Bootstrap': '1' } : {},
+      });
+    };
+    const tracker = createReaderSession((identityOnly, signal) => readReaderSnapshot(identityOnly, signal, undefined, request),
+      session => { assert.equal(session.scope, 'anonymous'); assert.equal(!!session.snapshot.guestCookieBlocked, issued); }, () => {});
+    await tracker.refresh();
+    await tracker.refresh(); // ordinary focus poll is read-only, even if cookies are disabled
+    assert.deepEqual(calls, issued ? [true, false, false] : [true, false]);
+  }
+});
+
+test('cleared cookies release the guest before another guest or account is shown', async () => {
+  const shown = [];
+  let full = guest(accountA), probe = selfHostedAnonymous;
+  const tracker = createReaderSession(async identityOnly => identityOnly ? probe : full, s => shown.push(s?.scope), () => {});
+  await tracker.refresh();
+  full = guest(accountB);
+  await tracker.refresh();
+  full = probe = { ...snapshot(accountA), identityKind: 'account', recognized: true };
+  await tracker.refresh();
+  assert.deepEqual(shown, [accountA, undefined, accountB, undefined, accountA]);
 });

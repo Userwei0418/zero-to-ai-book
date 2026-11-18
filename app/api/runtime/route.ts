@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { boundedJson, hash, json, protectedPost, reserveQuota, responseJson } from '@/lib/api-utils';
+import { boundedJson, json, protectedPost, quotaLimit, readerScope, reserveQuota, responseJson } from '@/lib/api-utils';
 
 const identifier = /^[a-zA-Z0-9_-]{1,128}$/;
 const privateGateway = 'http://sandbox-gateway:8090';
@@ -16,8 +16,8 @@ export async function POST(request: Request) {
     return json({ status: 'error', error: '实验请求须为 JSON，大小上限为 2 MiB。' }, 400);
   }
 
-  if (body.cacheScope !== (await hash(access.id)).slice(0, 32)) {
-    return json({ status: 'error', error: '登录账号已变化，请重新载入实验环境。', code: 'identity_changed' }, 409);
+  if (body.cacheScope !== await readerScope(access)) {
+    return json({ status: 'error', error: '当前读者已变化，请重新载入实验环境。', code: 'identity_changed' }, 409);
   }
   const action = body.action;
   if (action !== 'execute' && action !== 'reset' && action !== 'interrupt' && action !== 'status') {
@@ -55,6 +55,10 @@ export async function POST(request: Request) {
   try {
     if (action === 'execute' && !(await reserveQuota(`runtime:${access.id}`, 12, 60))) {
       return json({ status: 'unavailable', error: '运行请求过于频繁，请稍后重试。' }, 429);
+    }
+    if (action === 'execute' && access.kind === 'guest' &&
+        !await reserveQuota('guest-runtime-site', quotaLimit(env.GUEST_RUNTIME_SITE_DAILY_LIMIT, 60, 10000), 86400)) {
+      return json({ status: 'unavailable', error: '今天的访客远程运行次数已用完。浏览器实验仍可继续。' }, 429);
     }
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(access.id));

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LearningState } from '@/lib/course-types';
 import { guideMessage } from '@/lib/guide-message';
-import { saveLearningCache, selectLearningSnapshot, type LearningCache as Cache, type ReaderSession } from '@/lib/learning-cache';
+import { hasServerRecords, saveLearningCache, selectLearningSnapshot, type LearningCache as Cache, type ReaderSession } from '@/lib/learning-cache';
 
 const CACHE_KEY = 'ai-book-learning-v1';
 export type SaveStatus = 'loading' | 'saved' | 'saving' | 'local' | 'conflict' | 'unsaved';
@@ -42,9 +42,19 @@ export function normalizeLearningState(value: unknown): LearningState {
   return output;
 }
 
+export function readLocalDraft(): LearningState | null {
+  try {
+    const local = JSON.parse(localStorage.getItem(`${CACHE_KEY}:anonymous`) || 'null') as Cache | null;
+    if (local?.state && Object.keys(local.state).length) return normalizeLearningState(local.state);
+  } catch { /* Browsers can block storage. */ }
+  return null;
+}
+
 export function useLearningStore(session: ReaderSession | null, recheck: () => void) {
   const cacheScope = session?.scope || 'pending';
   const authenticated = session?.snapshot.authenticated === true;
+  const canUseServer = !!session?.verified && hasServerRecords(session.snapshot);
+  const guest = canUseServer && session?.snapshot.identityKind === 'guest';
   const initial = useRef(session);
   const [state, setState] = useState<LearningState>(defaults);
   const [ready, setReady] = useState(false);
@@ -97,15 +107,15 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
     version.current++;
     setState(current.current);
     if (cache(true) && !conflicted.current) {
-      setStatus(authenticated ? 'saving' : 'local');
+      setStatus(canUseServer ? 'saving' : 'local');
       setError('');
     }
     setChange(n => n + 1);
-  }, [authenticated, cache]);
+  }, [canUseServer, cache]);
 
   const sync = useCallback(async () => {
     const signal = lifetime.current?.signal;
-    if (!signal || signal.aborted || !authenticated || saving.current || conflicted.current || deleting.current) return;
+    if (!signal || signal.aborted || !canUseServer || saving.current || conflicted.current || deleting.current) return;
     saving.current = true;
     const sentVersion = version.current;
     setStatus('saving');
@@ -121,7 +131,7 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
         remote.current = { state: data.state || {}, revision: data.revision };
         conflicted.current = true;
         setStatus('conflict');
-        setError('另一个设备更新了学习记录。两份记录均已保留，请选择要继续的记录。');
+        setError('另一个页面更新了学习记录。两份记录均已保留，请选择要继续的记录。');
         return;
       }
       if (!response.ok) throw new Error(data.error || '服务器保存失败');
@@ -134,7 +144,7 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
         setError(`${cause instanceof Error ? cause.message : '连接中断'}；已保留本机恢复副本。`);
       }
     } finally { saving.current = false; }
-  }, [cacheScope, authenticated, recheck, cache]);
+  }, [cacheScope, canUseServer, recheck, cache]);
 
   useEffect(() => {
     if (!ready || !change || conflicted.current) return;
@@ -166,7 +176,7 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
     try {
       while (saving.current && !signal.aborted) await new Promise(resolve => setTimeout(resolve, 50));
       if (signal.aborted) return false;
-      if (authenticated) {
+      if (canUseServer) {
         const response = await fetch('/api/state', { method: 'DELETE', signal, headers: { 'X-Learning-Scope': cacheScope } });
         if (response.status === 401 || response.status === 409) { recheck(); return false; }
         if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || '服务器删除失败，请稍后重试'); }
@@ -182,7 +192,7 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
       const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index));
       keys.forEach(item => { if (item && (item === key || item.startsWith(`${key}:conflict-`))) localStorage.removeItem(item); });
       setError('');
-      setStatus(authenticated ? 'saved' : 'local');
+      setStatus(canUseServer ? 'saved' : 'local');
       return true;
     } catch (cause) {
       if (!signal.aborted) {
@@ -191,7 +201,7 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
       }
       return false;
     } finally { deleting.current = false; }
-  }, [authenticated, cacheScope, recheck]);
+  }, [canUseServer, cacheScope, recheck]);
 
-  return { state, update, ready, status, error, authenticated, cacheScope, sync, resolveConflict, deleteRecords };
+  return { state, update, ready, status, error, authenticated, canUseServer, guest, cacheScope, sync, resolveConflict, deleteRecords };
 }

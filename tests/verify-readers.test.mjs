@@ -15,7 +15,7 @@ import { provision } from '../deploy/identity/accounts.mjs';
 import { createIdentityServer } from '../deploy/identity/server.mjs';
 import { migrate } from '../deploy/web/migrate.mjs';
 import { openDatabase } from '../deploy/web/sqlite.mjs';
-import { verifyReaders } from '../deploy/verify-readers.mjs';
+import { verifyReaders, verifyVisitors } from '../deploy/verify-readers.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const readers = ['reader-a', 'reader-b'].map(username => ({ username, password: randomUUID() }));
@@ -33,10 +33,11 @@ async function close(server) {
 test('checks require two distinct synthetic readers and HTTPS before sending credentials', async () => {
   const calls = { fetchImpl: () => assert.fail('unexpected network request') };
   await assert.rejects(verifyReaders({ ...calls, origin: 'http://book.example', readers }), /HTTPS/);
+  await assert.rejects(verifyVisitors({ ...calls, origin: 'http://book.example' }), /HTTPS/);
   await assert.rejects(verifyReaders({ ...calls, origin: 'https://book.example', readers: [readers[0], readers[0]] }), /distinct/);
 });
 
-test('normal HTTPS reader flows use real auth and SQLite; a failing sandbox check cleans up both readers', async t => {
+test('HTTPS guest and account flows isolate real SQLite state and clean up after a sandbox outage', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'book-acceptance-'));
   const certFile = join(dir, 'cert.pem'), keyFile = join(dir, 'key.pem');
   let app, ingress, identity, dispatcher, db;
@@ -59,7 +60,12 @@ test('normal HTTPS reader flows use real auth and SQLite; a failing sandbox chec
     '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', keyFile, '-out', certFile], { stdio:'ignore' });
   const cert = await readFile(certFile);
   dispatcher = new Agent({ connect: { ca: cert } });
-  ingress = https.createServer({ cert, key: await readFile(keyFile) }, (req, res) => identity.emit('request', req, res));
+  const signInPaths = new Set(['/signin-with-chatgpt', '/signout-with-chatgpt']);
+  let accountRequests = 0;
+  ingress = https.createServer({ cert, key: await readFile(keyFile) }, (req, res) => {
+    if (signInPaths.has(req.url.split('?')[0])) accountRequests++;
+    identity.emit('request', req, res);
+  });
   const origin = 'https://127.0.0.1:' + await listen(ingress);
   process.env.PUBLIC_ORIGIN = origin;
   process.env.SQLITE_PATH = join(dir, 'learning.sqlite');
@@ -77,12 +83,20 @@ test('normal HTTPS reader flows use real auth and SQLite; a failing sandbox chec
     db.prepare('INSERT INTO learning_state (user_id,state,revision,updated_at) VALUES (?,?,1,0)').run(id, JSON.stringify(state));
     saved.push({ id, state });
   }
-  let sandboxRequests = 0;
+  const sandboxActions = [];
+  let failExecution = false;
   app = http.createServer(async (req, res) => {
-    if (req.url === '/api/runtime') { sandboxRequests++; res.writeHead(503).end(); return; }
-    if (new URL(req.url, origin).pathname !== '/api/state') { res.writeHead(404).end(); return; }
     const chunks = [];
     for await (const bytes of req) chunks.push(bytes);
+    if (req.url === '/api/runtime') {
+      const { action } = JSON.parse(Buffer.concat(chunks));
+      sandboxActions.push(action);
+      if (failExecution && (action === 'status' || action === 'reset')) {
+        res.writeHead(200, { 'content-type':'application/json' }).end(JSON.stringify({ exists:false, runtime:'gvisor' }));
+      } else res.writeHead(503).end();
+      return;
+    }
+    if (new URL(req.url, origin).pathname !== '/api/state') { res.writeHead(404).end(); return; }
     const request = new Request(origin + req.url, { method: req.method, headers: req.headers,
       ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
     const reply = await stateRoute[req.method](request);
@@ -93,6 +107,7 @@ test('normal HTTPS reader flows use real auth and SQLite; a failing sandbox chec
   const options = { readers, origin, fetchImpl:(url, args) => fetch(url, { ...args, dispatcher }), report:line => messages.push(line) };
   const assertClean = async () => {
     assert.deepEqual(await readdir(join(accountDir, 'sessions')), []);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM learning_state').get().n, saved.length);
     for (const entry of saved) {
       const row = db.prepare('SELECT state FROM learning_state WHERE user_id=?').get(entry.id);
       assert.deepEqual(JSON.parse(row.state), entry.state);
@@ -100,9 +115,19 @@ test('normal HTTPS reader flows use real auth and SQLite; a failing sandbox chec
   };
   await verifyReaders(options);
   await assertClean();
-  assert.equal(sandboxRequests, 0);
+  assert.deepEqual(sandboxActions, []);
   await assert.rejects(verifyReaders({ ...options, sandbox:true }), /sandbox status failed \(HTTP 503\)/);
   await assertClean();
-  assert.equal(sandboxRequests, 1);
+  assert.deepEqual(sandboxActions, ['status']);
+  const accountRequestsBefore = accountRequests;
+  assert.ok(accountRequestsBefore > 0);
+  const guestOptions = { origin, fetchImpl: options.fetchImpl, report: options.report };
+  await verifyVisitors(guestOptions);
+  await assertClean();
+  failExecution = true;
+  await assert.rejects(verifyVisitors({ ...guestOptions, sandbox:true }), /sandbox execute failed \(HTTP 503\)/);
+  await assertClean();
+  assert.deepEqual(sandboxActions, ['status', 'status', 'execute', 'reset', 'status']);
+  assert.equal(accountRequests, accountRequestsBefore, 'Guest verification touched a login/logout endpoint');
   assert.ok(messages.every(line => readers.every(r => !line.includes(r.username) && !line.includes(r.password))));
 });

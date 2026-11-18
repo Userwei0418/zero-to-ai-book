@@ -259,6 +259,7 @@ export class NotebookKernel {
   private current?: { id: string; cellId: string; finish: (result: CellResult) => void; timer: ReturnType<typeof setTimeout>; events: number; runtime: RuntimeKind };
   private controller?: AbortController;
   private generation = 0;
+  private onIdentityChange?: () => void;
   private released = false;
   private hydrated = false;
   private migratedLegacyKey?: string;
@@ -348,6 +349,7 @@ export class NotebookKernel {
     this.refreshEnvironment();
   }
   getCells() { return [...this.cells.values()]; }
+  setIdentityChangeHandler(handler?: () => void) { this.onIdentityChange = handler; }
   setRemoteConfigured(configured: boolean | undefined, gpuConfigured?: boolean) {
     if (configured === this.remoteConfigured && gpuConfigured === this.gpuConfigured) return;
     this.remoteConfigured = configured;
@@ -542,6 +544,7 @@ export class NotebookKernel {
         const parsed = await response.json().catch(() => ({ error: `远程运行服务响应异常（${response.status}）。` }));
         const data: Record<string, unknown> = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
         if (generation !== this.generation || !this.isCurrent(id)) return pending;
+        if (response.status === 401 || data.code === 'identity_changed') this.onIdentityChange?.();
         const images = remoteImages(data.images);
         this.complete({
           status: response.ok && data.status === 'ok' ? 'ok' : data.status === 'interrupted' || data.status === 'timeout' ? 'interrupted' : 'error',
@@ -579,8 +582,11 @@ export class NotebookKernel {
   private async remoteAction(action: 'reset' | 'interrupt', runtime: RuntimeKind = 'linux') {
     try {
       const response = await fetch('/api/runtime', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, chapterId: this.chapterId, cacheScope: this.cacheScope, runtime }), signal: AbortSignal.timeout(10000) });
-      if (!response.ok) return false;
-      const data = await response.json() as { status?: string };
+      const data = await response.json() as { status?: string; code?: string };
+      if (!response.ok) {
+        if (!this.released && (response.status === 401 || data.code === 'identity_changed')) this.onIdentityChange?.();
+        return false;
+      }
       return ['ok', 'idle', 'interrupted'].includes(data.status || '');
     } catch { return false; }
   }

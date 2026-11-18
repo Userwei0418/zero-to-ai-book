@@ -6,6 +6,8 @@ import { promisify } from 'node:util';
 const derive = promisify(scrypt);
 const storageOptions = { mode: 0o600, flag: 'wx' };
 export const sessionLifetime = 7 * 86400;
+export const guestLifetime = 180 * 86400;
+export const guestRenewWindow = 30 * 86400;
 const hashOptions = { N: 131072, r: 8, p: 1, maxmem: 192 * 1024 * 1024 };
 const notFound = (err) => err.code === 'ENOENT';
 export const validName = (name) => typeof name === 'string' && /^[a-z0-9][a-z0-9_-]{2,39}$/.test(name);
@@ -73,6 +75,24 @@ export async function verifyLogin(dir, name, password) {
 
 function signature(key, body) {
   return createHmac('sha256', key).update(body).digest('base64url');
+}
+
+// Guest credentials and account sessions use distinct MAC inputs even on the same installation.
+export function issueGuestToken(key, verifiedGuest = null, now = Math.floor(Date.now() / 1000)) {
+  const id = verifiedGuest?.id ?? randomBytes(24).toString('hex');
+  const body = id + '.' + (now + guestLifetime);
+  return body + '.' + signature(key, 'book-guest-v1\0' + body);
+}
+
+export function readGuestToken(key, token, now = Math.floor(Date.now() / 1000)) {
+  if (typeof token !== 'string' || token.length > 105) return null;
+  const match = /^([0-9a-f]{48})\.([0-9]{1,12})\.([a-zA-Z0-9_-]{43})$/.exec(token);
+  if (!match) return null;
+  const [, id, expires, mac] = match;
+  const expected = signature(key, 'book-guest-v1\0' + id + '.' + expires);
+  const expiresAt = Number(expires);
+  if (expiresAt <= now || !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
+  return { id, expiresAt };
 }
 
 export async function openSession(dir, key, user) {

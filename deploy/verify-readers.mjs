@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 const signIn = '/signin-with-chatgpt';
 const signOut = '/signout-with-chatgpt';
 const cookieName = '__Host-book_session';
+const guestCookie = '__Host-book_guest';
 class CheckFailure extends Error {}
 
 function check(condition, message) {
@@ -15,14 +16,29 @@ async function json(reply, label) {
   catch { throw new CheckFailure(label + ' returned invalid JSON'); }
 }
 
-function client(origin, fetchImpl) {
-  let cookie = '';
+function validateOrigin(origin) {
+  let parsed;
+  try { parsed = new URL(origin); } catch { throw new CheckFailure('Set BOOK_PUBLIC_ORIGIN to the canonical public HTTPS origin'); }
+  check(parsed.protocol === 'https:' && origin === parsed.origin, 'BOOK_PUBLIC_ORIGIN must be a canonical HTTPS origin with no path or credentials');
+}
+
+function client(origin, fetchImpl, cookies = new Map()) {
   async function request(path, options = {}) {
     const headers = new Headers(options.headers);
-    if (cookie) headers.set('cookie', cookie);
+    if (!headers.has('user-agent')) headers.set('user-agent', 'BookReaderVerification/1.0');
+    headers.set('sec-fetch-site', 'same-origin');
+    if (cookies.size) headers.set('cookie', [...cookies].map(([name, value]) => name + '=' + value).join('; '));
     if (options.method) headers.set('origin', origin);
     try {
-      return await fetchImpl(origin + path, { ...options, headers, redirect: 'manual', signal: AbortSignal.timeout(110000) });
+      const reply = await fetchImpl(origin + path, { ...options, headers, redirect: 'manual', signal: AbortSignal.timeout(110000) });
+      // Browsers retain both the guest cookie and an optional signed-in reader cookie.
+      for (const line of reply.headers.getSetCookie()) {
+        const match = line.match(/^(__Host-book_[A-Za-z0-9_-]+)=([^;]*)/);
+        if (!match) continue;
+        if (!match[2] || /;\s*max-age=0(?:;|$)/i.test(line)) cookies.delete(match[1]);
+        else cookies.set(match[1], match[2]);
+      }
+      return reply;
     } catch { throw new CheckFailure('Could not reach ' + path.split('?')[0] + ' before the deadline'); }
   }
 
@@ -35,18 +51,15 @@ function client(origin, fetchImpl) {
     const reply = await request(path, { method: 'POST', body: new URLSearchParams({ ...fields, return_to: '/' }) });
     const line = reply.headers.getSetCookie().find(item => item.startsWith(cookieName + '='));
     const pair = line?.split(';')[0];
-    // Keep the server-issued cookie for teardown even when a later acceptance check fails.
-    if (path === signIn && pair) cookie = pair;
     check(reply.status === 303 && reply.headers.get('location') === '/', 'Login/logout form submission failed (HTTP ' + reply.status + ')');
     const flags = (line || '').split(';').slice(1).map(item => item.trim().toLowerCase());
     check(flags.includes('secure') && flags.includes('httponly') && flags.includes('path=/') && flags.includes('samesite=lax'), 'Session cookie flags missing');
     if (path === signOut) {
       check(pair === cookieName + '=' && flags.includes('max-age=0'), 'Logout did not clear the session cookie');
-      cookie = '';
     } else check(pair?.length > cookieName.length + 1, 'Login did not establish a session');
   }
-  async function state(identityOnly = false) {
-    const reply = await request(identityOnly ? '/api/state?identity=1' : '/api/state');
+  async function state(identityOnly = false, headers) {
+    const reply = await request(identityOnly ? '/api/state?identity=1' : '/api/state', { headers });
     check(reply.ok, 'Reading learning state failed (HTTP ' + reply.status + ')');
     return json(reply, '/api/state');
   }
@@ -54,7 +67,8 @@ function client(origin, fetchImpl) {
     return request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   }
   return {
-    login: reader => form(signIn, reader), logout: () => cookie ? form(signOut, {}) : Promise.resolve(), state, post,
+    login: reader => form(signIn, reader), logout: () => cookies.has(cookieName) ? form(signOut, {}) : Promise.resolve(), state, post, request,
+    copy: () => client(origin, fetchImpl, new Map(cookies)), clearCookies: () => cookies.clear(),
   };
 }
 
@@ -62,8 +76,9 @@ function client(origin, fetchImpl) {
 // other edits, and drop an empty predictions map only if this test introduced the map.
 async function mark(account, key, value, remove = false) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const { authenticated, cacheScope, state, revision } = await account.http.state();
-    check(authenticated && cacheScope === account.scope, 'Reader changed before saving test state');
+    const { authenticated, identityKind, cacheScope, state, revision } = await account.http.state();
+    const expectedReader = account.guest ? authenticated === false && identityKind === 'guest' : authenticated === true;
+    check(expectedReader && cacheScope === account.scope, 'Reader changed before saving test state');
     const predictions = { ...state.predictions };
     if (remove) {
       if (predictions[key] !== value) return;
@@ -116,9 +131,7 @@ async function verifySandbox(accounts, chapter) {
 }
 
 export async function verifyReaders({ origin, readers, sandbox = false, fetchImpl = fetch, report = console.log }) {
-  let parsed;
-  try { parsed = new URL(origin); } catch { throw new CheckFailure('Set BOOK_PUBLIC_ORIGIN to the canonical public HTTPS origin'); }
-  check(parsed.protocol === 'https:' && origin === parsed.origin, 'BOOK_PUBLIC_ORIGIN must be a canonical HTTPS origin with no path or credentials');
+  validateOrigin(origin);
   check(Array.isArray(readers) && readers.length === 2 && readers.every(r => r && typeof r.username === 'string' &&
     /^[a-z0-9][a-z0-9_-]{2,39}$/.test(r.username) && typeof r.password === 'string' && Buffer.byteLength(r.password) >= 12 &&
     Buffer.byteLength(r.password) <= 256) && readers[0].username !== readers[1].username, 'Supply two distinct, dedicated test reader logins');
@@ -180,6 +193,97 @@ export async function verifyReaders({ origin, readers, sandbox = false, fetchImp
   report('PASS · Temporary reader records and login sessions cleaned up.');
 }
 
+async function startVisitor(http) {
+  // The first GET requests the cookie. Only its return on the second GET proves
+  // the browser accepts cookies and can safely address a private learning scope.
+  const headers = { 'x-book-visitor-bootstrap': '1' };
+  const first = await http.request('/api/state?identity=1', { headers });
+  check(first.ok && first.headers.get('x-book-guest-bootstrap') === '1', 'Missing first-party visitor bootstrap');
+  const firstState = await json(first, '/api/state');
+  check(firstState.authenticated === false && firstState.cacheScope === 'anonymous', 'Bootstrap exposed a learning scope before cookie confirmation');
+  const issued = first.headers.getSetCookie().find(line => line.startsWith(guestCookie + '='));
+  const flags = (issued || '').split(';').slice(1).map(item => item.trim().toLowerCase());
+  check(flags.includes('secure') && flags.includes('httponly') && flags.includes('path=/') && flags.includes('samesite=lax') &&
+    !flags.some(flag => flag.startsWith('domain=')), 'Visitor cookie is missing required host-only flags');
+  const saved = await http.state(false, headers);
+  check(saved.authenticated === false && saved.identityKind === 'guest' && /^[a-f0-9]{32}$/.test(saved.cacheScope),
+    'Returning the cookie did not establish a private visitor scope');
+  check(saved.revision === 0 && Object.keys(saved.state).length === 0, 'A fresh visitor inherited existing records');
+  return saved.cacheScope;
+}
+
+async function removeVisitorRecord(visitor, key) {
+  const snapshot = await visitor.http.state();
+  check(snapshot.identityKind === 'guest' && snapshot.authenticated === false && snapshot.cacheScope === visitor.scope,
+    'Refusing to clean a different visitor');
+  if (snapshot.revision === 0) return;
+  const { predictions, ...other } = snapshot.state;
+  if (predictions?.[key] === visitor.marker && Object.keys(predictions).length === 1 && !Object.keys(other).length) {
+    // Only a newly issued guest jar with this test's sole record is eligible for deletion.
+    const reply = await visitor.http.request('/api/state', { method: 'DELETE', headers: { 'x-learning-scope': visitor.scope } });
+    check(reply.ok && (await visitor.http.state()).revision === 0, 'Guest state cleanup failed');
+  } else {
+    await mark(visitor, key, visitor.marker, true);
+  }
+}
+
+export async function verifyVisitors({ origin, sandbox = false, fetchImpl = fetch, report = console.log }) {
+  validateOrigin(origin);
+  const key = 'acceptance-' + randomUUID();
+  const visitors = Array.from({ length: 2 }, () => ({ guest: true, marker: randomUUID(), http: client(origin, fetchImpl) }));
+  let failure;
+  try {
+    for (const visitor of visitors) visitor.scope = await startVisitor(visitor.http);
+    const [a, b] = visitors;
+    check(a.scope !== b.scope, 'Independent guest cookies shared a learning scope');
+    for (const visitor of visitors) {
+      visitor.stateStarted = true;
+      await mark(visitor, key, visitor.marker);
+    }
+    for (const visitor of visitors) {
+      const saved = await visitor.http.state();
+      check(saved.cacheScope === visitor.scope && saved.state.predictions?.[key] === visitor.marker,
+        'Reload did not recover only the current visitor’s saved learning record');
+    }
+    const browserUpdate = await a.http.state(true, { 'user-agent': 'BookReaderVerification/2.0' });
+    check(browserUpdate.identityKind === 'guest' && browserUpdate.cacheScope === a.scope, 'Changing the user agent lost a visitor scope');
+    report('PASS · Two visitors using the same IP and browser type saved independent records without signing in.');
+    if (sandbox) {
+      await verifySandbox(visitors, key);
+      report('PASS · Same-chapter guest Linux sessions isolated Python variables, files, execution counts and reset.');
+    }
+    // Retain the original test jar solely to tear down its isolated session.
+    const original = a.http.copy();
+    try {
+      a.http.clearCookies();
+      const freshScope = await startVisitor(a.http);
+      check(!visitors.some(v => v.scope === freshScope), 'Clearing cookies reused a previous visitor scope');
+      if (sandbox) {
+        const status = await runtime({ http: a.http, scope: freshScope }, key, 'status');
+        check(status.exists === false, 'A new guest could access an earlier sandbox');
+      }
+    } finally { a.http = original; }
+    report('PASS · Clearing site cookies produced a new visitor with empty learning records.');
+  } catch (error) { failure = error; }
+  const cleanupFailures = [];
+  for (const [i, visitor] of visitors.entries()) {
+    if (visitor.sandboxStarted) {
+      try {
+        await runtime(visitor, key, 'reset');
+        check((await runtime(visitor, key, 'status')).exists === false, 'Sandbox cleanup failed');
+      } catch { cleanupFailures.push('guest ' + (i + 1) + ' sandbox'); }
+    }
+    if (visitor.stateStarted) {
+      try { await removeVisitorRecord(visitor, key); }
+      catch { cleanupFailures.push('guest ' + (i + 1) + ' state'); }
+    }
+  }
+  if (cleanupFailures.length) throw new CheckFailure((failure instanceof CheckFailure ? failure.message + '. ' : '') +
+    'Cleanup incomplete (' + cleanupFailures.join(', ') + '). Temporary test key: ' + key);
+  if (failure) throw failure;
+  report('PASS · Temporary guest learning records and sandbox sessions cleaned up.');
+}
+
 async function inputs(env) {
   if (['BOOK_TEST_READER_A','BOOK_TEST_PASSWORD_A','BOOK_TEST_READER_B','BOOK_TEST_PASSWORD_B'].some(name => env[name] !== undefined)) {
     return ['A', 'B'].map(id => ({ username: env['BOOK_TEST_READER_' + id], password: env['BOOK_TEST_PASSWORD_' + id] }));
@@ -199,8 +303,11 @@ async function inputs(env) {
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   try {
     const args = process.argv.slice(2);
-    check(!args.length || (args.length === 1 && args[0] === '--sandbox'), 'Usage: node deploy/verify-readers.mjs [--sandbox]');
-    await verifyReaders({ origin: process.env.BOOK_PUBLIC_ORIGIN, readers: await inputs(process.env), sandbox: args.length === 1 });
+    check(args.every(flag => flag === '--guests' || flag === '--sandbox') && new Set(args).size === args.length,
+      'Usage: node deploy/verify-readers.mjs [--guests] [--sandbox]');
+    const options = { origin: process.env.BOOK_PUBLIC_ORIGIN, sandbox: args.includes('--sandbox') };
+    if (args.includes('--guests')) await verifyVisitors(options);
+    else await verifyReaders({ ...options, readers: await inputs(process.env) });
   } catch (error) {
     console.error(error instanceof CheckFailure ? error.message : 'Acceptance failed unexpectedly. Check service health.');
     process.exitCode = 1;

@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { boundedJson, hash, json, protectedPost, reserveQuota, responseJson, short } from '@/lib/api-utils';
+import { boundedJson, hash, json, protectedPost, quotaLimit, readerScope, reserveQuota, responseJson, short } from '@/lib/api-utils';
 import contexts from '@/lib/generated/course-context.json';
 import index from '@/public/course/index.json';
 import { GUIDE_STREAM_TYPE } from '@/lib/guide-stream';
@@ -11,8 +11,8 @@ const requestIdPattern = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export async function POST(request: Request) {
   const access = protectedPost(request); if (access instanceof Response) return access;
   const scope = request.headers.get('x-learning-scope');
-  if (scope !== null && scope !== (await hash(access.id)).slice(0,32)) {
-    return json({error:'登录账号已变化，请重新打开导读。',code:'identity_changed'},409);
+  if ((access.kind === 'guest' || scope !== null) && scope !== await readerScope(access)) {
+    return json({error:'当前读者已变化，请重新打开导读。',code:'identity_changed'},409);
   }
   if (!env.TOKENPLAN_API_KEY) return json({ error: 'AI 导读尚未连接模型服务，课程释义仍可阅读。', code: 'ai_not_configured' }, 503);
   if (!env.DB) return json({ error: 'AI 用量控制暂不可用，请稍后重试。' }, 503);
@@ -63,12 +63,14 @@ export async function POST(request: Request) {
     const dayKey = `guide-day:${userId}:${bucket}`;
     const prefix = `guide-pending:${userId}:${bucket}:`;
     const leaseKey = prefix + operationId;
-    const dayLimit = Math.min(500, Math.max(1, Number(env.AI_DAILY_LIMIT) || 100));
+    const dayLimit = access.kind === 'guest'
+      ? quotaLimit(env.GUEST_AI_DAILY_LIMIT, 3, 500)
+      : Math.min(500, Math.max(1, Number(env.AI_DAILY_LIMIT) || 100));
     const reservation = await database.prepare(`
       INSERT INTO request_quota (key, count, expires_at)
       SELECT ?, 1, ? WHERE NOT EXISTS(SELECT 1 FROM request_quota WHERE key=? AND expires_at>?) AND COALESCE((SELECT count FROM request_quota WHERE key=?),0) +
         (SELECT COUNT(*) FROM request_quota WHERE key >= ? AND key < ? AND expires_at > ?) < ?
-      RETURNING key`).bind(leaseKey, now + 75, cancelKey, now, dayKey, prefix, prefix + '~', now, dayLimit).first();
+      ON CONFLICT(key) DO NOTHING RETURNING key`).bind(leaseKey, now + 75, cancelKey, now, dayKey, prefix, prefix + '~', now, dayLimit).first();
     if (!reservation) return json({error:'今天的 AI 导读额度已用完或正在使用中，请稍后再试。',code:'daily_limit'},429);
     reservationKey = leaseKey;
     stage = 'context';
@@ -95,6 +97,30 @@ export async function POST(request: Request) {
     const signal = AbortSignal.any([request.signal, cancel.signal, AbortSignal.timeout(55000)]);
     const stream = request.headers.get('accept')?.includes(GUIDE_STREAM_TYPE) ?? false;
     const requestedModel = env.TOKENPLAN_MODEL || 'sensenova-6.8-flash';
+    if (access.kind === 'guest') {
+      stage = 'quota';
+      // The provider may bill a dispatched request even when the reader stops.
+      // Hold one durable slot per outbound call. The two indexed ranges and
+      // the insertion run in one SQLite statement across all guest identities.
+      const dispatchTime = Math.floor(Date.now() / 1000);
+      const dispatchDay = Math.floor(dispatchTime / 86400);
+      const sitePrefix = `guest-guide-dispatch:${dispatchDay}:`;
+      const guestPrefix = `${sitePrefix}${userId}:`;
+      const siteLimit = quotaLimit(env.GUEST_AI_SITE_DAILY_LIMIT, 30, 10000);
+      if (signal.aborted) throw new DOMException('Request stopped', 'AbortError');
+      const slot = await database.prepare(`
+        INSERT INTO request_quota (key,count,expires_at)
+        SELECT ?,1,? WHERE EXISTS (SELECT 1 FROM request_quota WHERE key=? AND expires_at>?)
+          AND (SELECT COUNT(*) FROM request_quota WHERE key>=? AND key<?) < ?
+          AND (SELECT COUNT(*) FROM request_quota WHERE key>=? AND key<?) < ?
+        ON CONFLICT(key) DO NOTHING RETURNING key`)
+        .bind(guestPrefix + operationId, (dispatchDay + 1) * 86400, leaseKey, dispatchTime,
+          guestPrefix, guestPrefix + '~', dayLimit, sitePrefix, sitePrefix + '~', siteLimit).first();
+      if (!slot) {
+        await releaseLease();
+        return json({error:'今天可用的访客 AI 请求次数已用完，或该请求已处理。',code:'guest_dispatch_limit'},429);
+      }
+    }
     stage = 'upstream';
     // Workers rejects redirect:"error" before making the request. Manual mode
     // keeps credentials on the configured origin; all redirects are rejected below.
@@ -124,7 +150,7 @@ export async function POST(request: Request) {
         database.prepare('DELETE FROM request_quota WHERE key=?').bind(leaseKey),
       ]);
       reservationKey = null;
-      if (!saved.meta.changes) throw new Error('Reservation cancelled');
+      if (!saved.meta.changes) throw new DOMException('Reservation cancelled', 'AbortError');
       return payload;
     }
     // Providers and the response cache may return a complete JSON answer even
