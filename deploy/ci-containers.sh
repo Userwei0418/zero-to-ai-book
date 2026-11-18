@@ -50,7 +50,7 @@ release_url="https://storage.googleapis.com/gvisor/releases/release/$release/x86
 # Keep its socket, data, PID and containerd paths separate; guests use network=none.
 sudo install -d -m 0755 /run/zero-ai-ci
 echo '{}' > "$work/daemon.json"
-sudo systemd-run --quiet --unit="$service" --property=Delegate=yes "$(command -v dockerd)" \
+sudo systemd-run --quiet --unit="$service" --property=Delegate=yes --property=PrivateNetwork=yes "$(command -v dockerd)" \
   --config-file "$work/daemon.json" --host="unix://$LEARNER_DOCKER_SOCKET" --group=docker \
   --exec-root=/run/zero-ai-ci/exec --pidfile=/run/zero-ai-ci/dockerd.pid --data-root="$work/engine" \
   --containerd-namespace=zero-ai-ci --containerd-plugins-namespace=zero-ai-ci-plugins \
