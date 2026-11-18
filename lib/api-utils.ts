@@ -6,7 +6,7 @@ export function json(data: unknown, status = 200) {
 export function userId(request: Request) { return request.headers.get('oai-authenticated-user-id')?.slice(0, 200) || null; }
 export function sameOrigin(request: Request) {
   const origin = request.headers.get('origin');
-  return !!origin && origin === new URL(request.url).origin;
+  return !!origin && origin === new URL(env.PUBLIC_ORIGIN || request.url).origin;
 }
 export async function boundedJson(request: Request, max = 32768): Promise<Record<string, unknown>> {
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) throw new Error('请发送 JSON 格式的数据。');

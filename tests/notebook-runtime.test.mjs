@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NotebookKernel, getNotebookKernel, clearNotebookHistory } from '../lib/notebook-runtime.ts';
+import { NotebookKernel, getNotebookKernel, clearNotebookHistory, releaseNotebookSessions } from '../lib/notebook-runtime.ts';
 
 const cell = (id, runtime = 'browser') => ({
   block: { id, type: 'code', language: 'python', runtime, runnable: true, code: 'value = 2' },
@@ -42,6 +42,34 @@ test('Notebook runtime account and remote-execution contracts', async (suite) =>
     assert.notEqual(getNotebookKernel('chapter-default'), getNotebookKernel('chapter-default'));
     assert.notEqual(getNotebookKernel('chapter-pending', 'pending'), getNotebookKernel('chapter-pending', 'pending'));
     assert.notEqual(getNotebookKernel('chapter-memory'), first);
+  });
+
+  await suite.test('switching readers releases a running kernel and preserves its own historical output', async (t) => {
+    const chapter = 'account-switch';
+    const first = getNotebookKernel(chapter, 'learner-a');
+    const other = getNotebookKernel(chapter, 'learner-b');
+    const sample = cell('private', 'linux');
+    let reply, sentSignal;
+    first.setRemoteConfigured(true);
+    t.mock.method(globalThis, 'fetch', async (_url, options) => {
+      if (JSON.parse(options.body).action === 'interrupt') return Response.json({ status: 'ok' });
+      sentSignal = options.signal;
+      return new Promise(resolve => { reply = resolve; });
+    });
+    const execution = first.execute(sample);
+    releaseNotebookSessions('learner-a');
+    assert.equal(sentSignal.aborted, true);
+    reply(Response.json({ status: 'ok', stdout: 'late output', stderr: '' }));
+    assert.equal((await execution).status, 'interrupted');
+    assert.equal(await first.execute(sample), undefined);
+    const resumed = getNotebookKernel(chapter, 'learner-a');
+    assert.notEqual(resumed, first);
+    resumed.hydrate();
+    assert.equal(resumed.getSnapshot().results.private.historical, true);
+    assert.doesNotMatch(resumed.getSnapshot().results.private.stdout, /late output/);
+    assert.equal(getNotebookKernel(chapter, 'learner-b'), other);
+    other.hydrate();
+    assert.deepEqual(other.getSnapshot().results, {});
   });
 
   await suite.test('saved output hydrates only into its own account scope', async (t) => {

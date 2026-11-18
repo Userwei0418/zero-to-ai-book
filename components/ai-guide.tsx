@@ -20,9 +20,6 @@ export type GuideContext = {
   code?: string;
   error?: string;
 };
-// Keep only context fingerprints in memory so reopening the same question does not
-// request it again, while edits to a code cell trigger a fresh, contextual answer.
-const seenContextSignatures = new Map<string, string>();
 function fingerprint(text: string) {
   let hash = 2166136261;
   for (let index = 0; index < text.length; index++) { hash ^= text.charCodeAt(index); hash = Math.imul(hash, 16777619); }
@@ -32,6 +29,10 @@ function fingerprint(text: string) {
 type AIGuideProps = {
   context: GuideContext;
   authenticated: boolean;
+  cacheScope: string;
+  signInHref: string;
+  seenContextSignatures: Map<string, string>;
+  onIdentityChange: () => void;
   history: GuideMessage[];
   onHistory: (history: GuideMessage[]) => void;
   onClose: () => void;
@@ -85,7 +86,7 @@ function AnswerText({ text }: { text: string }) {
   })}</div>;
 }
 
-export function AIGuide({ context, authenticated, history, onHistory, onClose, onNavigate }: AIGuideProps) {
+export function AIGuide({ context, authenticated, cacheScope, signInHref, seenContextSignatures, onIdentityChange, history, onHistory, onClose, onNavigate }: AIGuideProps) {
   const titleId = useId();
   const [messages, setMessages] = useState<GuideMessage[]>(history);
   const [input, setInput] = useState('');
@@ -127,7 +128,7 @@ export function AIGuide({ context, authenticated, history, onHistory, onClose, o
     abortRef.current?.abort();
     abortRef.current = null;
     if (operation) void fetch('/api/guide', {
-      method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      method: 'POST', keepalive: true, headers: { 'X-Learning-Scope': cacheScope, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'cancel', requestId: operation }),
     }).catch(() => {});
   }
@@ -166,7 +167,7 @@ export function AIGuide({ context, authenticated, history, onHistory, onClose, o
     try {
       const response = await fetch('/api/guide', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: GUIDE_STREAM_TYPE },
+        headers: { 'X-Learning-Scope': cacheScope, 'Content-Type': 'application/json', Accept: GUIDE_STREAM_TYPE },
         signal: controller.signal,
         body: JSON.stringify({
           requestId: operation,
@@ -179,7 +180,11 @@ export function AIGuide({ context, authenticated, history, onHistory, onClose, o
           error: current.error,
         }),
       });
-      if (!response.ok) throw new Error(readableError(response.status, await response.json().catch(() => null)));
+      if (!response.ok) {
+        const reason = await response.json().catch(() => null) as { code?: string } | null;
+        if (response.status === 401 || reason?.code === 'identity_changed') { onIdentityChange(); return; }
+        throw new Error(readableError(response.status, reason));
+      }
       const answer = await readGuideAnswer(response, partial => {
         if (thisRequest === requestId.current) setDraft(partial);
       });
@@ -314,6 +319,6 @@ export function AIGuide({ context, authenticated, history, onHistory, onClose, o
         <button className="guide-send" type="submit" disabled={busy || !input.trim()} aria-label="发送问题"><ArrowUp size={18} /></button>
       </form>
       <div className="guide-footer-note"><span>可对照书中原文核实</span>{messages.length > 0 && <button type="button" onClick={clearConversation} aria-label="清空当前导读对话" title="清空这段对话"><Trash2 size={12} /></button>}</div>
-    </footer> : <footer className="guide-panel-footer guide-local-note">登录后可向 AI 提问。</footer>}
+    </footer> : <footer className="guide-panel-footer guide-local-note"><a href={signInHref}>登录后向 AI 提问</a></footer>}
   </aside>;
 }

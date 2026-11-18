@@ -9,6 +9,7 @@
 | 一本交互书要做到什么，为什么这样教 | [产品需求](PRD.md) · [历次设计决定与验证方法](DESIGN-HISTORY.md) |
 | 如何修书页、维护课程、重导实验 | [项目首页](../README.md) · [课程维护指南](MAINTENANCE.md) |
 | 原型和实物效果有什么区别 | [设计图](design/) · [正式站点验收图](acceptance/ai-book-compact-prediction.jpg) |
+| 在自己的服务器部署、配置读者账号与隔离运行 | [自建容器部署](CONTAINERS.md) |
 | 本地怎样启动，现网怎样发布和回退 | [运行与部署](DEPLOYMENT.md) · [独立沙箱](sandbox-deployment.md) |
 | 如何验证一次实验真的运行过 | [Notebook 验收](notebook-acceptance.md) · [内容审计](content-audit.md) |
 

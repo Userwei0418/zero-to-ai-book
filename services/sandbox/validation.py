@@ -8,11 +8,11 @@ import threading
 import time
 from collections import deque
 
-MAX_BODY_BYTES = 262_144
+MAX_BODY_BYTES = 2_097_152
 MAX_CODE_BYTES = 65_536
-MAX_FILE_BYTES = 65_536
-MAX_FILES_BYTES = 131_072
-MAX_FILES = 32
+MAX_FILE_BYTES = 1_179_648
+MAX_FILES_BYTES = 1_572_864
+MAX_FILES = 160
 MAX_OUTPUT_BYTES = 65_536
 MAX_IMAGE_BYTES = 524_288
 MAX_IMAGES = 3
@@ -71,7 +71,7 @@ def validate_payload(payload: object, action: str) -> dict:
     else:
         raise InvalidRequest("files must be an object mapping paths to text, or a list of path/content objects")
     if len(entries) > MAX_FILES:
-        raise InvalidRequest("at most 32 files may be supplied")
+        raise InvalidRequest(f"at most {MAX_FILES} files may be supplied")
     files, total = {}, 0
     for path, content in entries:
         path = validate_path(path)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { saveLearningCache, selectLearningSnapshot } from '../lib/learning-cache.ts';
+import { createReaderSession, saveLearningCache, selectLearningSnapshot } from '../lib/learning-cache.ts';
 
 test('edited code, predictions and reading position survive an anonymous reload', () => {
   const stored = new Map();
@@ -32,4 +32,58 @@ test('an unsynced draft at the current revision is retained for the next save', 
 
 test('blocked storage reports failure instead of a false saved state', () => {
   assert.equal(saveLearningCache({ setItem() { throw new Error('QuotaExceededError'); } }, 'key', { state: {}, dirty: true, revision: 0, savedAt: 'now' }), false);
+});
+
+const accountA = 'a'.repeat(32), accountB = 'b'.repeat(32);
+const snapshot = scope => ({ authenticated: scope !== 'anonymous', cacheScope: scope, revision: 0 });
+
+test('offline startup can only select guest records, even after account hints or an incomplete identity', async () => {
+  const shown = [], hints = [];
+  let online = false;
+  const tracker = createReaderSession(async () => {
+    if (!online) throw Error('offline');
+    return { authenticated: true, revision: 0 };
+  }, s => shown.push(s), h => hints.push(h));
+  await tracker.refresh();
+  assert.equal(shown.at(-1).scope, 'anonymous');
+  assert.equal(shown.at(-1).verified, false);
+  online = true;
+  tracker.storageChanged(accountA);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(shown.at(-1).scope, 'anonymous');
+  assert.deepEqual(hints, []);
+});
+
+test('reverification keeps the current notebook for the same identity and removes it before loading a different identity', async () => {
+  const shown = [], probes = [];
+  let scope = accountA;
+  const tracker = createReaderSession(async identityOnly => { probes.push(identityOnly); return snapshot(scope); }, s => shown.push(s?.scope), () => {});
+  await tracker.refresh();
+  await tracker.refresh();
+  assert.deepEqual(shown, [accountA]);
+  scope = accountB;
+  await tracker.refresh();
+  assert.deepEqual(shown, [accountA, undefined, accountB]);
+  assert.deepEqual(probes, [false, true, true, false]);
+  scope = 'anonymous';
+  tracker.storageChanged('anonymous');
+  assert.equal(shown.at(-1), undefined);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(shown.at(-1), 'anonymous');
+});
+
+test('a late private snapshot cannot replace the session after another tab signs out', async () => {
+  const shown = [];
+  let scope = accountA, resolveLate, networkCalls = 0;
+  const tracker = createReaderSession(async () => {
+    if (++networkCalls === 2) return new Promise(resolve => { resolveLate = resolve; });
+    return snapshot(scope);
+  }, s => shown.push(s?.scope), () => {});
+  await tracker.refresh();
+  const oldRequest = tracker.refresh();
+  scope = 'anonymous';
+  tracker.storageChanged('anonymous');
+  resolveLate(snapshot(accountA));
+  await oldRequest;
+  assert.deepEqual(shown, [accountA, undefined, 'anonymous']);
 });

@@ -45,6 +45,7 @@ class Config:
     timeout_seconds: int = 15
     idle_seconds: int = 900
     max_sessions: int = 12
+    max_sessions_per_account: int = 2
     max_executions: int = 4
     max_http_requests: int = 24
     deployment: str = "ai-book-lab"
@@ -60,8 +61,11 @@ class Config:
         if len(token) < 32 or len(token) > 256 or any(c.isspace() for c in token):
             raise ValueError("SANDBOX_TOKEN must be a 32–256 character secret without whitespace")
         bind = os.environ.get("SANDBOX_BIND", "127.0.0.1")
-        if bind not in {"127.0.0.1", "::1"}:
-            raise ValueError("gateway binds only to loopback; use an HTTPS reverse proxy")
+        private_network = os.environ.get("SANDBOX_PRIVATE_NETWORK") == "1"
+        if bind not in {"127.0.0.1", "::1"} and not (private_network and bind == "0.0.0.0"):
+            raise ValueError("use loopback or opt in to a private container network")
+        if private_network and os.environ.get("DOCKER_HOST") != "unix:///run/learner-engine/docker.sock":
+            raise ValueError("private container network requires the dedicated learner-engine socket")
         deployment = os.environ.get("SANDBOX_DEPLOYMENT_ID", "ai-book-lab")
         validate_payload({"sessionKey": deployment, "chapterId": "check"}, "status")
         return cls(token=token, bind=bind,
@@ -71,6 +75,7 @@ class Config:
                    timeout_seconds=env_int("SANDBOX_TIMEOUT_SECONDS", 15, 1, 60),
                    idle_seconds=env_int("SANDBOX_IDLE_SECONDS", 900, 30, 3600),
                    max_sessions=env_int("SANDBOX_MAX_SESSIONS", 12, 1, 64),
+                   max_sessions_per_account=env_int("SANDBOX_MAX_SESSIONS_PER_ACCOUNT", 2, 1, 64),
                    max_executions=env_int("SANDBOX_MAX_EXECUTIONS", 4, 1, 16),
                    max_http_requests=env_int("SANDBOX_MAX_HTTP_REQUESTS", 24, 4, 64),
                    deployment=deployment)
@@ -86,7 +91,7 @@ def response(status: str, *, count: int = 0, elapsed: int = 0,
     return result
 
 
-def run_docker(config: Config, arguments: list[str], timeout: int = 15) -> subprocess.CompletedProcess:
+def run_docker(config: Config, arguments: list[str], timeout: float = 15) -> subprocess.CompletedProcess:
     return subprocess.run([config.docker, *arguments], capture_output=True, text=True,
                           timeout=timeout, check=True, shell=False)
 
@@ -107,8 +112,9 @@ class SessionLost(RuntimeError):
 
 
 class Session:
-    def __init__(self, config: Config, identity: str, broker: ModelBroker | None = None):
+    def __init__(self, config: Config, identity: str, broker: ModelBroker | None = None, *, account: str = ""):
         self.config, self.identity = config, identity
+        self.account = account
         self.broker = broker or ModelBroker()
         self.model_calls = 0
         self.write_lock = threading.Lock()
@@ -117,13 +123,15 @@ class Session:
         self.lifecycle_lock = threading.Lock()
         self.messages: queue.Queue = queue.Queue(maxsize=2)
         self.process: subprocess.Popen | None = None
+        self.creation_attempted = False
+        self.removed = False
         self.cancelled = threading.Event()
         self.last_used = time.monotonic()
         self.execution_count = 0
         self.reason = "interrupted"
 
     def command(self) -> list[str]:
-        return [self.config.docker, "run", "--rm", "--init", "--interactive", "--pull=never",
+        return [self.config.docker, "create", "--rm", "--init", "--interactive", "--pull=never",
                 "--name", self.name, "--runtime=runsc", "--network=none", "--read-only",
                 "--user=10001:10001", "--cap-drop=ALL", "--security-opt=no-new-privileges:true",
                 "--memory=256m", "--memory-swap=256m", "--cpus=1", "--pids-limit=64",
@@ -161,20 +169,25 @@ class Session:
         assert self.process and self.process.stderr
         # Docker/guest diagnostics are untrusted and can contain submitted code.
         # Discard them; API returns bounded, generic service failures.
-        with contextlib.suppress(OSError):
+        with contextlib.suppress(OSError, ValueError):
             while self.process.stderr.read(8192):
                 pass
 
     def start(self, timeout: float = 20) -> None:
+        deadline = time.monotonic() + min(20, timeout)
         with self.lifecycle_lock:
             if self.cancelled.is_set():
                 raise SessionLost("session was cancelled")
-            self.process = subprocess.Popen(self.command(), stdin=subprocess.PIPE,
+            # Complete named container creation before stop() can observe it.
+            # An attach client racing with removal cannot create a new guest.
+            self.creation_attempted = True
+            run_docker(self.config, self.command()[1:], timeout=min(20, timeout))
+            self.process = subprocess.Popen([self.config.docker, "start", "--attach", "--interactive", self.name], stdin=subprocess.PIPE,
                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                             shell=False, bufsize=65536)
-        threading.Thread(target=self._read_protocol, daemon=True).start()
-        threading.Thread(target=self._drain_stderr, daemon=True).start()
-        ready = self.receive(min(20, timeout))
+            threading.Thread(target=self._read_protocol, daemon=True).start()
+            threading.Thread(target=self._drain_stderr, daemon=True).start()
+        ready = self.receive(deadline - time.monotonic())
         if ready != {"ready": True, "protocol": 1}:
             raise SessionLost("kernel startup protocol failed")
 
@@ -215,7 +228,7 @@ class Session:
         def write() -> None:
             try:
                 with self.write_lock:
-                    data = json.dumps(wire, ensure_ascii=False).encode("utf-8") + b"\n"
+                    data = json.dumps(wire, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
                     remaining = memoryview(data)
                     while remaining:
                         written = self.process.stdin.write(remaining)
@@ -255,30 +268,34 @@ class Session:
 
     def stop(self, reason: str = "interrupted") -> None:
         with self.lifecycle_lock:
-            self.reason = reason
-            self.cancelled.set()
-            if self.process is None:
+            if self.removed:
                 return
-            process = self.process
-        removed = False
-        try:
+            if not self.cancelled.is_set():
+                self.reason = reason
+                self.cancelled.set()
+            if not self.creation_attempted:
+                self.removed = True
+                return
             # Names are generated internally, never interpolated into a shell.
-            run_docker(self.config, ["rm", "--force", self.name], timeout=10)
-            removed = True
-        except subprocess.CalledProcessError:
-            # An already-exited --rm container is also a successful cleanup.
-            result = run_docker(self.config, ["ps", "--all", "--quiet", "--filter", "name=^/" + self.name + "$"])
-            removed = not result.stdout.strip()
-        finally:
-            if process.poll() is None:
-                process.kill()
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=3)
-            for stream in (process.stdin, process.stdout, process.stderr):
-                with contextlib.suppress(Exception):
-                    stream.close()
-        if not removed:
-            raise RuntimeError("container cleanup could not be confirmed")
+            try:
+                run_docker(self.config, ["rm", "--force", self.name], timeout=10)
+                self.removed = True
+            except subprocess.CalledProcessError:
+                # An already-exited --rm container is also a successful cleanup.
+                result = run_docker(self.config, ["ps", "--all", "--quiet", "--filter", "name=^/" + self.name + "$"])
+                self.removed = not result.stdout.strip()
+            finally:
+                process = self.process
+                if process:
+                    if process.poll() is None:
+                        process.kill()
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=3)
+                    for stream in (process.stdin, process.stdout, process.stderr):
+                        with contextlib.suppress(Exception):
+                            stream.close()
+            if not self.removed:
+                raise RuntimeError("container cleanup could not be confirmed")
 
 
 def sanitize_kernel_response(value: dict) -> dict:
@@ -354,11 +371,16 @@ class Manager:
         identity = session_id(payload)
         try:
             with self.lock:
+                if not self.available or self.stopping.is_set():
+                    return 503, response("unavailable", error="Sandbox service is unavailable")
                 session = self.sessions.get(identity)
                 if session is None:
                     if len(self.sessions) >= self.config.max_sessions:
                         return 429, response("busy", error="Sandbox session capacity is full")
-                    session = Session(self.config, identity, self.broker)
+                    account = payload["sessionKey"]
+                    if sum(s.account == account for s in self.sessions.values()) >= self.config.max_sessions_per_account:
+                        return 429, response("busy", error="Account chapter session capacity is full", code="account_session_limit")
+                    session = Session(self.config, identity, self.broker, account=account)
                     self.sessions[identity] = session
                 acquired = session.lock.acquire(blocking=False)
             if not acquired:
@@ -533,7 +555,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             length = -1
         if length < 0 or length > MAX_BODY_BYTES:
-            self.reply(413, response("error", error="Request body must be at most 262144 bytes"))
+            self.reply(413, response("error", error=f"Request body must be at most {MAX_BODY_BYTES} bytes"))
             return
         if self.headers.get_content_type() != "application/json":
             self.reply(415, response("error", error="Content-Type must be application/json"))
@@ -557,8 +579,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self.server.rate.allow(bucket):
             self.reply(429, response("busy", error="Session request rate exceeded"))
             return
-        status, result = (self.server.manager.execute(payload) if action == "execute"
-                          else self.server.manager.control(payload, action))
+        try:
+            status, result = (self.server.manager.execute(payload) if action == "execute"
+                              else self.server.manager.control(payload, action))
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            status, result = 503, response("unavailable", error="Sandbox service is unavailable")
         self.reply(status, result)
 
 
@@ -575,7 +600,7 @@ def main() -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    LOGGER.info("Sandbox gateway listening on loopback port %d; gVisor required", config.port)
+    LOGGER.info("Sandbox gateway listening on %s:%d; gVisor required", config.bind, config.port)
     try:
         server.serve_forever(poll_interval=0.25)
     finally:

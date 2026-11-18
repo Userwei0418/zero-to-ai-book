@@ -2,6 +2,8 @@
 
 GitHub 保存课程和应用源码。现网由 Sites 托管，使用 Worker 服务端、D1 数据库和平台登录身份。静态书页数据和媒体跟随发布包交付。浏览器中的 Pyodide 负责轻量 Python 实验，完整 Linux 和 GPU 实验各有单独的服务入口。[线上书籍](https://ai-book-laboratory.lucien-alvarez748774.chatgpt.site) · [设计及版本交接](HANDOFF.md)
 
+自建 Ubuntu 采用[容器部署手册](CONTAINERS.md)，包含独立读者账号、SQLite、HTTPS 和按账号隔离的远程执行。下文覆盖原 Sites 站点。
+
 ## 从仓库启动
 
 使用 Node.js 22.13.0 或以上版本、npm 和 Python 3。运行以下命令前确认检出了完整源码，包含 `package-lock.json`、`public/course/`、`public/assets/`、`lib/generated/`、`drizzle/` 和 `course-source/`。普通前端修改可以直接使用仓库里的课程产物。重导课程才需要另装 Python 编辑工具，详见[课程维护](MAINTENANCE.md)。
@@ -80,4 +82,4 @@ NOTEBOOK_PYODIDE_DIR="$PWD/.sites-runtime/pyodide-test" node --test tests/*.test
 
 独立 Linux 网关的准备、安装、systemd、TLS 和真实验收步骤见[沙箱部署手册](sandbox-deployment.md)。在目标主机验证 Docker + `runsc` 和资源限额，确认 HTTPS 可达后，经私密通道设置 `SANDBOX_URL`、`SANDBOX_TOKEN`，执行 `python3 services/sandbox/smoke_test.py` 检查真实隔离、会话、超时和中断，并完成手册列出的隔离检查。要验证会产生提供方调用的模型实验，在有额度的测试环境显式设置 `SANDBOX_SMOKE_MODEL=1` 再运行。通过后在 Sites 配置对应服务并从书页复测。
 
-2 核、4 GiB 主机能承载的并发实验数尚未在目标机测量。以目标 Linux 课件做小并发压测，记录已有服务占用、容器峰值内存、排队时间和网关拒绝情况，再选择会话与并发上限。GPU 需要单独的算力和服务验收。若目标是把**整站**迁至独立 Ubuntu，还需要替换托管 Worker、D1 和平台身份或提供兼容服务；现有 Linux 安装手册仅部署实验执行网关。
+2 核、4 GiB 主机能承载的并发实验数尚未在目标机测量。以目标 Linux 课件做小并发压测，记录已有服务占用、容器峰值内存、排队时间和网关拒绝情况，再选择会话与并发上限。GPU 需要单独的算力和服务验收。

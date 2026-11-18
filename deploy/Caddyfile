@@ -1,0 +1,8 @@
+{$BOOK_DOMAIN} {
+	@compressible not path /api/guide
+	encode @compressible zstd gzip
+	reverse_proxy identity:8080 {
+		header_up -OAI-Authenticated-User-Id
+		flush_interval -1
+	}
+}

@@ -1,5 +1,9 @@
 *
 !Dockerfile
+!Dockerfile.gateway
+!gateway.py
+!model_broker.py
+!smoke_test.py
 !requirements.txt
 !kernel.py
 !validation.py

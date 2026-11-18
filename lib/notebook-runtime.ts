@@ -80,6 +80,16 @@ export function getNotebookKernel(chapterId: string, cacheScope?: string): Noteb
   return kernel;
 }
 
+/** Account changes stop all live chapter environments and retain their scoped output history. */
+export function releaseNotebookSessions(cacheScope: string) {
+  for (const [key, kernel] of kernels) {
+    if (kernel.cacheScope === cacheScope) {
+      kernel.release();
+      kernels.delete(key);
+    }
+  }
+}
+
 export type RunHistory = Record<string, { status: CellResult['status']; historical: boolean }>;
 
 function historyKey(scope: string, chapterId: string) {
@@ -249,6 +259,7 @@ export class NotebookKernel {
   private current?: { id: string; cellId: string; finish: (result: CellResult) => void; timer: ReturnType<typeof setTimeout>; events: number; runtime: RuntimeKind };
   private controller?: AbortController;
   private generation = 0;
+  private released = false;
   private hydrated = false;
   private migratedLegacyKey?: string;
   private saveTimer?: ReturnType<typeof setTimeout>;
@@ -308,7 +319,10 @@ export class NotebookKernel {
     this.listeners.forEach(listener => listener());
   }
   release() {
-    this.stop('为节省内存，已回收较早章节的运行会话。历史输出保留；回到本章请从头运行。');
+    this.hydrate();
+    this.stop('本章会话已回收，历史输出保留。回到本章后可以从头运行。');
+    this.released = true;
+    this.generation++;
     clearTimeout(this.saveTimer);
     this.persist();
   }
@@ -490,7 +504,7 @@ export class NotebookKernel {
   }
 
   async execute(cell: RegisteredCell, fromBatch = false): Promise<CellResult | undefined> {
-    if (this.current || (this.state.batch && !fromBatch) || !browserRunnable(cell.block)) return undefined;
+    if (this.released || this.current || (this.state.batch && !fromBatch) || !browserRunnable(cell.block)) return undefined;
     const blocked = this.unavailableReason(cell.block);
     if (blocked) {
       this.update({ message: blocked + '。可以下载本章在本机运行。' });
@@ -571,6 +585,7 @@ export class NotebookKernel {
     } catch { return false; }
   }
   async reset(cells = this.getCells()): Promise<boolean> {
+    if (this.released) return false;
     this.stop('本章会话已重置，变量已清空。');
     const generation = this.generation;
     for (const cell of cells) {
@@ -641,11 +656,13 @@ export class NotebookKernel {
 
   async download(format: 'zip' | 'py' | 'ipynb') {
     const { createExperiment, loadExperimentSupport } = await import('./experiment-export.ts');
+    const support = await loadExperimentSupport(this.chapterId);
+    if (this.released) return;
     const blob = createExperiment({
       chapterId: this.chapterId,
       cells: this.getCells().filter(cell => cell.block.type === 'code'),
       files: this.files, originals: this.exportOriginals, results: this.state.results,
-      support: await loadExperimentSupport(this.chapterId),
+      support,
     }, format);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

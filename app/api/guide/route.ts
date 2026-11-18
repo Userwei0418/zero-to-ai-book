@@ -10,6 +10,10 @@ const corpus = contexts as Record<string, Context>;
 const requestIdPattern = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export async function POST(request: Request) {
   const access = protectedPost(request); if (access instanceof Response) return access;
+  const scope = request.headers.get('x-learning-scope');
+  if (scope !== null && scope !== (await hash(access.id)).slice(0,32)) {
+    return json({error:'登录账号已变化，请重新打开导读。',code:'identity_changed'},409);
+  }
   if (!env.TOKENPLAN_API_KEY) return json({ error: 'AI 导读尚未连接模型服务，课程释义仍可阅读。', code: 'ai_not_configured' }, 503);
   if (!env.DB) return json({ error: 'AI 用量控制暂不可用，请稍后重试。' }, 503);
   let stage: 'request' | 'cache' | 'quota' | 'context' | 'configuration' | 'upstream' | 'response' | 'save' = 'request';

@@ -18,6 +18,10 @@
 | 查看读者实际会读到的内容 | [结构化章节、索引与字幕](public/course/) · [上线媒体](public/media/) |
 | 核对实验与运行服务 | [Notebook 验收](docs/notebook-acceptance.md) · [沙箱部署](docs/sandbox-deployment.md) · [内容清点](docs/content-audit.md) |
 
+## 容器部署
+
+自建版通过 HTTPS 入口、独立读者账号和持久化 SQLite 提供书站。浏览器实验在读者设备上执行。启用 Linux 实验后，网关按账号和章节启动独立的 gVisor 容器。配置、双账号验收及备份恢复见[容器部署手册](docs/CONTAINERS.md)。
+
 ## 在本地打开
 
 在仓库根目录使用 Node.js 22.13 或更高版本和 npm。首次安装会根据锁文件下载依赖。

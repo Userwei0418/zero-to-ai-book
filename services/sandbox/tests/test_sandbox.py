@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gateway
 import kernel
-from validation import (InvalidRequest, MAX_BODY_BYTES, RateLimiter, authenticated,
+from validation import (InvalidRequest, MAX_BODY_BYTES, MAX_FILE_BYTES, MAX_FILES_BYTES, MAX_FILES, RateLimiter, authenticated,
                         session_id, validate_path, validate_payload)
 
 TOKEN = "test-only-secret-" + "a" * 48
@@ -58,13 +58,30 @@ class ValidationTests(unittest.TestCase):
             validate_payload({**EXECUTE, "code": "汉" * 21846}, "execute")
 
     def test_file_limits_and_duplicate_paths(self):
-        invalid = [{str(i) + ".py": "" for i in range(33)}, {"a.py": "x" * 65537},
-                   {f"{i}.py": "x" * 65536 for i in range(3)},
+        invalid = [{str(i) + ".py": "" for i in range(MAX_FILES + 1)}, {"a.py": "x" * (MAX_FILE_BYTES + 1)},
+                   {"a.py": "x" * MAX_FILE_BYTES, "b.py": "y" * (MAX_FILES_BYTES - MAX_FILE_BYTES + 1)},
                    [{"path": "a.py", "content": "1"}, {"path": "a.py", "content": "2"}],
                    [{"path": "a.py", "content": "1", "mode": "0777"}]]
         for files in invalid:
             with self.subTest(kind=type(files)), self.assertRaises(InvalidRequest):
                 validate_payload({**EXECUTE, "files": files}, "execute")
+
+    def test_published_experiment_bundles_fit_request_and_guest_limits(self):
+        chapters = Path(__file__).resolve().parents[3] / "public/course/chapters"
+        checked = set()
+        for path in chapters.glob("*.json"):
+            chapter = json.loads(path.read_text(encoding="utf-8"))
+            for block in chapter["blocks"]:
+                if block.get("type") != "code" or not block.get("runnable"):
+                    continue
+                with self.subTest(chapter=chapter["id"], cell=block["id"]):
+                    payload = {"sessionKey": "a" * 64, "chapterId": chapter["id"],
+                               "cellId": block["id"], "code": block["code"], "files": chapter["files"]}
+                    self.assertEqual(validate_payload(payload, "execute"), payload)
+                    wire = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    self.assertLessEqual(len(wire), MAX_BODY_BYTES)
+                    checked.add(chapter["id"])
+        self.assertTrue({"upper-14", "lower-03"}.issubset(checked))
 
     def test_session_keys_are_isolated_by_user_and_chapter(self):
         identities = [IDENTITY, {**IDENTITY, "sessionKey": "user_43"}, {**IDENTITY, "chapterId": "linux-02"},
@@ -163,6 +180,27 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "loopback"):
                 gateway.Config.from_environment()
 
+    def test_container_bind_requires_dedicated_socket_and_explicit_private_mode(self):
+        env = {"SANDBOX_TOKEN": TOKEN, "SANDBOX_BIND": "0.0.0.0", "SANDBOX_PRIVATE_NETWORK": "1"}
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaisesRegex(ValueError, "learner-engine"):
+                gateway.Config.from_environment()
+            os.environ["DOCKER_HOST"] = "unix:///run/learner-engine/docker.sock"
+            self.assertEqual(gateway.Config.from_environment().bind, "0.0.0.0")
+
+    def test_failed_attach_removes_created_guest_only_once(self):
+        session = gateway.Session(self.config, session_id(IDENTITY))
+        with patch("gateway.run_docker") as docker, patch("gateway.subprocess.Popen", side_effect=OSError) as attach:
+            with self.assertRaises(OSError):
+                session.start()
+            session.stop("reset")
+            session.stop("interrupted")
+        self.assertEqual(docker.call_args_list[0].args[1][0], "create")
+        self.assertEqual(attach.call_args.args[0], [self.config.docker, "start", "--attach", "--interactive", session.name])
+        self.assertEqual(docker.call_count, 2)
+        self.assertEqual(docker.call_args.args[1], ["rm", "--force", session.name])
+        self.assertEqual(session.reason, "reset")
+
     def test_guest_accounting_and_extra_keys_are_not_trusted(self):
         value = gateway.sanitize_kernel_response({"status": "ok", "stdout": "hi", "stderr": "", "images": [],
                                                    "executionCount": -900, "secret": "guest-chosen"})
@@ -219,6 +257,56 @@ class ManagerTests(unittest.TestCase):
             self.manager.discard(session.identity, session, "timeout")
         self.assertFalse(self.manager.available)
         self.assertEqual(self.manager.execute(validate_payload(EXECUTE, "execute"))[0], 503)
+
+    def test_two_readers_and_two_chapters_have_independent_state_and_control(self):
+        first = IDENTITY
+        second = {**first, "sessionKey": "user_43"}
+        next_chapter = {**first, "chapterId": "linux-02"}
+        manager = gateway.Manager(gateway.Config(token=TOKEN, max_executions=2, max_sessions=3))
+
+        def mock_kernel(session, payload):
+            session.execution_count += 1
+            if payload["code"] == "write":
+                session.test_file = payload["files"]["shared.txt"]
+            return {"status": "ok", "stdout": getattr(session, "test_file", "")}
+
+        def run(scope, value=None):
+            code = "read" if value is None else "write"
+            files = {} if value is None else {"shared.txt": value}
+            return manager.execute({**scope, "cellId": "same-cell", "code": code, "files": files})
+
+        with patch.object(gateway.Session, "execute", autospec=True, side_effect=mock_kernel):
+            for scope, value in [(first, "one"), (second, "two"), (next_chapter, "three")]:
+                status, clean = run(scope)
+                self.assertEqual((status, clean["stdout"], clean["executionCount"]), (200, "", 1))
+                self.assertEqual(run(scope, value)[1]["stdout"], value)
+            names = {session.name for session in manager.sessions.values()}
+            self.assertEqual(len(names), 3)
+            old = manager.sessions[session_id(first)]
+            manager.control(first, "reset")
+            self.assertTrue(old.cancelled.is_set())
+            self.assertEqual(run(first)[1]["stdout"], "")
+            replacement = manager.sessions[session_id(first)]
+            # An old execute handler may finish cleanup after reset and restart.
+            manager.discard(session_id(first), old, "interrupted")
+            self.assertIs(manager.sessions[session_id(first)], replacement)
+            self.assertEqual(run(second)[1]["stdout"], "two")
+            manager.control(second, "interrupt")
+            self.assertFalse(manager.control(second, "status")[1]["exists"])
+            self.assertEqual(run(next_chapter)[1]["stdout"], "three")
+            self.assertTrue(manager.control(first, "status")[1]["exists"])
+
+    def test_per_account_limit_reserves_capacity_for_another_reader(self):
+        manager = gateway.Manager(gateway.Config(token=TOKEN, max_sessions=3, max_sessions_per_account=2))
+        def run(account, chapter):
+            return manager.execute({**EXECUTE, "sessionKey": account, "chapterId": chapter})[0]
+        with patch.object(gateway.Session, "execute", side_effect=lambda payload: {"status": "ok"}):
+            self.assertEqual(run("readerA", "first"), 200)
+            self.assertEqual(run("readerA", "second"), 200)
+            self.assertEqual(run("readerA", "third"), 429)
+            self.assertEqual(run("readerB", "first"), 200)
+            manager.control({"sessionKey": "readerA", "chapterId": "first"}, "reset")
+            self.assertEqual(run("readerA", "third"), 200)
 
 
 class HTTPTests(unittest.TestCase):

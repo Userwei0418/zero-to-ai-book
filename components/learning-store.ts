@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LearningState } from '@/lib/course-types';
 import { guideMessage } from '@/lib/guide-message';
-import { saveLearningCache, selectLearningSnapshot, type LearningCache as Cache, type LearningSnapshot as Snapshot } from '@/lib/learning-cache';
+import { saveLearningCache, selectLearningSnapshot, type LearningCache as Cache, type ReaderSession } from '@/lib/learning-cache';
 
 const CACHE_KEY = 'ai-book-learning-v1';
 export type SaveStatus = 'loading' | 'saved' | 'saving' | 'local' | 'conflict' | 'unsaved';
@@ -42,14 +42,12 @@ export function normalizeLearningState(value: unknown): LearningState {
   return output;
 }
 
-export function useLearningStore() {
+export function useLearningStore(session: ReaderSession | null, recheck: () => void) {
+  const cacheScope = session?.scope || 'pending';
+  const authenticated = session?.snapshot.authenticated === true;
+  const initial = useRef(session);
   const [state, setState] = useState<LearningState>(defaults);
   const [ready, setReady] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [cacheScope, setCacheScope] = useState('pending');
-  const scope = useRef('pending');
-  const scopeVerified = useRef(false);
-  const accountVerified = useRef(false);
   const [status, setStatus] = useState<SaveStatus>('loading');
   const [error, setError] = useState('');
   const [change, setChange] = useState(0);
@@ -59,129 +57,84 @@ export function useLearningStore() {
   const saving = useRef(false);
   const conflicted = useRef(false);
   const deleting = useRef(false);
+  const lifetime = useRef<AbortController | null>(null);
   const remote = useRef<{state: LearningState; revision: number} | null>(null);
   const cache = useCallback((dirty: boolean) => {
+    if (!lifetime.current || lifetime.current.signal.aborted) return false;
     let written = false;
-    try { written = saveLearningCache(localStorage, `${CACHE_KEY}:${scope.current}`, { state: current.current, revision: revision.current, dirty, savedAt: new Date().toISOString() }); } catch { /* Storage can itself be blocked. */ }
+    try { written = saveLearningCache(localStorage, `${CACHE_KEY}:${cacheScope}`, { state: current.current, revision: revision.current, dirty, savedAt: new Date().toISOString() }); } catch { /* Storage can itself be blocked. */ }
     if (!written) { setStatus('unsaved'); setError('本机保存失败：浏览器空间不足或不允许存储。当前修改仍在页面中，请先导出学习记录。'); }
     return written;
-  }, []);
+  }, [cacheScope]);
 
   useEffect(() => {
-    let disposed = false;
-    fetch('/api/state').then(async response => {
-      if (!response.ok) throw new Error('学习记录服务暂时不可用');
-      const data = await response.json() as Snapshot;
-      if (disposed) return;
-      scope.current = data.cacheScope || 'anonymous';
-      scopeVerified.current = true;
-      setCacheScope(scope.current);
-      setAuthenticated(Boolean(data.authenticated));
-      accountVerified.current = Boolean(data.authenticated);
-      let local: Cache | null = null;
-      try { local = JSON.parse(localStorage.getItem(`${CACHE_KEY}:${scope.current}`) || 'null'); } catch { /* Empty or unreadable cache. */ }
-      try { localStorage.setItem(`${CACHE_KEY}:active-scope`, scope.current); } catch { /* A full store must not prevent reading the existing draft. */ }
-      remote.current = { state: data.state || {}, revision: data.revision || 0 };
-      const restored = selectLearningSnapshot(data, local);
-      if (restored.mode === 'device') {
-        current.current = { ...defaults, ...normalizeLearningState(restored.state) };
-        revision.current = 0;
-        setState(current.current);
-        if (cache(true)) { setStatus('local'); setError(''); }
-      } else if (restored.mode === 'pending' || restored.mode === 'conflict') {
-        current.current = { ...defaults, ...normalizeLearningState(restored.state) };
-        revision.current = restored.revision;
-        setState(current.current);
-        if (restored.mode === 'conflict') {
-          conflicted.current = true;
-          setStatus('conflict');
-          setError('本机有尚未同步的修改，服务器也有更新。两份记录均已保留，请选择要继续使用的一份。');
-        } else { setStatus('local'); setChange(n => n + 1); }
-      } else {
-        current.current = { ...defaults, ...normalizeLearningState(restored.state) };
-        revision.current = restored.revision;
-        setState(current.current);
-        cache(false);
-        setStatus('saved');
-      }
-    }).catch(cause => {
-      if (!disposed) {
-        // Offline restoration stays in the last verified account's partition. It is
-        // never uploaded until that identity has been verified again.
-        try {
-          scope.current = localStorage.getItem(`${CACHE_KEY}:active-scope`) || 'offline';
-          setCacheScope(scope.current);
-          const local = JSON.parse(localStorage.getItem(`${CACHE_KEY}:${scope.current}`) || 'null') as Cache | null;
-          if (local?.state) { current.current = { ...defaults, ...normalizeLearningState(local.state) }; revision.current = local.revision; setState(current.current); }
-        } catch { /* A blocked cache does not prevent reading. */ }
-        setStatus('local'); setError(`${cause.message}；修改会保留在本机，联网后可重试同步。`);
-      }
-    }).finally(() => { if (!disposed) setReady(true); });
-    return () => { disposed = true; };
-  }, [cache]);
+    if (!initial.current) return;
+    lifetime.current = new AbortController();
+    const snapshot = initial.current.snapshot;
+    let local: Cache | null = null;
+    try { local = JSON.parse(localStorage.getItem(`${CACHE_KEY}:${cacheScope}`) || 'null'); } catch { /* Empty or unreadable cache. */ }
+    const restored = selectLearningSnapshot(snapshot, local);
+    current.current = { ...defaults, ...normalizeLearningState(restored.state) };
+    revision.current = restored.revision;
+    setState(current.current);
+    if (restored.mode === 'device') {
+      setStatus('local');
+    } else if (restored.mode === 'conflict') {
+      remote.current = { state: snapshot.state || {}, revision: snapshot.revision };
+      conflicted.current = true;
+      setStatus('conflict');
+      setError('本机有尚未同步的修改，服务器也有更新。两份记录均已保留，请选择要继续使用的一份。');
+    } else if (restored.mode === 'pending') {
+      setStatus('local'); setChange(n => n + 1);
+    } else if (cache(false)) setStatus('saved');
+    setReady(true);
+    return () => { lifetime.current?.abort(); };
+  }, [cache, cacheScope]);
 
   const update = useCallback((patch: Partial<LearningState> | ((previous: LearningState) => LearningState)) => {
+    if (!lifetime.current || lifetime.current.signal.aborted || deleting.current) return;
     current.current = typeof patch === 'function' ? patch(current.current) : { ...current.current, ...patch };
     version.current++;
     setState(current.current);
-    const cached = cache(true);
-    if (!conflicted.current && cached) {
-      setStatus(accountVerified.current ? 'saving' : 'local');
-      if (scopeVerified.current && !accountVerified.current) setError('');
+    if (cache(true) && !conflicted.current) {
+      setStatus(authenticated ? 'saving' : 'local');
+      setError('');
     }
     setChange(n => n + 1);
-  }, [cache]);
+  }, [authenticated, cache]);
 
   const sync = useCallback(async () => {
-    if (saving.current || conflicted.current || deleting.current) return;
-    if (scopeVerified.current && !accountVerified.current) {
-      if (cache(true)) { setStatus('local'); setError(''); }
-      return;
-    }
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted || !authenticated || saving.current || conflicted.current || deleting.current) return;
     saving.current = true;
     const sentVersion = version.current;
     setStatus('saving');
     try {
-      if (!scopeVerified.current) {
-        const verifiedResponse = await fetch('/api/state');
-        if (!verifiedResponse.ok) throw new Error('尚未能确认当前账号，已暂停同步');
-        const verified = await verifiedResponse.json() as Snapshot;
-        if (verified.cacheScope !== scope.current) throw new Error('登录账号发生变化，请刷新页面读取当前账号的记录。原账号的本机副本已保留');
-        scopeVerified.current = true;
-        setAuthenticated(Boolean(verified.authenticated));
-        accountVerified.current = Boolean(verified.authenticated);
-        if (!verified.authenticated) {
-          if (cache(true)) { setStatus('local'); setError(''); }
-          return;
-        }
-        if (verified.revision !== revision.current) {
-          remote.current = { state: verified.state || {}, revision: verified.revision };
-          conflicted.current = true; setStatus('conflict'); setError('服务器上有更新的记录，请选择保留本机记录或加载服务器记录。'); return;
-        }
-      }
-      const response = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: current.current, revision: revision.current, cacheScope: scope.current }) });
-      if (response.status === 409) {
-        const conflict = await response.json() as { code?: string };
-        if (conflict.code === 'identity_changed') { scopeVerified.current = false; throw new Error('登录账号发生变化，请刷新页面。原账号的本机副本已保留'); }
-        const latest = await fetch('/api/state').then(r => r.json()) as {state: LearningState; revision: number};
-        remote.current = { state: latest.state, revision: latest.revision };
+      const response = await fetch('/api/state', {
+        method: 'PUT', signal, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: current.current, revision: revision.current, cacheScope }),
+      });
+      const data = await response.json() as { code?: string; state?: LearningState; revision: number; error?: string };
+      if (signal.aborted) return;
+      if (response.status === 401 || data.code === 'identity_changed') { recheck(); return; }
+      if (response.status === 409 && data.code === 'revision_conflict') {
+        remote.current = { state: data.state || {}, revision: data.revision };
         conflicted.current = true;
         setStatus('conflict');
-        setError('另一个设备更新了学习记录。未覆盖任何代码，请选择保留本机记录或加载服务器记录。');
+        setError('另一个设备更新了学习记录。两份记录均已保留，请选择要继续的记录。');
         return;
       }
-      if (!response.ok) { const payload = await response.json().catch(() => ({})) as {error?: string}; throw new Error(payload.error || '服务器保存失败'); }
-      const data = await response.json() as {state?: LearningState; revision: number; authenticated?: boolean};
+      if (!response.ok) throw new Error(data.error || '服务器保存失败');
       revision.current = data.revision;
-      if (sentVersion === version.current) { cache(false); setStatus('saved'); setError(''); }
+      if (sentVersion === version.current) { if (cache(false)) { setStatus('saved'); setError(''); } }
       else { cache(true); setChange(n => n + 1); }
     } catch (cause) {
-      if (cache(true)) {
+      if (!signal.aborted && cache(true)) {
         setStatus('local');
         setError(`${cause instanceof Error ? cause.message : '连接中断'}；已保留本机恢复副本。`);
       }
     } finally { saving.current = false; }
-  }, [cache]);
+  }, [cacheScope, authenticated, recheck, cache]);
 
   useEffect(() => {
     if (!ready || !change || conflicted.current) return;
@@ -190,45 +143,55 @@ export function useLearningStore() {
   }, [change, ready, sync]);
 
   useEffect(() => {
-    const online = () => { if (!conflicted.current) void sync(); };
+    const online = () => { if (change && !conflicted.current) void sync(); };
     window.addEventListener('online', online);
     return () => window.removeEventListener('online', online);
-  }, [sync]);
+  }, [change, sync]);
 
   const resolveConflict = useCallback((useLocal: boolean) => {
-    if (!remote.current) return;
-    try { localStorage.setItem(`${CACHE_KEY}:${scope.current}:conflict-${Date.now()}`, JSON.stringify({ local: current.current, remote: remote.current })); } catch { /* Preserve primary cache. */ }
+    if (!remote.current || !lifetime.current || lifetime.current.signal.aborted) return;
+    try { localStorage.setItem(`${CACHE_KEY}:${cacheScope}:conflict-${Date.now()}`, JSON.stringify({ local: current.current, remote: remote.current })); } catch { /* Preserve primary cache. */ }
     revision.current = remote.current.revision;
     conflicted.current = false;
     setError('');
-    if (useLocal) { setChange(n => n + 1); setStatus('saving'); }
-    else { current.current = { ...defaults, ...normalizeLearningState(remote.current.state) }; setState(current.current); cache(false); setStatus('saved'); return current.current; }
-  }, [cache]);
+    if (useLocal) { cache(true); setChange(n => n + 1); setStatus('saving'); }
+    else { current.current = { ...defaults, ...normalizeLearningState(remote.current.state) }; setState(current.current); if (cache(false)) setStatus('saved'); return current.current; }
+  }, [cache, cacheScope]);
 
   const deleteRecords = useCallback(async () => {
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted || deleting.current) return false;
     deleting.current = true;
     setStatus('saving');
     try {
-      while (saving.current) await new Promise(resolve => setTimeout(resolve, 50));
-      const response = await fetch('/api/state', { method: 'DELETE', headers: { 'X-Learning-Scope': scope.current } });
-      if (!response.ok) { const payload = await response.json().catch(() => ({})) as {error?: string}; throw new Error(payload.error || '服务器删除失败，请稍后重试'); }
+      while (saving.current && !signal.aborted) await new Promise(resolve => setTimeout(resolve, 50));
+      if (signal.aborted) return false;
+      if (authenticated) {
+        const response = await fetch('/api/state', { method: 'DELETE', signal, headers: { 'X-Learning-Scope': cacheScope } });
+        if (response.status === 401 || response.status === 409) { recheck(); return false; }
+        if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || '服务器删除失败，请稍后重试'); }
+      }
+      if (signal.aborted) return false;
       current.current = { ...defaults };
       revision.current = 0;
       version.current++;
       conflicted.current = false;
       setState(current.current);
       setChange(0);
+      const key = `${CACHE_KEY}:${cacheScope}`;
       const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index));
-      keys.forEach(key => { if (key?.startsWith(`${CACHE_KEY}:${scope.current}`) || key?.startsWith(`ai-book-results-v1:${scope.current}:`)) localStorage.removeItem(key); });
+      keys.forEach(item => { if (item && (item === key || item.startsWith(`${key}:conflict-`))) localStorage.removeItem(item); });
       setError('');
-      setStatus('saved');
+      setStatus(authenticated ? 'saved' : 'local');
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '删除失败，原记录仍保留。');
-      setStatus('local');
+      if (!signal.aborted) {
+        setError(cause instanceof Error ? cause.message : '删除失败，原记录仍保留。');
+        setStatus('local');
+      }
       return false;
     } finally { deleting.current = false; }
-  }, []);
+  }, [authenticated, cacheScope, recheck]);
 
   return { state, update, ready, status, error, authenticated, cacheScope, sync, resolveConflict, deleteRecords };
 }

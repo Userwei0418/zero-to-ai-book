@@ -1,0 +1,143 @@
+name: zero-to-ai-book
+
+services:
+  edge:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      BOOK_DOMAIN: ${BOOK_DOMAIN:?set BOOK_DOMAIN in the Compose env file}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls-data:/data
+      - tls-config:/config
+    networks: [edge-out, ingress]
+    depends_on: [identity]
+    mem_limit: 160m
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+
+  identity:
+    image: zero-to-ai-identity:${BOOK_RELEASE:-local}
+    build: ./deploy/identity
+    restart: unless-stopped
+    environment:
+      BOOK_PUBLIC_ORIGIN: https://${BOOK_DOMAIN}
+      BOOK_WEB_UPSTREAM: http://web:3000
+      BOOK_IDENTITY_DIR: /var/lib/book-identity
+      PORT: "8080"
+    volumes:
+      - accounts:/var/lib/book-identity
+    networks: [ingress, app]
+    depends_on:
+      web:
+        condition: service_healthy
+    read_only: true
+    tmpfs: ["/tmp:size=16m,nosuid,nodev"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Two concurrent scrypt checks plus the Node process and provisioning headroom.
+    mem_limit: 512m
+    pids_limit: 80
+
+  web:
+    image: zero-to-ai-web:${BOOK_RELEASE:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_ORIGIN: https://${BOOK_DOMAIN}
+      SQLITE_PATH: /data/course.sqlite
+      TOKENPLAN_BASE_URL: ${GUIDE_MODEL_BASE_URL:-https://token.sensetime.com/api/v1}
+      TOKENPLAN_MODEL: ${GUIDE_MODEL_NAME:-sensenova-6.8-flash}
+      AI_DAILY_LIMIT: ${GUIDE_DAILY_LIMIT:-100}
+      TOKENPLAN_API_KEY_FILE: /run/secrets/guide-key
+      SELF_HOSTED_SANDBOX: "1"
+      SANDBOX_API_URL: ${BOOK_SANDBOX_URL:-}
+      SANDBOX_API_KEY_FILE: /run/secrets/web-gateway-token
+    volumes:
+      - book-data:/data
+    secrets: [guide-key, web-gateway-token]
+    networks: [app, lab, guide-out]
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,nosuid,nodev
+      - /app/.next/cache:size=32m,uid=1000,gid=1000,mode=0750
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    pids_limit: 160
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(async r => process.exit(r.ok && (await r.json()).persistenceConfigured ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  sandbox-gateway:
+    profiles: [sandbox]
+    image: zero-to-ai-gateway:${BOOK_RELEASE:-local}
+    build:
+      context: ./services/sandbox
+      dockerfile: Dockerfile.gateway
+    restart: unless-stopped
+    environment:
+      DOCKER_HOST: unix:///run/learner-engine/docker.sock
+      SANDBOX_PRIVATE_NETWORK: "1"
+      SANDBOX_BIND: 0.0.0.0
+      SANDBOX_PORT: "8090"
+      SANDBOX_TOKEN_FILE: /run/secrets/gateway-token
+      SANDBOX_IMAGE: ${BOOK_GUEST_IMAGE:-zero-to-ai-guest:local}
+      SANDBOX_DEPLOYMENT_ID: ${BOOK_SANDBOX_ID:-zero-ai-compose}
+      SANDBOX_TIMEOUT_SECONDS: ${LAB_TIMEOUT_SECONDS:-15}
+      SANDBOX_IDLE_SECONDS: ${LAB_IDLE_SECONDS:-180}
+      SANDBOX_MAX_SESSIONS: ${LAB_SESSIONS:-2}
+      SANDBOX_MAX_SESSIONS_PER_ACCOUNT: ${LAB_ACCOUNT_SESSIONS:-1}
+      SANDBOX_MAX_EXECUTIONS: ${LAB_PARALLEL:-1}
+      SANDBOX_MAX_HTTP_REQUESTS: "8"
+    env_file:
+      - ${BOOK_CONFIG_DIR:-/etc/zero-ai-book}/lab-provider.env
+    group_add:
+      - "${LEARNER_SOCKET_GID:-65534}"
+    volumes:
+      - type: bind
+        source: ${LEARNER_DOCKER_SOCKET:-/run/zero-ai-learner/docker.sock}
+        target: /run/learner-engine/docker.sock
+        bind:
+          create_host_path: false
+    secrets: [gateway-token]
+    networks: [lab, broker-out]
+    read_only: true
+    tmpfs: ["/tmp:size=24m,nosuid,nodev"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 96
+
+volumes:
+  book-data:
+  accounts:
+  tls-data:
+  tls-config:
+
+secrets:
+  guide-key:
+    file: ${BOOK_CONFIG_DIR:-/etc/zero-ai-book}/guide.key
+  web-gateway-token:
+    file: ${BOOK_CONFIG_DIR:-/etc/zero-ai-book}/web-gateway.key
+  gateway-token:
+    file: ${BOOK_CONFIG_DIR:-/etc/zero-ai-book}/gateway.key
+
+networks:
+  ingress:
+    internal: true
+  app:
+    internal: true
+  lab:
+    internal: true
+  edge-out: {}
+  guide-out: {}
+  broker-out: {}

@@ -5,6 +5,9 @@ import { ZodError } from 'zod';
 
 export async function GET(request: Request) {
   const id = userId(request);
+  if (new URL(request.url).searchParams.get('identity') === '1') {
+    return json({ authenticated: !!id, cacheScope: id ? (await hash(id)).slice(0,32) : 'anonymous' });
+  }
   if (!id) return json({ state: {}, revision: 0, authenticated: false, cacheScope: 'anonymous' });
   const cacheScope = (await hash(id)).slice(0,32);
   if (!env.DB) return json({ error: '云端保存暂不可用，当前修改请保留在此设备。', authenticated: true, cacheScope }, 503);
