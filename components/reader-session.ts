@@ -11,7 +11,7 @@ export function useReaderSession() {
   useEffect(() => {
     let lastScope: string | undefined;
     const monitor = createReaderSession((identityOnly, signal) =>
-      readReaderSnapshot(identityOnly, AbortSignal.any([signal, AbortSignal.timeout(10000)]), navigator.locks), next => {
+      readReaderSnapshot(identityOnly, AbortSignal.any([signal, AbortSignal.timeout(10000)]), navigator), next => {
       if (next) {
         if (lastScope && lastScope !== next.scope) {
           const url = new URL(window.location.href);

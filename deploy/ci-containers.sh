@@ -122,6 +122,10 @@ printf '%s\n' "$BOOK_TEST_PASSWORD_B" | "${compose[@]}" exec -T identity node de
 export BOOK_TEST_PASSWORD_A BOOK_TEST_PASSWORD_B
 node deploy/verify-readers.mjs --sandbox
 node deploy/verify-readers.mjs --guests --sandbox
+# Use the runner's Chrome and an isolated browser driver environment.
+python3 -m venv "$work/browser-tools"
+"$work/browser-tools/bin/pip" --disable-pip-version-check install --quiet playwright==1.55.0
+"$work/browser-tools/bin/python" deploy/verify-guest-browser.py
 "${compose[@]}" exec -T sandbox-gateway python /opt/gateway/smoke_test.py
 remaining=$("${learner[@]}" ps --all --quiet --filter label=ai-book.sandbox.managed=true)
 test -z "$remaining"

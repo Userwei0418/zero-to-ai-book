@@ -82,13 +82,20 @@ export function useLearningStore(session: ReaderSession | null, recheck: () => v
     lifetime.current = new AbortController();
     const snapshot = initial.current.snapshot;
     let local: Cache | null = null;
-    try { local = JSON.parse(localStorage.getItem(`${CACHE_KEY}:${cacheScope}`) || 'null'); } catch { /* Empty or unreadable cache. */ }
+    let localAvailable = true;
+    try {
+      const saved = localStorage.getItem(`${CACHE_KEY}:${cacheScope}`);
+      if (saved) {
+        try { local = JSON.parse(saved); } catch { /* Ignore an unreadable draft. */ }
+      }
+    } catch { localAvailable = false; }
     const restored = selectLearningSnapshot(snapshot, local);
     current.current = { ...defaults, ...normalizeLearningState(restored.state) };
     revision.current = restored.revision;
     setState(current.current);
     if (restored.mode === 'device') {
-      setStatus('local');
+      setStatus(localAvailable ? 'local' : 'unsaved');
+      if (!localAvailable) setError('浏览器未允许本机存储，草稿仅在此页保留。关闭前可导出学习记录。');
     } else if (restored.mode === 'conflict') {
       remote.current = { state: snapshot.state || {}, revision: snapshot.revision };
       conflicted.current = true;

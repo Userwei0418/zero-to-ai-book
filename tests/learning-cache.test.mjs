@@ -141,7 +141,7 @@ test('only the credentialed confirmation opens a new guest, including concurrent
     }
     return Response.json(guest(accountB));
   };
-  const read = () => readReaderSnapshot(false, new AbortController().signal, locks, request);
+  const read = () => readReaderSnapshot(false, new AbortController().signal, { locks }, request);
   const result = await Promise.all([read(), read()]);
   assert.deepEqual(calls, [true, false, true]);
   assert.deepEqual(result, [guest(accountB), guest(accountB)]);
@@ -162,6 +162,44 @@ test('blocked cookies get one read-only retry then local reading, hosted readers
     await tracker.refresh();
     await tracker.refresh(); // ordinary focus poll is read-only, even if cookies are disabled
     assert.deepEqual(calls, issued ? [true, false, false] : [true, false]);
+  }
+});
+
+test('a denied lock getter or acquisition still confirms accepted or blocked cookies exactly once', async () => {
+  for (const name of ['SecurityError', 'NotAllowedError']) {
+    const denied = () => { throw new DOMException('Site storage disabled', name); };
+    for (const browser of [{ get locks() { return denied(); } }, { locks: { request: async () => denied() } }]) {
+      for (const acceptsCookie of [true, false]) {
+        const calls = [];
+        const request = async (_, options) => {
+          const bootstrap = !!options.headers?.['X-Book-Visitor-Bootstrap'];
+          calls.push(bootstrap);
+          return bootstrap
+            ? Response.json(selfHostedAnonymous, { headers: { 'X-Book-Guest-Bootstrap': '1' } })
+            : Response.json(acceptsCookie ? guest(accountA) : selfHostedAnonymous);
+        };
+        const result = await readReaderSnapshot(false, new AbortController().signal, browser, request);
+        assert.deepEqual(calls, [true, false]);
+        assert.equal(result.cacheScope, acceptsCookie ? accountA : 'anonymous');
+        assert.equal(!!result.guestCookieBlocked, !acceptsCookie);
+      }
+    }
+  }
+});
+
+test('lock fallback never repeats a started request or a cancelled or unrelated lock failure', async () => {
+  const controller = new AbortController();
+  const denied = new DOMException('Denied', 'SecurityError');
+  let calls = 0;
+  const failingRequest = async () => { calls++; throw denied; };
+  const entered = { locks: { request: (_, __, callback) => callback() } };
+  await assert.rejects(readReaderSnapshot(false, controller.signal, entered, failingRequest), error => error === denied);
+  assert.equal(calls, 1);
+  for (const failure of [new Error('Unexpected failure'), denied]) {
+    if (failure === denied) controller.abort();
+    const lockFailure = { locks: { request: async () => { throw failure; } } };
+    await assert.rejects(readReaderSnapshot(false, controller.signal, lockFailure, failingRequest), error => error === failure);
+    assert.equal(calls, 1);
   }
 });
 

@@ -51,7 +51,7 @@ function scopeFor(snapshot: LearningSnapshot) {
 
 /** Mint only during a full load. The second request proves the browser accepted the cookie. */
 export async function readReaderSnapshot(
-  identityOnly: boolean, signal: AbortSignal, locks?: Pick<LockManager, 'request'>, request = fetch,
+  identityOnly: boolean, signal: AbortSignal, browser?: { readonly locks?: Pick<LockManager, 'request'> }, request = fetch,
 ): Promise<LearningSnapshot> {
   const url = identityOnly ? '/api/state?identity=1' : '/api/state';
   async function get(bootstrap: boolean) {
@@ -71,7 +71,20 @@ export async function readReaderSnapshot(
     return scopeFor(snapshot) === 'anonymous' ? { ...snapshot, guestCookieBlocked: true } : snapshot;
   }
   // A pair of brand-new tabs must finish the cookie round trip before either can mint again.
-  return locks ? locks.request('ai-book-reader-bootstrap', { signal }, load) : load();
+  let entered = false;
+  try {
+    const locks = browser?.locks;
+    if (locks) return await locks.request('ai-book-reader-bootstrap', { signal }, () => {
+      entered = true;
+      return load();
+    });
+  } catch (error) {
+    // Storage policy may deny either reading navigator.locks or acquiring the lock.
+    // Once the callback started, a request may already have issued a cookie.
+    if (entered || signal.aborted || !(error instanceof DOMException)
+        || (error.name !== 'SecurityError' && error.name !== 'NotAllowedError')) throw error;
+  }
+  return load();
 }
 
 /** A scope hint may invalidate a session. Only a server response may open private records. */
