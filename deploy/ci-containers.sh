@@ -66,6 +66,23 @@ export LEARNER_SOCKET_GID
 docker build --tag "$BOOK_GUEST_IMAGE" services/sandbox
 docker image save "$BOOK_GUEST_IMAGE" | "${learner[@]}" image load
 
+# Diagnose the first guest before any account, learner code or provider secret exists.
+# Exercise the gateway's exact OCI restrictions with a small, trusted runtime probe.
+DOCKER_HOST="unix://$LEARNER_DOCKER_SOCKET" PYTHONPATH=services/sandbox python3 - <<'PYTHON'
+import os, subprocess
+from gateway import Config, Session
+image = os.environ["BOOK_GUEST_IMAGE"]
+session = Session(Config(token="ci-only", image=image), "preflight")
+command = session.command()
+command[1] = "run"
+command[-1:] = ["--entrypoint=python", image, "-I", "-c",
+                "import os, socket, threading; print('guest UID', os.getuid(), flush=True); "
+                "t=threading.Thread(target=lambda:None); t.start(); t.join(); "
+                "s=socket.socket(); s.bind(('127.0.0.1', 8765)); s.close(); "
+                "open('/workspace/probe','w').close(); print('guest ready')"]
+subprocess.run(command, check=True, timeout=60)
+PYTHON
+
 # Directory is runner-private. Compose binds individual files into unprivileged containers.
 mkdir "$BOOK_CONFIG_DIR"
 : > "$BOOK_CONFIG_DIR/guide.key"
