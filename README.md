@@ -6,6 +6,8 @@
 
 **第一次接手项目，先读[开发与部署交接](docs/HANDOFF.md)。** 里面记录了线上版本、验收用例、待办和发布条件；[设计决策记录](docs/DESIGN-HISTORY.md)解释每项选择的原因。
 
+[下载 2026-11-19 完整交接包](https://github.com/Userwei0418/zero-to-ai-book/releases/tag/handoff-2026-11-19) · [开发者接手指南](docs/TAKEOVER.md)
+
 ## 从哪里开始
 
 | 你想做什么 | 从这里开始 |

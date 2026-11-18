@@ -1,0 +1,146 @@
+name: Publish handoff
+
+on:
+  push:
+    branches: [main]
+    paths: ['release/handoff.json']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-handoff
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build and verify the offline handoff
+        shell: bash
+        run: |
+          python3 scripts/package-handoff.py --output-dir "$RUNNER_TEMP/handoff"
+          zip_paths=("$RUNNER_TEMP"/handoff/*.zip)
+          [[ ${#zip_paths[@]} == 1 && -f "${zip_paths[0]}" ]]
+          python3 scripts/verify-handoff.py "${zip_paths[0]}" --restore-history
+
+      - name: Publish the verified ZIP and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python3 {0}
+        run: |
+          import datetime
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          version = json.loads(Path("release/handoff.json").read_text())["version"]
+          if datetime.date.fromisoformat(version).isoformat() != version:
+              raise SystemExit("Expected an ISO date in release/handoff.json")
+          commit = os.environ["GITHUB_SHA"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = f"handoff-{version}"
+          title = f"零基础学 AI 项目交接包 {version}"
+          notes = (
+              "下载 ZIP 和 SHA256SUMS.txt，核对 SHA-256 后解压。"
+              "先读 `zero-to-ai-book-handoff/00-先读我.md`。\n\n"
+              f"源码提交：`{commit}`。本次发布仅提供离线交接包，目标服务器部署需由接手人完成。\n\n"
+              "ZIP SHA-256："
+          )
+          output = Path(os.environ["RUNNER_TEMP"]) / "handoff"
+          archive = output / f"zero-to-ai-book-handoff-{version}.zip"
+          checksum = output / "SHA256SUMS.txt"
+          with archive.open("rb") as stream:
+              local_digest = hashlib.file_digest(stream, "sha256").hexdigest()
+          checksum_template = f"{{}}  {archive.name}\n"
+          if checksum.read_bytes() != checksum_template.format(local_digest).encode():
+              raise SystemExit("Package checksum does not match the verified ZIP")
+
+          def gh(*args):
+              return subprocess.check_output(["gh", *args], text=True)
+
+          def api(endpoint, *args):
+              return json.loads(gh("api", f"repos/{repo}/{endpoint}", *args))
+
+          def tag_target():
+              refs = api(f"git/matching-refs/tags/{tag}")
+              return next((ref["object"]["sha"] for ref in refs if ref["ref"] == f"refs/tags/{tag}"), None)
+
+          # List releases with write access so an interrupted draft can also be found.
+          pages = api("releases?per_page=100", "--paginate", "--slurp")
+          matches = [item for page in pages for item in page if item["tag_name"] == tag]
+          if len(matches) > 1:
+              raise SystemExit(f"Multiple releases found for {tag}")
+          target = tag_target()
+          if target is not None and (not matches or target != commit):
+              raise SystemExit(f"Tag {tag} already exists outside this release")
+          if matches:
+              release = matches[0]
+          else:
+              release = api("releases", "-X", "POST", "-f", f"tag_name={tag}", "-f", f"name={title}",
+                            "-f", f"target_commitish={commit}", "-f", f"body={notes}{local_digest}", "-F", "draft=true")
+
+          endpoint = f"releases/{release['id']}"
+          bot = "github-actions[bot]"
+          def recorded_digest(release):
+              body = (release["body"] or "").replace("\r\n", "\n")
+              match = re.fullmatch(re.escape(notes) + r"([0-9a-f]{64})", body)
+              if (not match or release["tag_name"] != tag or release["name"] != title
+                      or release["target_commitish"] != commit or release["author"]["login"] != bot):
+                  raise SystemExit(f"Unexpected ownership, commit or notes for {tag}")
+              return match[1]
+
+          digest = recorded_digest(release)
+          # A rebuild may encode the same Git history differently. Only an empty,
+          # matching draft may adopt a new ZIP digest before its first upload.
+          if release["draft"] and not release["assets"] and digest != local_digest:
+              release = api(endpoint, "-X", "PATCH", "-f", f"body={notes}{local_digest}")
+              digest = recorded_digest(release)
+          checksum_bytes = checksum_template.format(digest).encode()
+          expected = {archive.name: "sha256:" + digest,
+                      checksum.name: "sha256:" + hashlib.sha256(checksum_bytes).hexdigest()}
+
+          def checked_assets(release):
+              if recorded_digest(release) != digest:
+                  raise SystemExit("Release changed during publication")
+              present = set()
+              for asset in release["assets"]:
+                  name = asset["name"]
+                  if (name not in expected or name in present or asset["state"] != "uploaded"
+                          or asset["digest"] != expected[name] or asset["uploader"]["login"] != bot):
+                      raise SystemExit(f"Unexpected asset or digest: {name}")
+                  present.add(name)
+              return present
+
+          present = checked_assets(release)
+          if release["draft"]:
+              if archive.name not in present:
+                  if digest != local_digest:
+                      raise SystemExit("Local ZIP differs from the digest reserved for this draft")
+                  gh("release", "upload", tag, str(archive), "--repo", repo)
+              if checksum.name not in present:
+                  checksum.write_bytes(checksum_bytes)
+                  gh("release", "upload", tag, str(checksum), "--repo", repo)
+          if checked_assets(api(endpoint)) != expected.keys():
+              raise SystemExit("Release must contain both verified assets")
+          if release["draft"]:
+              # Create the exact lightweight tag once, without ever updating a ref.
+              if tag_target() is None:
+                  api("git/refs", "-X", "POST", "-f", f"ref=refs/tags/{tag}", "-f", f"sha={commit}")
+              if tag_target() != commit:
+                  raise SystemExit("Tag target changed before publication")
+              api(endpoint, "-X", "PATCH", "-F", "draft=false")
+          published = api(endpoint)
+          if published["draft"] or tag_target() != commit or checked_assets(published) != expected.keys():
+              raise SystemExit("Published release failed final verification")
+          print(published["html_url"])
