@@ -42,7 +42,7 @@ python3 scripts/prepare-pyodide-test.py
 NOTEBOOK_PYODIDE_DIR="$PWD/.sites-runtime/pyodide-test" node --test tests/*.test.mjs
 ```
 
-2026-11-18 交接复核在本地空数据库按顺序成功执行了两份迁移，打包后的 Worker 返回 `/api/health` HTTP 200，D1 绑定存在。无本地 WASM 资源的 Node 测试通过 61 项，跳过 3 项，Python 网关测试通过 51 项。媒体检查通过 233 个引用、459 个资产和 10 个 fast-start 视频。发布预算检查为 596 个文件、展开 123.01 MiB，脚本限额 252 MiB。真实模型、远端沙箱和生产数据库均需在相应环境单独验收。
+2026-11-18 交接复核在本地空数据库按顺序成功执行了两份迁移，打包后的 Worker 返回 `/api/health` HTTP 200，D1 绑定存在。在 Node.js 24.22.1 上准备固定 WASM 资源后，Node 测试 85 项全部通过，零跳过，覆盖 34 个可在浏览器执行的课程单元、表格和图像输出、停止与重启。省略 WASM 资源时，通过 61 项，跳过 3 项顶层测试。Python 网关测试通过 51 项。媒体检查通过 233 个引用、459 个资产和 10 个 fast-start 视频。发布预算检查为 596 个文件、展开 123.01 MiB，脚本限额 252 MiB。真实模型、远端沙箱和生产数据库均需在相应环境单独验收。
 
 ## 配置归属
 
